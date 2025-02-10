@@ -1,6 +1,6 @@
 import asyncio
 from typing import Optional
-from hypha_rpc import connect_to_server
+from hypha_rpc import connect_to_server, login
 from schema_agents.hypha_service import register_agent_service
 import logging
 
@@ -21,8 +21,9 @@ async def start_service(server_url: str = "https://hypha.aicell.io") -> None:
     """
     server = None
     try:
+        token = await login({"server_url": server_url})
         # Connect to Hypha server
-        server = await connect_to_server(server_url=server_url)
+        server = await connect_to_server({"server_url": server_url, "token": token})
         
         # Register agent service
         agent_svc = await register_agent_service(server)

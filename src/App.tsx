@@ -15,12 +15,14 @@ import './github-markdown.css'
 import { HyphaProvider } from './HyphaContext';
 import ModelTrainer from './components/ModelTrainer';
 import Create from './components/Create';
+import Chat from './components/Chat';
 
 // Create a wrapper component that uses Router hooks
 const AppContent: React.FC = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const hasResourceId = searchParams.has('id');
+  const isChatRoute = location.pathname === '/chat';
 
   // Add state for Snackbar
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
@@ -41,13 +43,13 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar />
+      {!isChatRoute && <Navbar />}
       <Snackbar 
         isOpen={snackbarOpen}
         message={snackbarMessage}
         onClose={() => setSnackbarOpen(false)}
       />
-      <main className="container mx-auto px-4">
+      <main className={isChatRoute ? '' : 'container mx-auto px-4'}>
         <Routes>
           <Route path="/" element={<ResourceGrid />} />
           <Route path="/resources/:id" element={<ResourceDetails />} />
@@ -61,9 +63,10 @@ const AppContent: React.FC = () => {
           <Route path="/edit/:artifactId" element={<Edit />} />
           <Route path="/model-trainer/:id" element={<ModelTrainer />} />
           <Route path="/create" element={<Create />} />
+          <Route path="/chat" element={<Chat />} />
         </Routes>
       </main>
-      <Footer />
+      {!isChatRoute && <Footer />}
     </div>
   );
 };
