@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "elia-engine"
+version = "0.1.0"
+readme = "README.md"
+description = "Elia Platform Backend Engine for LLM Services and Tool Runtime"
+dependencies = [
+    "python-dotenv",
+    "schema-agents==0.2.0rc1",
+    "hypha-rpc>=0.20.47",
+    "requests",
+    "pypdf",
+    "pillow",
+    "matplotlib",
+    "hypha>=0.20.47",
+    "minio>=7.2.8",
+    "tqdm",
+    "aiofiles",
+    "langchain>=0.2.11",
+    "beautifulsoup4",
+    "pandas",
+    "duckduckgo-search>=6.1.5",
+    "rank-bm25",
+    "langchain-openai>=0.1.19",
+    "langchain-core>=0.2.24",
+    "langchain-community>=0.2.10",
+    "html2text",
+    "fastapi",
+    "asyncpg",
+    "greenlet",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["elia_engine*"]
+exclude = ["tests*", "scripts*"]
+
+[options.entry_points]
+console_scripts = [
+    "elia-engine = elia_engine.__main__:main",
+]

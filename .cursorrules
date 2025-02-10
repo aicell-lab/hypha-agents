@@ -1,0 +1,163 @@
+### **Elia Platform `.cursorrules`**
+
+## Role and Expertise
+You are an expert Python/TypeScript (full-stack) developer focusing on the **Elia Platform** project. You have deep knowledge of building cloud-native web applications and backends—particularly for LLM-powered agent systems and real-time communication—along with modern frontend frameworks. Your code should be production-ready, well-documented, and consistent with best practices for both Python and TypeScript.
+
+The **Elia Platform** aims to provide a foundation for building and customizing AI agents that:
+1. Specializes in telecom applications and domain knowledge
+2. Supports customizable knowledge bases via document uploads
+3. Enables extensibility through Python-based tools and workflows
+4. Facilitates agent sharing and collaboration within the community
+
+For local development, the frontend is built with **React**, **TypeScript**, and **Tailwind CSS**, using `pnpm` as the package manager.
+
+## Project Context
+The **Elia** platform is designed to handle AI agent creation and management at scale. Elia:
+- Uses **schema-agents** framework for building customizable LLM-powered agents
+- Manages agent assets (configs, PDFs, Python files) through **Hypha's Artifact Manager**
+- Exposes LLM and tool functionalities as **Hypha Services**
+- Provides real-time communication via **Hypha's WebSocket/HTTP RPC**
+
+For backend services, you may rely on:
+- A Python-based microservice architecture using **Hypha** for service communication
+- **Pydantic** for robust data validation and serialization
+- **schema-agents** framework for LLM agent orchestration
+- Artifact management for agent resources (configs, knowledge bases, tools)
+
+## Coding Standards
+
+### General Principles
+- **PEP 8** and **PEP 257** compliance for Python code
+- Consistent style for TypeScript (Prettier, ESLint)
+- Use **type hints** in Python functions/methods whenever possible
+- Include **docstrings** or JSDoc comments for all significant classes, functions, and modules
+- Follow **Pydantic** model patterns for data validation
+
+### Naming Conventions
+- **Python Variables and Functions**: `snake_case`
+- **Python Classes**: `PascalCase`
+- **TS Variables and Functions**: `camelCase`
+- **TS Classes**: `PascalCase`
+- **Files and Folders**: `kebab-case` for frontend, `snake_case` for backend
+
+### Error Handling
+- Wrap critical operations (e.g., LLM calls, file operations, RPC requests) in try-except/try-catch blocks
+- Log meaningful exceptions with context
+- Use structured logging for better traceability
+
+## Project Structure
+```
+elia-platform/
+├── frontend/                 # React + TypeScript + Tailwind
+│   ├── src/
+│   │   ├── components/      # Reusable UI components
+│   │   ├── pages/          # Page components
+│   │   ├── hooks/          # Custom React hooks
+│   │   ├── services/       # Hypha service clients
+│   │   └── types/          # TypeScript definitions
+│   └── package.json
+│
+├── backend/
+│   ├── services/           # Hypha service implementations
+│   │   ├── llm/           # LLM service
+│   │   ├── tools/         # Agent tools
+│   │   └── agents/        # Agent orchestration
+│   ├── models/            # Pydantic models
+│   └── utils/             # Shared utilities
+│
+└── agents/                # Agent definitions and configs
+    ├── templates/         # Base agent templates
+    ├── tools/            # Shared agent tools
+    └── prompts/          # Agent prompt templates
+```
+
+### Key Components
+1. **Frontend**
+   - Agent builder interface
+   - Knowledge base management
+   - Tool configuration
+   - Agent monitoring and control
+
+2. **Backend Services**
+   - LLM service for agent interactions
+   - Tool registry and execution
+   - Agent orchestration and management
+   - Asset management via Hypha
+
+3. **Agent Framework**
+   - Base agent templates
+   - Tool definitions
+   - Prompt engineering
+   - Workflow orchestration
+
+## Platform Architecture & Workflow
+
+### Core Components Interaction
+1. **Agent Management**
+   - Each agent is represented as a collection in Hypha's Artifact Manager
+   - Agent assets (configs, knowledge bases, tools) are stored as artifacts
+   - Version control and access management handled by Artifact Manager
+   - Real-time agent state updates via Hypha WebSocket
+
+2. **Knowledge Base Integration**
+   - Documents uploaded through frontend are processed and stored as artifacts
+   - Text extraction and chunking for LLM consumption
+   - Vector embeddings generated and stored for semantic search
+   - Knowledge bases can be shared across agents or kept private
+
+3. **Tool System**
+   - Python-based tools registered as Hypha services
+   - Tools can access external APIs, perform computations, or manage resources
+   - Dynamic tool registration and discovery
+   - Secure execution environment with proper isolation
+
+4. **Agent Execution**
+   - schema-agents framework orchestrates agent behavior
+   - LLM interactions handled by dedicated Hypha service
+   - Real-time streaming of agent thoughts and actions
+   - Tool calls executed through Hypha RPC
+
+### Typical Workflow
+1. **Agent Creation**
+   ```
+   User Interface → Artifact Manager
+   ├── Create agent collection
+   ├── Upload knowledge base documents
+   ├── Configure agent parameters
+   └── Select/customize tools
+   ```
+
+2. **Agent Deployment**
+   ```
+   Artifact Manager → Runtime Services
+   ├── Load agent configuration
+   ├── Initialize schema-agents runtime
+   ├── Register selected tools
+   └── Start agent monitoring
+   ```
+
+3. **Agent Interaction**
+   ```
+   User → Agent
+   ├── Send queries/commands via WebSocket
+   ├── Receive streaming responses
+   ├── Monitor agent state
+   └── View execution logs
+   ```
+
+4. **Agent Sharing**
+   ```
+   Owner → Community
+   ├── Set permissions in Artifact Manager
+   ├── Share agent configurations
+   ├── Distribute knowledge bases
+   └── Publish custom tools
+   ```
+
+### Security & Scalability
+- Authentication and authorization via Hypha's built-in mechanisms
+- Resource isolation between agents
+- Scalable microservice architecture
+- Efficient asset management and caching
+- Real-time monitoring and logging
+
