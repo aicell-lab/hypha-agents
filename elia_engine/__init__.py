@@ -1,5 +1,3 @@
-"""
-Elia Engine - Backend services for LLM and tool execution runtime
-"""
+"""Elia Engine - Backend service for AI agent runtime."""
 
 __version__ = "0.1.0" 

@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "elia-engine"
@@ -32,14 +33,18 @@ dependencies = [
     "greenlet",
 ]
 
-[tool.setuptools]
-include-package-data = true
+[tool.poetry]
+name = "elia-engine"
+version = "0.1.0"
+description = "Backend service for AI agent runtime"
+authors = ["Your Name <your.email@example.com>"]
 
-[tool.setuptools.packages.find]
-include = ["elia_engine*"]
-exclude = ["tests*", "scripts*"]
+[tool.poetry.dependencies]
+python = "^3.8"
+hypha-rpc = "*"
+schema-agents = "*"
+click = "*"
+pydantic = "*"
 
-[options.entry_points]
-console_scripts = [
-    "elia-engine = elia_engine.__main__:main",
-]
+[tool.poetry.scripts]
+elia-engine = "elia_engine.__main__:cli"
