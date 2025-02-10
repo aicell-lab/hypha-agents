@@ -15,9 +15,10 @@ Elia Platform is a comprehensive solution for creating, managing, and deploying 
 
 ### Prerequisites
 
-- Node.js (v16 or higher)
+- Python 3.11 or higher
+- conda package manager
 - pnpm (v8 or higher)
-- Python 3.9+
+- Node.js (v18 or higher recommended)
 
 ### Installation
 
@@ -26,21 +27,130 @@ Elia Platform is a comprehensive solution for creating, managing, and deploying 
 git clone https://github.com/your-org/elia-platform.git
 cd elia-platform
 
+# Create and activate conda environment
+conda create -n elia-platform python=3.11
+conda activate elia-platform
+
+# Install Python dependencies
+pip install -e .
+pip install -r requirements_test.txt
+
 # Install frontend dependencies
-cd frontend
 pnpm install
 
-# Install backend dependencies
-cd ../backend
-pip install -r requirements.txt
+# Start the elia engine
+python -m elia_engine serve
 
-pip install -e .
-
-# Start the development servers
-pnpm dev
+# In another terminal, start the frontend
+pnpm start
 ```
 
-The application will be available at `http://localhost:3000`.
+## 🛠️ Tech Stack
+
+- **Frontend**
+  - React 18 with TypeScript
+  - TailwindCSS for styling
+  - Hypha RPC for real-time communication
+  - React Router for navigation
+
+- **Engine**
+  - Python-based microservices
+  - schema-agents framework
+  - Hypha for service orchestration
+  - Artifact Manager for resource management
+
+## 🏗️ Project Structure
+
+```
+elia-platform/
+├── src/                  # React frontend source
+│   ├── components/      # React components
+│   └── types/          # TypeScript definitions
+├── elia_engine/         # Core engine implementation
+│   ├── services/       # Hypha services
+│   ├── models/        # Pydantic models
+│   └── utils/         # Shared utilities
+├── resources/          # Resource files and examples
+├── tests/             # Test suite
+└── agents/            # Agent definitions and configs
+```
+
+## 🧪 Development
+
+### Available Scripts
+
+- `pnpm start`: Start the development server
+- `pnpm build`: Build for production
+- `pnpm test`: Run tests
+- `pnpm eject`: Eject from create-react-app
+
+### Development Guidelines
+
+- Use Python type hints and TypeScript types
+- Write comprehensive documentation
+- Include tests for critical functionality
+- Follow PEP 8 and React/TypeScript style guidelines
+
+## Configuration
+
+1. Create a `.env` file in the root directory:
+```bash
+touch .env
+```
+
+2. Add required environment variables to `.env`:
+```env
+# Required environment variables will be listed here
+OPENAI_API_KEY=your_api_key_here
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🌟 Acknowledgments
+
+- The Hypha development team
+- Our telecom industry partners
+- All contributors and maintainers
+
+---
+
+<div align="center">
+Made with ❤️ by the Elia Platform Team
+</div>
+
+# Elia Engine
+
+Backend services for LLM and tool execution runtime for the Elia Platform.
+
+## Configuration
+
+1. Create a `.env` file in the root directory:
+```bash
+touch .env
+```
+
+2. Add required environment variables to `.env`:
+```env
+# Required environment variables will be listed here
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Running the Engine
+
+To start the engine:
+```bash
+# Using the CLI command
+elia-engine serve
+
+# Or using Python module
+python -m elia_engine serve
+```
 
 ## 🛠️ Tech Stack
 
@@ -108,69 +218,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 <div align="center">
 Made with ❤️ by the Elia Platform Team
 </div>
-
-# Elia Engine
-
-Backend services for LLM and tool execution runtime for the Elia Platform.
-
-## Setup Instructions
-
-### Prerequisites
-
-- Python 3.11 or higher
-- pip or conda package manager
-
-### Environment Setup
-
-1. Create a new conda environment:
-```bash
-conda create -n elia-platform python=3.11
-conda activate elia-platform
-```
-
-2. Install the package in development mode:
-```bash
-# Clone the repository (if you haven't already)
-git clone <repository-url>
-cd elia-engine
-
-# Install in development mode
-pip install -e .
-
-# Install test dependencies (optional)
-pip install -r requirements_test.txt
-```
-
-### Configuration
-
-1. Create a `.env` file in the root directory:
-```bash
-touch .env
-```
-
-2. Add required environment variables to `.env`:
-```env
-# Required environment variables will be listed here
-OPENAI_API_KEY=your_api_key_here
-```
-
-### Running the Engine
-
-To start the engine:
-```bash
-# Using the CLI command
-elia-engine
-
-# Or using Python module
-python -m elia_engine
-```
-
-### Running Tests
-
-```bash
-pytest tests/
-```
-
-## Development
-
-The engine is structured as follows:
