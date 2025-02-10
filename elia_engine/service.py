@@ -1,8 +1,10 @@
-import asyncio
-from typing import Optional
 from hypha_rpc import connect_to_server, login
 from schema_agents.hypha_service import register_agent_service
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logger to print to stdout
 logger = logging.getLogger(__name__)
