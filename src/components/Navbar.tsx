@@ -117,7 +117,7 @@ const Navbar: React.FC = () => {
               onClick={() => setIsMobileMenuOpen(false)}
             >
               <IoCloudUploadOutline className="mr-2" size={18} />
-              + Create
+              Create
             </Link>
             <Link 
               to="/about" 
@@ -138,7 +138,7 @@ const Navbar: React.FC = () => {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <IoCloudUploadOutline className="mr-2" size={18} />
-                + Create
+                Create
               </Link>
             )}
             <div className="px-3 py-2">

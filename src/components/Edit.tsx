@@ -12,6 +12,7 @@ import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import ModelTester from './ModelTester';
 import ModelValidator from './ModelValidator';
+import Chat from './Chat';
 
 interface FileNode {
   name: string;
@@ -25,7 +26,7 @@ interface FileNode {
 
 // Add this interface for the tab type
 interface ContentTab {
-  id: 'files' | 'review' | 'config';
+  id: 'files' | 'review' | 'config' | 'chat';
   label: string;
   icon: React.ReactNode;
 }
@@ -84,11 +85,23 @@ interface FileListItem {
 
 // Add new interface for agent config
 interface AgentConfig {
+  // Basic Info
   name: string;
-  instructions: string;
+  description: string; // renamed from instructions
   welcomeMessage: string;
-  extensions: string[];
-  visibility?: 'public' | 'private';
+  
+  // Runtime Configuration (used directly by Chat.tsx)
+  agent_config: {
+    // Identity
+    name: string;
+    profile: string;
+    goal: string;
+    
+    // Model Settings
+    model: string;
+    stream?: boolean;
+    instructions?: string;
+  };
 }
 
 const Edit: React.FC = () => {
@@ -97,7 +110,7 @@ const Edit: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [files, setFiles] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
-  const { artifactManager, isLoggedIn, server } = useHyphaStore();
+  const { schemaAgents, artifactManager, isLoggedIn, server } = useHyphaStore();
   const [uploadStatus, setUploadStatus] = useState<{
     message: string;
     severity: 'info' | 'success' | 'error';
@@ -106,12 +119,12 @@ const Edit: React.FC = () => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [unsavedChanges, setUnsavedChanges] = useState<{[key: string]: string}>({});
   const [showComments, setShowComments] = useState(false);
-  const [activeTab, setActiveTab] = useState<'files' | 'review' | 'config'>(() => {
+  const [activeTab, setActiveTab] = useState<'files' | 'review' | 'config' | 'chat'>(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam?.startsWith('@')) {
       return 'files';
     }
-    return (tabParam as 'files' | 'review' | 'config') || 'config';
+    return (tabParam as 'files' | 'review' | 'config' | 'chat') || 'config';
   });
   const [artifactInfo, setArtifactInfo] = useState<ArtifactInfo | null>(null);
   const [showPublishDialog, setShowPublishDialog] = useState(false);
@@ -137,11 +150,22 @@ const Edit: React.FC = () => {
 
   // Add new state for agent config
   const [agentConfig, setAgentConfig] = useState<AgentConfig>({
+    // Basic Info
     name: '',
-    instructions: '',
+    description: '', // renamed from instructions
     welcomeMessage: 'Hello, how can I assist you today?',
-    extensions: [],
-    visibility: 'private'
+    
+    // Runtime Configuration
+    agent_config: {
+      // Identity
+      name: '',
+      profile: 'AI Assistant',
+      goal: 'I am a helpful AI assistant',
+      
+      // Model Settings
+      model: 'gpt-4o-mini',
+      stream: true
+    }
   });
 
   // Add new state for available extensions
@@ -628,6 +652,15 @@ const Edit: React.FC = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       )
+    },
+    {
+      id: 'chat',
+      label: 'Chat',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      )
     }
   ];
 
@@ -714,8 +747,18 @@ const Edit: React.FC = () => {
               <div className="bg-white rounded-lg shadow p-6 mb-6">
                 <div className="flex justify-between items-start mb-6">
                   <h3 className="text-lg font-medium text-gray-900">Preview</h3>
-                  {/* Admin actions moved here */}
+                  {/* Admin actions */}
                   <div className="flex gap-2">
+                    {/* Add Chat Preview button */}
+                    <button 
+                      onClick={() => window.open(`#/chat/${artifactId.split('/').pop()}`, '_blank')}
+                      className="flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Preview Chat
+                    </button>
                     <button 
                       className="flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                       onClick={() => setShowPublishDialog(true)}
@@ -773,6 +816,8 @@ const Edit: React.FC = () => {
                 <Comments artifactId={artifactId!} />
               </div>
             </div>
+          ) : activeTab === 'chat' ? (
+            renderChat()
           ) : (
             renderFileContent()
           )}
@@ -782,40 +827,83 @@ const Edit: React.FC = () => {
   };
 
   // Update the navigation button
-  const renderSidebarNav = () => (
-    <>
-      {/* Only show New Version button if not in staging mode */}
-      {!isStaged && (
+  const renderSidebarNav = () => {
+    // Get the latest content for rdf.yaml, including unsaved changes
+    const getLatestRdfContent = () => {
+      const rdfFile = files.find(file => file.path.endsWith('rdf.yaml'));
+      if (!rdfFile) return '';
+      return unsavedChanges[rdfFile.path] ?? 
+        (typeof rdfFile.content === 'string' ? rdfFile.content : '');
+    };
+
+    const isRdfFile = selectedFile?.path.endsWith('rdf.yaml');
+    const shouldDisableActions = isRdfFile && (!isContentValid || hasContentChanged);
+
+    return (
+      <>
+        {/* Only show New Version button if not in staging mode */}
+        {!isStaged && (
+          <div className="p-4 border-b bg-white space-y-2">
+            <button
+              onClick={() => setShowNewVersionDialog(true)}
+              className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors bg-white text-gray-700 border hover:bg-gray-50"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              New Version
+            </button>
+          </div>
+        )}
+        {/* Navigation buttons section */}
         <div className="p-4 border-b bg-white space-y-2">
-        <button
-          onClick={() => setShowNewVersionDialog(true)}
-          className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors bg-white text-gray-700 border hover:bg-gray-50"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          New Version
-        </button>
+          <button
+            onClick={() => handleTabChange('config')}
+            className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
+              ${activeTab === 'config' 
+                ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                : 'bg-white text-gray-700 border hover:bg-gray-50'}`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Configure Agent
+          </button>
+          <button
+            onClick={() => handleTabChange('chat')}
+            className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
+              ${activeTab === 'chat' 
+                ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                : 'bg-white text-gray-700 border hover:bg-gray-50'}`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            Start Chat
+          </button>
+          {/* Add Review & Publish button only when in staging mode */}
+          {isStaged && (
+            <button
+              onClick={() => handleTabChange('review')}
+              disabled={shouldDisableActions}
+              className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
+                ${shouldDisableActions
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : activeTab === 'review'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-white text-gray-700 border hover:bg-gray-50'}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Review & Publish
+            </button>
+          )}
         </div>
-      )}
-      {/* Add Configure button */}
-      <div className="p-4 border-b bg-white">
-        <button
-          onClick={() => handleTabChange('config')}
-          className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
-            ${activeTab === 'config' 
-              ? 'bg-blue-50 text-blue-700 border-blue-200' 
-              : 'bg-white text-gray-700 border hover:bg-gray-50'}`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          Configure Agent
-        </button>
-      </div>
-    </>
-  );
+      </>
+    );
+  };
 
   // Update the publish confirmation dialog
   const renderPublishDialog = () => (
@@ -906,7 +994,7 @@ const Edit: React.FC = () => {
   );
 
   // Update URL when tab changes
-  const handleTabChange = (tab: 'files' | 'review' | 'config', filePath?: string) => {
+  const handleTabChange = (tab: 'files' | 'review' | 'config' | 'chat', filePath?: string) => {
     setActiveTab(tab);
     if (tab === 'files' && filePath) {
       setSearchParams({ tab: `@${filePath}` });
@@ -931,7 +1019,7 @@ const Edit: React.FC = () => {
         }
       } else {
         // If no tab is specified in URL, set it to 'config'
-        const tab = tabParam as 'files' | 'review' | 'config' || 'config';
+        const tab = tabParam as 'files' | 'review' | 'config' | 'chat' || 'config';
         setActiveTab(tab);
         if (!tabParam) {
           setSearchParams({ tab: 'config' });
@@ -1196,7 +1284,6 @@ const Edit: React.FC = () => {
           </button>
         )}
 
-        {/* Update ModelValidator to use latest content */}
         {isRdfFile && (
           <div title={`Run Validator (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+R)`}>
             <ModelValidator
@@ -1208,34 +1295,12 @@ const Edit: React.FC = () => {
           </div>
         )}
 
-        
-
-        {/* Update ModelTester */}
         {artifactId && (
           <ModelTester
             artifactId={artifactId}
             version={isStaged ? 'stage' : artifactInfo?.version}
             isDisabled={!isStaged || shouldDisableActions}
           />
-        )}
-
-        {/* Update Review & Publish button */}
-        {isStaged && (
-          <button
-            onClick={() => handleTabChange('review')}
-            disabled={shouldDisableActions}
-            className={`px-6 py-2 rounded-md font-medium transition-colors whitespace-nowrap flex items-center gap-2
-              ${shouldDisableActions
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : activeTab === 'review'
-                  ? 'bg-blue-700 text-white'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Review & Publish
-          </button>
         )}
       </div>
     );
@@ -1576,13 +1641,12 @@ const Edit: React.FC = () => {
 
   // Add function to load extensions
   const loadExtensions = async () => {
-    if (!server) return;
+    if (!schemaAgents) return;
     
     try {
-      const agentManager = await server.getService('agent_manager');
-      const response = await agentManager.getAvailableExtensions();
-      if (response.extensions) {
-        setAvailableExtensions(response.extensions);
+      
+      if (schemaAgents.extensions) {
+        setAvailableExtensions(schemaAgents.extensions);
       }
     } catch (error) {
       console.error("Error loading extensions:", error);
@@ -1591,20 +1655,31 @@ const Edit: React.FC = () => {
 
   // Add useEffect to load extensions and initial config
   useEffect(() => {
-    if (server) {
+    if (schemaAgents) {
       loadExtensions();
     }
-  }, [server]);
+  }, [schemaAgents]);
 
   useEffect(() => {
     if (artifactInfo?.manifest) {
-      // Update agent config from manifest
       setAgentConfig({
+        // Basic Info
         name: artifactInfo.manifest.name || '',
-        instructions: artifactInfo.manifest.description || '',
+        description: artifactInfo.manifest.description || '', // renamed from instructions
         welcomeMessage: artifactInfo.manifest.welcomeMessage || 'Hello, how can I assist you today?',
-        extensions: artifactInfo.manifest.extensions || [],
-        visibility: artifactInfo.manifest.visibility || 'private'
+        
+        // Runtime Configuration
+        agent_config: {
+          // Identity
+          name: artifactInfo.manifest.name || '',
+          profile: artifactInfo.manifest.agent_config?.profile || 'AI Assistant',
+          goal: artifactInfo.manifest.agent_config?.goal || 'I am a helpful AI assistant',
+          
+          // Model Settings
+          model: artifactInfo.manifest.agent_config?.model || 'gpt-4o-mini',
+          stream: artifactInfo.manifest.agent_config?.stream ?? true,
+          instructions: artifactInfo.manifest.description || ''
+        }
       });
     }
   }, [artifactInfo]);
@@ -1619,14 +1694,25 @@ const Edit: React.FC = () => {
         severity: 'info'
       });
 
-      // Preserve all existing manifest fields while updating the ones we manage
       const updatedManifest = {
         ...artifactInfo.manifest,
+        // Basic Info
         name: agentConfig.name,
-        description: agentConfig.instructions,
+        description: agentConfig.description, // renamed from instructions
         welcomeMessage: agentConfig.welcomeMessage,
-        extensions: agentConfig.extensions,
-        visibility: agentConfig.visibility
+        
+        // Runtime Configuration
+        agent_config: {
+          // Identity
+          name: agentConfig.name,
+          profile: agentConfig.agent_config.profile,
+          goal: agentConfig.agent_config.goal,
+          
+          // Model Settings
+          model: agentConfig.agent_config.model,
+          stream: agentConfig.agent_config.stream,
+          instructions: agentConfig.description // renamed from instructions
+        }
       };
 
       await artifactManager.edit({
@@ -1641,7 +1727,6 @@ const Edit: React.FC = () => {
         severity: 'success'
       });
 
-      // Reload artifact info to ensure we have the latest state
       await loadArtifactFiles();
     } catch (error) {
       console.error('Error saving configuration:', error);
@@ -1652,93 +1737,161 @@ const Edit: React.FC = () => {
     }
   };
 
-  // Add renderConfig function
+  // Update renderConfig to merge the two sections
   const renderConfig = () => (
     <div className="p-6">
       <div className="max-w-3xl mx-auto space-y-6">
         <h2 className="text-2xl font-bold text-gray-900">Agent Configuration</h2>
         
-        <div className="space-y-4">
-          <TextField
-            label="Agent Name"
-            value={agentConfig.name}
-            onChange={(e) => setAgentConfig(prev => ({ ...prev, name: e.target.value }))}
-            fullWidth
-            required
-          />
+        <div className="space-y-6">
+          {/* Basic Information */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+            
+            <TextField
+              label="Agent Name"
+              value={agentConfig.name}
+              onChange={(e) => setAgentConfig(prev => ({
+                ...prev,
+                name: e.target.value,
+                agent_config: {
+                  ...prev.agent_config,
+                  name: e.target.value
+                }
+              }))}
+              fullWidth
+              required
+            />
 
-          <TextField
-            label="Instructions"
-            value={agentConfig.instructions}
-            onChange={(e) => setAgentConfig(prev => ({ ...prev, instructions: e.target.value }))}
-            fullWidth
-            required
-            multiline
-            rows={4}
-            helperText="Describe the agent's purpose and behavior"
-          />
+            <TextField
+              label="Description"
+              value={agentConfig.description}
+              onChange={(e) => setAgentConfig(prev => ({
+                ...prev,
+                description: e.target.value,
+                agent_config: {
+                  ...prev.agent_config,
+                  instructions: e.target.value
+                }
+              }))}
+              fullWidth
+              required
+              multiline
+              rows={4}
+              helperText="Describe the agent's purpose and behavior"
+            />
 
-          <TextField
-            label="Welcome Message"
-            value={agentConfig.welcomeMessage}
-            onChange={(e) => setAgentConfig(prev => ({ ...prev, welcomeMessage: e.target.value }))}
-            fullWidth
-            helperText="Message displayed when starting a conversation with the agent"
-          />
+            <TextField
+              label="Welcome Message"
+              value={agentConfig.welcomeMessage}
+              onChange={(e) => setAgentConfig(prev => ({
+                ...prev,
+                welcomeMessage: e.target.value
+              }))}
+              fullWidth
+              helperText="Message displayed when starting a conversation with the agent"
+            />
+          </div>
 
-          <FormControl fullWidth>
-            <InputLabel>Extensions</InputLabel>
-            <Select
-              multiple
-              value={agentConfig.extensions}
-              onChange={(e) => setAgentConfig(prev => ({ ...prev, extensions: e.target.value as string[] }))}
-              renderValue={(selected) => (
-                <div className="flex flex-wrap gap-1">
-                  {(selected as string[]).map((value) => {
-                    const extension = availableExtensions.find(ext => ext.id === value);
-                    return (
-                      <Chip 
-                        key={value} 
-                        label={extension?.name || value}
-                        size="small"
-                      />
-                    );
-                  })}
-                </div>
-              )}
+          {/* Runtime Configuration */}
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Runtime Configuration</h3>
+            
+            {/* Identity */}
+            <div className="space-y-4 mb-6">
+              <TextField
+                label="Profile"
+                value={agentConfig.agent_config.profile}
+                onChange={(e) => setAgentConfig(prev => ({
+                  ...prev,
+                  agent_config: {
+                    ...prev.agent_config,
+                    profile: e.target.value
+                  }
+                }))}
+                fullWidth
+                required
+                helperText="Define the agent's role and expertise"
+              />
+
+              <TextField
+                label="Goal"
+                value={agentConfig.agent_config.goal}
+                onChange={(e) => setAgentConfig(prev => ({
+                  ...prev,
+                  agent_config: {
+                    ...prev.agent_config,
+                    goal: e.target.value
+                  }
+                }))}
+                fullWidth
+                required
+                multiline
+                rows={2}
+                helperText="Define the agent's primary objective"
+              />
+            </div>
+
+            {/* Model Settings */}
+            <div className="space-y-4">
+              <TextField
+                label="Model"
+                value={agentConfig.agent_config.model}
+                onChange={(e) => setAgentConfig(prev => ({
+                  ...prev,
+                  agent_config: {
+                    ...prev.agent_config,
+                    model: e.target.value
+                  }
+                }))}
+                fullWidth
+                required
+                helperText="Specify the LLM model to use"
+              />
+
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={agentConfig.agent_config.stream}
+                    onChange={(e) => setAgentConfig(prev => ({
+                      ...prev,
+                      agent_config: {
+                        ...prev.agent_config,
+                        stream: e.target.checked
+                      }
+                    }))}
+                  />
+                }
+                label="Enable streaming responses"
+              />
+            </div>
+          </div>
+
+          {/* Save button */}
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveConfig}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              {availableExtensions.map((extension) => (
-                <MenuItem key={extension.id} value={extension.id}>
-                  <div>
-                    <div className="font-medium">{extension.name}</div>
-                    <div className="text-sm text-gray-500">{extension.description}</div>
-                  </div>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl fullWidth>
-            <InputLabel>Visibility</InputLabel>
-            <Select
-              value={agentConfig.visibility}
-              onChange={(e) => setAgentConfig(prev => ({ ...prev, visibility: e.target.value as 'public' | 'private' }))}
-            >
-              <MenuItem value="private">Private</MenuItem>
-              <MenuItem value="public">Public</MenuItem>
-            </Select>
-          </FormControl>
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            onClick={handleSaveConfig}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Save Configuration
-          </button>
+              Save Configuration
+            </button>
+          </div>
         </div>
       </div>
+    </div>
+  );
+
+  // Update renderChat function
+  const renderChat = () => (
+    <div className="flex-1 flex flex-col h-3/4 overflow-hidden">
+      <Chat 
+        agentConfig={{
+          ...agentConfig.agent_config,
+          // Don't include welcomeMessage in agent_config
+        }}
+        welcomeMessage={agentConfig.welcomeMessage} // Pass as separate prop
+        className="flex-1 min-h-0"
+      />
     </div>
   );
 

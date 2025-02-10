@@ -16,6 +16,7 @@ import { resolveHyphaUrl } from '../utils/urlHelpers';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import Link from '@mui/material/Link';
+import ChatIcon from '@mui/icons-material/Chat';
 
 const ResourceDetails = () => {
   const { id } = useParams();
@@ -25,6 +26,9 @@ const ResourceDetails = () => {
 
   // Store covers in a local variable
   const covers = selectedResource?.manifest.covers || [];
+
+  // Add this variable to control button state
+  const shouldDisableChat = !selectedResource?.manifest?.agent_config;
 
   useEffect(() => {
     if (id) {
@@ -114,28 +118,24 @@ const ResourceDetails = () => {
           >
             Download
           </Button>
-          <ModelTester 
-                artifactId={selectedResource.id}
-                version={manifest.version}
-                isDisabled={!selectedResource.manifest.type?.includes('model')}
-              />
           <Button
             component={RouterLink}
-            to={`/model-trainer/${selectedResource.id.split('/').pop()}`}
+            to={`/chat/${selectedResource.id.split('/').pop()}`}
             variant="contained"
             size="medium"
-            disabled={!selectedResource.manifest.type?.includes('model')}
+            startIcon={<ChatIcon />}
+            disabled={shouldDisableChat}
             sx={{
-              backgroundColor: '#10b981',
+              backgroundColor: '#3b82f6',
               '&:hover': {
-                backgroundColor: '#059669',
+                backgroundColor: '#2563eb',
               },
               '&.Mui-disabled': {
                 backgroundColor: '#d1d5db',
               },
             }}
           >
-            Model Trainer
+            Start Chat
           </Button>
           {manifest.version && (
             <Chip 

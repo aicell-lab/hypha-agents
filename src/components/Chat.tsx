@@ -14,6 +14,18 @@ interface ChatMessage {
   content: string;
 }
 
+interface ChatProps {
+  agentConfig?: {
+    name: string;
+    profile?: string;
+    goal?: string;
+    model?: string;
+    [key: string]: any;
+  };
+  welcomeMessage?: string;
+  className?: string;
+}
+
 const generateSessionId = () => {
   const timestamp = new Date().getTime();
   const random = Math.random();
@@ -22,12 +34,12 @@ const generateSessionId = () => {
 
 const FONT_FAMILY = 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
-const Chat: React.FC = () => {
+const Chat: React.FC<ChatProps> = ({ agentConfig, welcomeMessage, className }) => {
   const [message, setMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
     {
       sender: 'assistant',
-      content: "👋 Hi! I'm ELIA, your AI assistant. How can I help you today?"
+      content: welcomeMessage || "👋 Hi! I'm ELIA, your AI assistant. How can I help you today?"
     }
   ]);
   const [status, setStatus] = useState('Ready to chat! Type your message and press enter!');
@@ -37,15 +49,12 @@ const Chat: React.FC = () => {
   const sessionId = useRef(generateSessionId());
   const [isTyping, setIsTyping] = useState(false);
 
-  const scrollToBottom = () => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   useEffect(() => {
-    if (!isTyping) {
-      scrollToBottom();
-    }
-  }, [chatHistory, isTyping]);
+    setChatHistory([{
+      sender: 'assistant',
+      content: welcomeMessage || "👋 Hi! I'm ELIA, your AI assistant. How can I help you today?"
+    }]);
+  }, [welcomeMessage]);
 
   const handleFeedback = async (messageIndex: number, type: 'like' | 'unlike') => {
     const feedback = prompt('Please share your thoughts about this response, thank you!');
@@ -100,8 +109,9 @@ const Chat: React.FC = () => {
       // Add user message to chat
       setChatHistory(prev => [...prev, { sender: 'user', content: message }]);
 
+      // Use provided agentConfig or fallback to defaults
       const response = await schemaAgents.aask(message, {
-        agent_config: {
+        agent_config: agentConfig || {
           name: "Alice",
           profile: "BioImage Analyst",
           goal: "A are a helpful agent",
@@ -125,35 +135,35 @@ const Chat: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-gradient-to-b from-gray-50 to-white" style={{ fontFamily: FONT_FAMILY }}>
-      {/* Header */}
+    <div className={`flex flex-col h-full bg-gradient-to-b from-gray-50 to-white ${className || ''}`} style={{ fontFamily: FONT_FAMILY }}>
+      {/* Header - even smaller */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-r from-blue-700 to-blue-900 text-white py-3 px-4 flex items-center"
+        className="bg-gradient-to-r from-blue-700 to-blue-900 text-white py-1.5 px-3 flex items-center flex-shrink-0"
       >
         <motion.img 
           whileHover={{ scale: 1.1 }}
           src="https://raw.githubusercontent.com/alalulu8668/alalulu8668.github.io/master/images/elia-agent-icon2.svg"
           alt="ELIA"
-          className="h-8 mr-3 drop-shadow-lg"
+          className="h-6 mr-2 drop-shadow-lg"
         />
-        <span className="text-xl font-medium tracking-wide">ELIA: Your GenAI assistant</span>
+        <span className="text-base font-medium tracking-wide">ELIA: Your GenAI assistant</span>
       </motion.div>
 
       {/* Chat Container */}
-      <div className="flex-1 overflow-hidden flex flex-col bg-white/95 backdrop-blur-sm">
-        {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent p-6">
+      <div className="flex-1 overflow-hidden flex flex-col bg-white/95 backdrop-blur-sm min-h-0">
+        {/* Messages Area - smaller padding */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent p-3">
           <AnimatePresence>
-            <div className="space-y-6">
+            <div className="space-y-3"> {/* Even less space between messages */}
               {chatHistory.map((msg, index) => (
                 <motion.div
                   key={index}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
-                  className={`message-container group ${msg.sender === 'user' ? 'flex justify-end' : 'flex justify-start'} items-start space-x-3`}
+                  className={`message-container group ${msg.sender === 'user' ? 'flex justify-end' : 'flex justify-start'} items-start space-x-2`}
                 >
                   {msg.sender === 'assistant' && (
                     <motion.div 
@@ -163,7 +173,7 @@ const Chat: React.FC = () => {
                       <img 
                         src="https://raw.githubusercontent.com/alalulu8668/alalulu8668.github.io/master/images/elia-agent-icon2.svg"
                         alt="Assistant"
-                        className="w-10 h-10 drop-shadow-md"
+                        className="w-8 h-8 drop-shadow-md" // Smaller avatar
                       />
                     </motion.div>
                   )}
@@ -171,14 +181,14 @@ const Chat: React.FC = () => {
                   <div className={`flex flex-col max-w-[80%] ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
                     <motion.div 
                       whileHover={{ scale: 1.01 }}
-                      className={`rounded-2xl p-4 shadow-md ${
+                      className={`rounded-xl p-3 shadow-md ${
                         msg.sender === 'user' 
                           ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white' 
                           : 'bg-gray-50 border border-gray-200'
                       }`}
                     >
                       <ReactMarkdown 
-                        className={`prose prose-base max-w-none ${
+                        className={`prose prose-sm max-w-none ${
                           msg.sender === 'user' 
                             ? 'prose-invert' 
                             : 'prose-gray prose-headings:text-gray-900 prose-p:text-gray-800'
@@ -192,35 +202,35 @@ const Chat: React.FC = () => {
                       <motion.div 
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="flex space-x-2 mt-2"
+                        className="flex space-x-2 mt-1"
                       >
                         <button 
                           onClick={() => handleFeedback(index, 'like')}
                           className="text-gray-500 hover:text-green-600 transition-all duration-200 transform hover:scale-110"
                         >
-                          <FaThumbsUp className="w-4 h-4" />
+                          <FaThumbsUp className="w-3 h-3" />
                         </button>
                         <button 
                           onClick={() => handleFeedback(index, 'unlike')}
                           className="text-gray-500 hover:text-red-600 transition-all duration-200 transform hover:scale-110"
                         >
-                          <FaThumbsDown className="w-4 h-4" />
+                          <FaThumbsDown className="w-3 h-3" />
                         </button>
                       </motion.div>
                     ) : (
                       <motion.div 
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="flex justify-end mt-1"
+                        className="flex justify-end mt-0.5"
                       >
                         <motion.button
                           initial={{ opacity: 0 }}
                           whileHover={{ scale: 1.1, opacity: 1 }}
-                          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all duration-200 p-1"
+                          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all duration-200 p-0.5"
                           onClick={() => handleDeleteMessage(index)}
                           title="Delete message"
                         >
-                          <FaTrash className="w-3 h-3" />
+                          <FaTrash className="w-2.5 h-2.5" />
                         </motion.button>
                       </motion.div>
                     )}
@@ -231,8 +241,8 @@ const Chat: React.FC = () => {
                       whileHover={{ scale: 1.05 }}
                       className="flex-shrink-0"
                     >
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center shadow-md">
-                        <FaUser className="w-5 h-5 text-white" />
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center shadow-md">
+                        <FaUser className="w-4 h-4 text-white" />
                       </div>
                     </motion.div>
                   )}
@@ -243,17 +253,17 @@ const Chat: React.FC = () => {
           </AnimatePresence>
         </div>
 
-        {/* Bottom Section */}
+        {/* Bottom Section - more compact */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="border-t border-gray-200 p-6 bg-white shadow-lg"
+          className="border-t border-gray-200 p-2 bg-white shadow-lg flex-shrink-0"
         >
-          {/* Status Message */}
-          <div className="text-base text-gray-600 mb-3 italic">{status}</div>
+          {/* Status Message - smaller */}
+          <div className="text-xs text-gray-600 mb-1.5 italic">{status}</div>
 
           {/* Input Area */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             <div className="flex-1 relative">
               <textarea
                 value={message}
@@ -261,10 +271,10 @@ const Chat: React.FC = () => {
                 onKeyDown={handleKeyDown}
                 placeholder="Type your message..."
                 rows={1}
-                className="w-full p-3 pr-4 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white shadow-sm transition-all duration-200 text-gray-800 placeholder-gray-500 resize-none overflow-hidden min-h-[44px]"
+                className="w-full p-2 pr-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white shadow-sm transition-all duration-200 text-gray-800 placeholder-gray-500 resize-none overflow-hidden min-h-[36px]"
                 style={{
-                  height: '44px',
-                  maxHeight: '200px'
+                  height: '36px',
+                  maxHeight: '120px'
                 }}
                 onInput={handleInput}
                 disabled={isLoading}
@@ -275,20 +285,20 @@ const Chat: React.FC = () => {
               whileTap={{ scale: 0.95 }}
               onClick={handleSendMessage}
               disabled={isLoading}
-              className="px-6 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed h-[44px] flex items-center space-x-2 shadow-md transition-all duration-200 font-medium flex-shrink-0 text-base"
+              className="px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed h-[36px] flex items-center space-x-1.5 shadow-md transition-all duration-200 font-medium flex-shrink-0 text-xs"
             >
-              <FaPaperPlane className="w-4 h-4" />
+              <FaPaperPlane className="w-3 h-3" />
               <span>Send</span>
             </motion.button>
           </div>
 
-          {/* Footer */}
+          {/* Footer - more compact */}
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="mt-6 text-center text-base"
+            className="mt-2 text-center text-xs"
           >
-            <p className="mb-2 font-medium text-gray-700">⚠️ Warning: AI Agents can make mistakes. Consider checking important information.</p>
+            <p className="mb-0.5 font-medium text-gray-700">⚠️ AI Agents can make mistakes. Check important information.</p>
             <p className="text-blue-700 font-semibold">ELIA: Ericsson Learning Intelligent Agents</p>
           </motion.div>
         </motion.div>

@@ -13,9 +13,9 @@ import Edit from './components/Edit';
 import './index.css'
 import './github-markdown.css'
 import { HyphaProvider } from './HyphaContext';
-import ModelTrainer from './components/ModelTrainer';
 import Create from './components/Create';
 import Chat from './components/Chat';
+import ChatPage from './pages/ChatPage';
 
 // Create a wrapper component that uses Router hooks
 const AppContent: React.FC = () => {
@@ -61,9 +61,9 @@ const AppContent: React.FC = () => {
           <Route path="/upload" element={<Upload />} />
           <Route path="/my-agents" element={<MyArtifacts />} />
           <Route path="/edit/:artifactId" element={<Edit />} />
-          <Route path="/model-trainer/:id" element={<ModelTrainer />} />
           <Route path="/create" element={<Create />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/chat/:id" element={<ChatPage />} />
         </Routes>
       </main>
       {!isChatRoute && <Footer />}
