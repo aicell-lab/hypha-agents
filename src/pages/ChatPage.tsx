@@ -38,7 +38,6 @@ const ChatPage: React.FC = () => {
           artifact_id: `elia-platform/${id}`,
           _rkwargs: true
         });
-        debugger;
         const manifest = artifact.manifest as ArtifactManifest;
 
         if (manifest.agent_config) {

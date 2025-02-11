@@ -1776,8 +1776,6 @@ const Edit: React.FC = () => {
               }))}
               fullWidth
               required
-              multiline
-              rows={4}
               helperText="Describe the agent's purpose and behavior"
             />
 
@@ -1827,8 +1825,8 @@ const Edit: React.FC = () => {
                 fullWidth
                 required
                 multiline
-                rows={2}
-                helperText="Define the agent's primary objective"
+                rows={4}
+                helperText="Define the agent's primary objective and expected behavior in detail"
               />
             </div>
 
