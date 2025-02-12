@@ -130,7 +130,7 @@ async def main():
                 required_skills=["Fiber Optics", "Power Systems"],
                 estimated_duration=45,
                 risk_assessment=analysis
-            )
+            ).model_dump(mode="json")
 
         @schema_tool
         async def update_public_comms(comms_status: PublicCommsStatus) -> str:
