@@ -104,11 +104,16 @@ async def main():
                 )
                 print(f"   Field Report: {attempt_report}")
                 
-                if "SUCCESS" in attempt_report:
+                # Add random success chance (1/3 probability)
+                success_roll = random.randint(1, 3)
+                if success_roll == 1:
+                    print(f"🎲 DICE ROLL: {success_roll} → SUCCESS!")
                     print(f"✅ REPAIR SUCCESS! Removed {alert.alert_id} from active repairs")
+                    network_status['outage_resolved'] = True
                     network_status['repairs_in_progress'].remove(alert.alert_id)
                     return f"✅ Field repair completed: {attempt_report}"
                 
+                print(f"🎲 DICE ROLL: {success_roll} → FAILURE")
                 attempts += 1
                 print(f"⚠️ RETRYING... (Attempt {attempts})")
             
@@ -130,7 +135,7 @@ async def main():
                 required_skills=["Fiber Optics", "Power Systems"],
                 estimated_duration=45,
                 risk_assessment=analysis
-            ).model_dump(mode="json")
+            )
 
         @schema_tool
         async def update_public_comms(comms_status: PublicCommsStatus) -> str:
