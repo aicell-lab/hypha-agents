@@ -7,6 +7,8 @@ module.exports = function override(config, env) {
     util: require.resolve('util'),
     process: require.resolve('process/browser'),
     assert: require.resolve('assert/'),
+    events: require.resolve('events/'),
+    path: require.resolve('path-browserify'),
   };
 
   // Add plugins if needed

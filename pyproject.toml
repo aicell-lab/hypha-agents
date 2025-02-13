@@ -9,7 +9,7 @@ readme = "README.md"
 description = "Elia Platform Backend Engine for LLM Services and Tool Runtime"
 dependencies = [
     "python-dotenv",
-    "schema-agents==0.2.0rc1",
+    "schema-agents==0.2.0rc3",
     "hypha-rpc>=0.20.47",
     "requests",
     "pypdf",

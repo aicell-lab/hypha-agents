@@ -286,10 +286,6 @@ const Edit: React.FC = () => {
       });
 
       if (!fileList || fileList.length === 0) {
-        setUploadStatus({
-          message: 'No files found',
-          severity: 'error'
-        });
         return;
       }
 

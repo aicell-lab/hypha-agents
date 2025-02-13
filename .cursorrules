@@ -48,27 +48,17 @@ For backend services, you may rely on:
 ## Project Structure
 ```
 elia-platform/
-├── frontend/                 # React + TypeScript + Tailwind
-│   ├── src/
-│   │   ├── components/      # Reusable UI components
-│   │   ├── pages/          # Page components
-│   │   ├── hooks/          # Custom React hooks
-│   │   ├── services/       # Hypha service clients
-│   │   └── types/          # TypeScript definitions
-│   └── package.json
+├── src/                    # Frontend React + TypeScript + Tailwind
+│   ├── ...
+├── elia_engine/           # Backend Python package
+│   ├── ...
 │
-├── backend/
-│   ├── services/           # Hypha service implementations
-│   │   ├── llm/           # LLM service
-│   │   ├── tools/         # Agent tools
-│   │   └── agents/        # Agent orchestration
-│   ├── models/            # Pydantic models
-│   └── utils/             # Shared utilities
-│
-└── agents/                # Agent definitions and configs
-    ├── templates/         # Base agent templates
-    ├── tools/            # Shared agent tools
-    └── prompts/          # Agent prompt templates
+├── resources/             # Documentation and resources
+├── scripts/              # Utility scripts
+├── tests/                # Test files
+├── package.json          # Frontend dependencies
+├── pyproject.toml        # Python package configuration
+└── requirements.txt      # Python dependencies
 ```
 
 ### Key Components

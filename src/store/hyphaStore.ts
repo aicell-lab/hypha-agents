@@ -35,7 +35,6 @@ export interface HyphaState {
   totalItems: number;
   setTotalItems: (total: number) => void;
   artifactManager: any;
-  schemaAgents: any;
   isConnected: boolean;
   connect: (config: ConnectionConfig) => Promise<any>;
   isLoggingIn: boolean;
@@ -98,14 +97,12 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
       }
 
       const artifactManager = await server.getService('public/artifact-manager');
-      const schemaAgents = await server.getService("schema-agents");
       const isAuthenticated = !!config.token;
       
       set({
         client,
         server,
         artifactManager,
-        schemaAgents,
         isConnected: true,
         isAuthenticated,
         isLoggedIn: isAuthenticated,
@@ -239,4 +236,4 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
       set({ isLoggingIn: false });
     }
   }
-})); 
+}));

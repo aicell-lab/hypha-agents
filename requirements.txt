@@ -1,4 +1,4 @@
-schema-agents==0.2.0rc1
+schema-agents==0.2.0rc3
 hypha-rpc>=0.20.47
 hypha>=0.20.47
 requests
