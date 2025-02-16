@@ -14,7 +14,7 @@ import './index.css'
 import './github-markdown.css'
 import { HyphaProvider } from './HyphaContext';
 import Create from './components/Create';
-import Chat from './components/Chat';
+import Chat from './components/chat/Chat';
 import ChatPage from './pages/ChatPage';
 
 // Create a wrapper component that uses Router hooks
@@ -42,14 +42,9 @@ const AppContent: React.FC = () => {
   }, [location]);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {!isChatRoute && <Navbar />}
-      <Snackbar 
-        isOpen={snackbarOpen}
-        message={snackbarMessage}
-        onClose={() => setSnackbarOpen(false)}
-      />
-      <main className={isChatRoute ? '' : 'container mx-auto px-4'}>
+    <div className="flex flex-col h-screen">
+      <Navbar className="flex-shrink-0" />
+      <main className="flex-1 flex flex-col min-h-0">
         <Routes>
           <Route path="/" element={<ResourceGrid />} />
           <Route path="/resources/:id" element={<ResourceDetails />} />
@@ -66,7 +61,6 @@ const AppContent: React.FC = () => {
           <Route path="/chat/:id" element={<ChatPage />} />
         </Routes>
       </main>
-      {!isChatRoute && <Footer />}
     </div>
   );
 };

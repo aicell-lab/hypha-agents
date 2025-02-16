@@ -1,5 +1,5 @@
 from hypha_rpc import connect_to_server, login
-from schema_agents.hypha_service import register_agent_service
+from elia_engine.hypha_service import register_agent_service
 from elia_engine.services.plotting import register_plotting_service
 import logging
 from dotenv import load_dotenv

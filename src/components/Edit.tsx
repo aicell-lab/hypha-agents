@@ -12,7 +12,7 @@ import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import ModelTester from './ModelTester';
 import ModelValidator from './ModelValidator';
-import Chat from './Chat';
+import Chat from './chat/Chat';
 
 interface FileNode {
   name: string;
@@ -1149,7 +1149,7 @@ const Edit: React.FC = () => {
 
   // Update renderFileList to include file management features
   const renderFileList = () => (
-    <div {...getRootProps()} className="flex-1 overflow-y-auto">
+    <div {...getRootProps()} className="flex-1 overflow-y-auto overflow-x-hidden"> {/* Added overflow-x-hidden */}
       {/* Add Files section with + File button */}
       <div className="mt-4">
         <div className="flex items-center justify-between px-4 mb-2">
@@ -1877,14 +1877,17 @@ const Edit: React.FC = () => {
 
   // Update renderChat function
   const renderChat = () => (
-    <div className="flex-1 flex flex-col h-3/4 overflow-hidden">
+    <div className="flex-1 flex flex-col" style={{ height: 'calc(100vh - 107px)' }}> {/* 104px = 64px (navbar) + 40px (back button bar) */}
       <Chat 
         agentConfig={{
           ...agentConfig.agent_config,
-          // Don't include welcomeMessage in agent_config
         }}
-        welcomeMessage={agentConfig.welcomeMessage} // Pass as separate prop
-        className="flex-1 min-h-0"
+        welcomeMessage={agentConfig.welcomeMessage}
+        className="flex-1"
+        showActions={true}
+        onPreviewChat={() => window.open(`#/chat/${artifactId!.split('/').pop()}`, '_blank')}
+        onPublish={() => setShowPublishDialog(true)}
+        artifactId={artifactId}
       />
     </div>
   );
