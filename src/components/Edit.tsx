@@ -1922,7 +1922,7 @@ const Edit: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-xs text-gray-500 font-mono mt-2">
-                  ID: {artifactInfo.id}
+                  ID: {artifactInfo.id.split("/").pop()}
                 </div>
               </>
             ) : (
