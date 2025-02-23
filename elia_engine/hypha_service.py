@@ -10,6 +10,26 @@ from schema_agents.utils.common import EventBus
 from schema_agents.utils.jsonschema_pydantic import json_schema_to_pydantic_model
 from schema_agents import schema_tool
 
+example_code = """
+
+# example code for using matplotlib inline mode to make a simple plot
+# and print some text
+import matplotlib.pyplot as plt
+# make inline
+%matplotlib inline
+import numpy as np
+
+x = np.linspace(0, 10, 100)
+y = np.sin(x)
+
+plt.plot(x, y)
+plt.text(4, 0.5, "Hello, world!")
+plt.show()
+
+print("Hello, world!")
+
+"""
+
 def create_tool_name(svc_id, tool_id=""):
     text = f"{svc_id}_{tool_id}"
     text = text.replace("-", " ").replace("_", " ").replace(".", " ")
@@ -48,7 +68,7 @@ def tool_factory(svc_id, tool_id, tool_func, schema):
     
     return schema_tool(wrapper, input_model=input_model)
 
-async def aask(question, agent_config, streaming_callback=None):
+async def aask(question, agent_config, streaming_callback=None, run_code=None):
     """Ask a question."""
     agent = Role(**agent_config)
     event_bus = EventBus("test")
@@ -59,7 +79,9 @@ async def aask(question, agent_config, streaming_callback=None):
     async with create_session_context(
         event_bus=event_bus
     ):
-        return await agent.aask(question)
+        if run_code:
+            results = await run_code(example_code)
+        return await agent.aask(question + "\n\n code execution results: " + results)
 
 def extract_tools_from_service(service):
     """A utility function to extract functions nested in a service."""
@@ -80,7 +102,7 @@ def normalize_service_name(text):
 async def register_agent_service(server):
     """Register a service with the server."""
 
-    async def acall(question, agent_config, tools=None, services=None, streaming_callback=None, **kwargs):
+    async def acall(question, agent_config, tools=None, services=None, streaming_callback=None, run_code=None, **kwargs):
         """Ask a question."""
         agent = Role(**agent_config)
         event_bus = EventBus("test")
@@ -113,6 +135,9 @@ async def register_agent_service(server):
         async with create_session_context(
             event_bus=event_bus
         ):
+            if run_code:
+                results = await run_code(example_code)
+                print("code execution results: " + results)
             return await agent.acall(question, tools=tools, tool_usage_prompt=tool_usage_prompt, **kwargs)
     
     svc = await server.register_service({

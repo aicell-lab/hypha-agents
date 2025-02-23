@@ -13,6 +13,7 @@ import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import ModelTester from './ModelTester';
 import ModelValidator from './ModelValidator';
 import Chat from './chat/Chat';
+import { ThebeProvider } from './chat/ThebeProvider';
 
 interface FileNode {
   name: string;
@@ -1878,17 +1879,60 @@ const Edit: React.FC = () => {
   // Update renderChat function
   const renderChat = () => (
     <div className="flex-1 flex flex-col" style={{ height: 'calc(100vh - 107px)' }}> {/* 104px = 64px (navbar) + 40px (back button bar) */}
-      <Chat 
-        agentConfig={{
-          ...agentConfig.agent_config,
-        }}
-        welcomeMessage={agentConfig.welcomeMessage}
-        className="flex-1"
-        showActions={true}
-        onPreviewChat={() => window.open(`#/chat/${artifactId!.split('/').pop()}`, '_blank')}
-        onPublish={() => setShowPublishDialog(true)}
-        artifactId={artifactId}
-      />
+      <ThebeProvider>
+        <Chat 
+          agentConfig={{
+            ...agentConfig.agent_config,
+          }}
+          welcomeMessage={agentConfig.welcomeMessage}
+          className="flex-1"
+          showActions={true}
+          onPreviewChat={() => artifactId && window.open(`#/chat/${artifactId.split('/').pop()}`, '_blank')}
+          onPublish={() => setShowPublishDialog(true)}
+          artifactId={artifactId}
+          initialMessages={[
+            {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'markdown',
+                  content: 'Here is a test code block that you can execute:'
+                },
+                {
+                  type: 'code_execution',
+                  content: `# Matplotlib plot
+import matplotlib.pyplot as plt
+plt.plot([1, 2, 3, 4])
+plt.ylabel('some numbers')
+plt.show()
+
+import micropip
+await micropip.install(['plotly', 'pandas'])
+# Plotly figure
+import plotly.express as px
+df = px.data.tips()
+fig = px.histogram(df, x="total_bill", y="tip", color="sex", marginal="rug",
+                  hover_data=df.columns)
+fig.show()
+
+# HTML display
+from IPython.display import HTML
+HTML("<h1>Hello World!</h1>")
+
+# Image display
+from PIL import Image
+import numpy as np
+img = Image.fromarray(np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8))
+display(img)`,
+                  attrs: {
+                    language: 'python'
+                  }
+                }
+              ],
+            }
+          ]}
+        />
+      </ThebeProvider>
     </div>
   );
 

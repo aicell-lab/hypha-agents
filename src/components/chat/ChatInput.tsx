@@ -1,18 +1,21 @@
 import React, { useRef, useState, KeyboardEvent, useEffect } from 'react';
 import { SendIcon } from './icons/SendIcon';
+import { ThebeStatus } from './ThebeStatus';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
   isTyping?: boolean;
+  isThebeReady?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   disabled = false,
   placeholder = "Type your message...",
-  isTyping = false
+  isTyping = false,
+  isThebeReady = false
 }) => {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -69,17 +72,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         className="flex-1 resize-none overflow-hidden max-h-[200px] focus:outline-none focus:ring-0 border-0 bg-transparent p-2"
         style={{ height: '36px' }}
       />
-      <button
-        onClick={handleSend}
-        disabled={!message.trim() || disabled}
-        className={`p-2 rounded-lg transition-colors ${
-          !message.trim() || disabled
-            ? 'text-gray-400 cursor-not-allowed'
-            : 'text-blue-600 hover:bg-blue-50'
-        }`}
-      >
-        <SendIcon className="w-5 h-5" />
-      </button>
+      <div className="flex items-center gap-2">
+        <ThebeStatus />
+        <button
+          onClick={handleSend}
+          disabled={!message.trim() || disabled}
+          className={`p-2 rounded-lg transition-colors ${
+            !message.trim() || disabled
+              ? 'text-gray-400 cursor-not-allowed'
+              : 'text-blue-600 hover:bg-blue-50'
+          }`}
+        >
+          <SendIcon className="w-5 h-5" />
+        </button>
+      </div>
     </div>
   );
 }; 
