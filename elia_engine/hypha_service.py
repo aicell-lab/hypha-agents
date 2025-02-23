@@ -111,7 +111,16 @@ async def register_agent_service(server):
                 await streaming_callback(response.model_dump(mode="json"))
             event_bus.on("stream", callback)
 
-        tools = []
+        tools = tools or []
+        if tools:
+            for t in tools:
+                schema = t.__schema__
+                t.__doc__ = schema["description"]
+                tools.append(tool_factory("tool", t.__name__, t, schema["parameters"]))
+
+            svcd = service['description'].replace('\n', ' ')
+            service_prompts.append(f" - {svc_id}*: {svcd}\n")
+
         if services:
             service_prompts = []
             for service in services:

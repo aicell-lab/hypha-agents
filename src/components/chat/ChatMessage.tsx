@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { UserIcon } from './icons/UserIcon';
 import { BotIcon } from './icons/BotIcon';
@@ -42,6 +42,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   isLoading
 }) => {
   const isUser = message.role === 'user';
+  const htmlContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Execute scripts in HTML content after rendering
+    if (htmlContentRef.current) {
+      const scripts = htmlContentRef.current.getElementsByTagName('script');
+      Array.from(scripts).forEach(oldScript => {
+        const newScript = document.createElement('script');
+        Array.from(oldScript.attributes).forEach(attr => 
+          newScript.setAttribute(attr.name, attr.value)
+        );
+        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+        oldScript.parentNode?.replaceChild(newScript, oldScript);
+      });
+    }
+  }, [message]);
 
   const renderContentItem = (item: ContentItem, index: number) => {
     switch (item.type) {
@@ -127,7 +143,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       
       case 'html':
         return (
-          <div key={index} className="my-2" dangerouslySetInnerHTML={{ __html: item.content }} />
+          <div 
+            key={index} 
+            className="my-2 prose prose-sm max-w-none" 
+            ref={htmlContentRef}
+            dangerouslySetInnerHTML={{ __html: item.content }} 
+          />
         );
       
       default:

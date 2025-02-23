@@ -1,5 +1,4 @@
-import React from 'react';
-import Plot from 'react-plotly.js';
+import React, { useEffect, useRef } from 'react';
 
 interface Output {
   type: string;
@@ -65,8 +64,25 @@ const formatTraceback = (content: string): string => {
 };
 
 const OutputDisplay: React.FC<OutputDisplayProps> = React.memo(({ outputs, theme = 'light' }) => {
+  const htmlContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Execute scripts in HTML content after rendering
+    if (htmlContentRef.current) {
+      const scripts = htmlContentRef.current.getElementsByTagName('script');
+      Array.from(scripts).forEach(oldScript => {
+        const newScript = document.createElement('script');
+        Array.from(oldScript.attributes).forEach(attr => 
+          newScript.setAttribute(attr.name, attr.value)
+        );
+        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+        oldScript.parentNode?.replaceChild(newScript, oldScript);
+      });
+    }
+  }, [outputs]);
+
   return (
-    <div className={`output-display ${theme}`}>
+    <div className={`output-display ${theme}`} ref={htmlContentRef}>
       {outputs.map((output, index) => {
         switch (output.type) {
           case 'stdout':
@@ -115,40 +131,7 @@ const OutputDisplay: React.FC<OutputDisplayProps> = React.memo(({ outputs, theme
                 {...output.attrs}
               />
             );
-          case 'plotly':
-            try {
-              const fig = JSON.parse(output.content);
-              return (
-                <div key={`plotly-${index}`} className="my-4">
-                  <Plot
-                    data={fig.data}
-                    layout={{
-                      ...fig.layout,
-                      paper_bgcolor: 'transparent',
-                      plot_bgcolor: 'transparent',
-                      font: {
-                        color: theme === 'dark' ? '#E5E7EB' : '#1F2937'
-                      },
-                      margin: { t: 30, r: 10, b: 30, l: 60 }
-                    }}
-                    config={{
-                      responsive: true,
-                      displayModeBar: true,
-                      scrollZoom: true
-                    }}
-                    style={{width: '100%', height: '400px'}}
-                    useResizeHandler={true}
-                  />
-                </div>
-              );
-            } catch (e) {
-              const error = e as Error;
-              return (
-                <pre key={`error-${index}`} className="text-red-500 p-2 bg-red-50 rounded">
-                  Error rendering Plotly figure: {error.message}
-                </pre>
-              );
-            }
+          
           case 'audio':
             return (
               <audio 

@@ -1896,7 +1896,7 @@ const Edit: React.FC = () => {
               content: [
                 {
                   type: 'markdown',
-                  content: 'Here is a test code block that you can execute:'
+                  content: '# hello \nHere is a test code block that you can execute:'
                 },
                 {
                   type: 'code_execution',
@@ -1906,28 +1906,16 @@ plt.plot([1, 2, 3, 4])
 plt.ylabel('some numbers')
 plt.show()
 
-import micropip
-await micropip.install(['plotly', 'pandas'])
 # Plotly figure
 import plotly.express as px
 df = px.data.tips()
 fig = px.histogram(df, x="total_bill", y="tip", color="sex", marginal="rug",
                   hover_data=df.columns)
-fig.show()
-
-# HTML display
-from IPython.display import HTML
-HTML("<h1>Hello World!</h1>")
-
-# Image display
-from PIL import Image
-import numpy as np
-img = Image.fromarray(np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8))
-display(img)`,
+fig.show()`,
                   attrs: {
                     language: 'python'
                   }
-                }
+                },
               ],
             }
           ]}

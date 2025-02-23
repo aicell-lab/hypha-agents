@@ -128,7 +128,10 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
             style={oneLight}
             customStyle={{
               margin: 0,
-              padding: '1rem',
+              paddingTop: '0rem',
+              paddingBottom: '0rem',
+              paddingLeft: '1rem',
+              paddingRight: '1rem',
               background: 'transparent',
               fontSize: '0.875rem',
             }}

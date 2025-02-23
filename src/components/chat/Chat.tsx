@@ -1,10 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useHyphaStore } from '../../store/hyphaStore';
-import { FaPaperPlane } from 'react-icons/fa';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useThebe } from './ThebeProvider';
-import { ThebeStatus } from './ThebeStatus';
+import { hyphaWebsocketClient } from 'hypha-rpc';
 
 interface OutputType {
   type: string;
@@ -309,6 +308,13 @@ const Chat: React.FC<ChatProps> = ({
             output: 'Executing...'
           }
         };
+
+        // Clear any previous HTML outputs that might be related to this code execution
+        currentContent = currentContent.filter((item, idx) => 
+          idx < executionIndex || 
+          (item.type !== 'html' && !item.content.includes('plotly-graph-div'))
+        );
+        
         currentContent.push(codeExecution);
         
         // Update the message with current content
@@ -329,10 +335,31 @@ const Chat: React.FC<ChatProps> = ({
         // Execute the code using the Thebe kernel with real-time output handling
         await executeCode(code, {
           onOutput: (output: OutputType) => {
-            // Update the current execution's output in real-time
-            currentContent[executionIndex].attrs!.output = 
-              (currentContent[executionIndex].attrs!.output === 'Executing...' ? '' : currentContent[executionIndex].attrs!.output) + 
-              output.content;
+            // Handle plotly output specially
+            if (output.type === 'html' && output.content.includes('plotly-graph-div')) {
+              // Add plotly script if not already added
+              if (!currentContent.some(item => 
+                item.type === 'html' && 
+                item.content.includes('cdn.plot.ly/plotly')
+              )) {
+                currentContent.push({
+                  type: 'html',
+                  content: `<div id="plotly-output" style="min-height: 400px;">
+                    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+                  </div>`
+                });
+              }
+              // Add the plotly output
+              currentContent.push({
+                type: 'html',
+                content: output.content
+              });
+            } else {
+              // Update the current execution's output in real-time
+              currentContent[executionIndex].attrs!.output = 
+                (currentContent[executionIndex].attrs!.output === 'Executing...' ? '' : currentContent[executionIndex].attrs!.output) + 
+                output.content;
+            }
             updateMessage();
           },
           onStatus: (status: string) => {
@@ -343,6 +370,18 @@ const Chat: React.FC<ChatProps> = ({
         // Get the final output
         return currentContent[executionIndex].attrs!.output;
       };
+
+      const runCodeTool = hyphaWebsocketClient.schemaFunction(runCode, {
+        name: 'runCode',
+        description: 'Run the code in the code execution block',
+        parameters: {
+          type: 'object',
+          properties: {
+            code: { type: 'string' }
+          },
+          required: ['code']
+        }
+      });
 
       // Create a streaming callback
       const streamingCallback = async (event: any) => {
@@ -374,7 +413,7 @@ const Chat: React.FC<ChatProps> = ({
       // Call the agent with both callbacks
       const response = await schemaAgents.acall(message, {
         agent_config: agentConfig,
-        run_code: runCode,
+        tools: [runCodeTool],
         streaming_callback: streamingCallback,
         _rkwargs: true
       });

@@ -132,19 +132,34 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children }) => {
   }, []);
 
   const getKernelInfo = async (kernel: KernelConnection) => {
-    if (!kernel || !isReady) return;
+    if (!kernel) {
+      console.warn('Kernel info not ready');
+      return;
+    }
     
     try {
+      console.log('Installing packages...');
+      // First install required packages
+      const installFuture = kernel.requestExecute({
+        code: `
+import micropip
+await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc'])
+`
+      });
+      await installFuture.done;
+
+      // Then get version info
       const future = kernel.requestExecute({
         code: `
 import sys
 import pyodide
-print(f"{sys.version.split()[0]}|||{pyodide.__version__}")
+print(f"{sys.version.split()[0]}")
 `
       });
 
       let versions = '';
       future.onIOPub = (msg: KernelMessage) => {
+        console.log('Kernel message:', msg);
         if (msg.header.msg_type === 'stream' && msg.content.name === 'stdout') {
           versions = msg.content.text.trim();
         }
@@ -213,7 +228,7 @@ print(f"{sys.version.split()[0]}|||{pyodide.__version__}")
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Kernel startup timeout'));
-        }, 30000);
+        }, 120000);
 
         kernel.statusChanged.connect((_: unknown, status: 'idle' | 'busy' | 'starting' | 'error') => {
           console.log('Kernel status changed:', status);
@@ -228,10 +243,8 @@ print(f"{sys.version.split()[0]}|||{pyodide.__version__}")
           }
         });
       });
-
       // After kernel is ready, get kernel info
       await getKernelInfo(kernel);
-      
       return kernel;
     } catch (error) {
       console.error('Error connecting to kernel:', error);
@@ -257,17 +270,6 @@ print(f"{sys.version.split()[0]}|||{pyodide.__version__}")
     onStatus?.('Executing code...');
 
     try {
-      // First install required packages if they are imported
-      if (code.includes('import plotly')) {
-        onOutput?.({
-          type: 'stdout',
-          content: 'Installing plotly package...\n'
-        });
-        await currentKernel.requestExecute({ 
-          code: '%pip install plotly'
-        }).done;
-      }
-
       const future = currentKernel.requestExecute({ code });
       // Handle kernel messages
       future.onIOPub = (msg: KernelMessage) => {
@@ -367,7 +369,6 @@ print(f"{sys.version.split()[0]}|||{pyodide.__version__}")
       }
       // Create new kernel connection
       const newKernel = await connect();
-      // Get kernel info after restart
       await getKernelInfo(newKernel);
       setStatus('idle');
     } catch (error) {
