@@ -34,8 +34,8 @@ interface ChatProps {
     model?: string;
     stream?: boolean;
     instructions?: string;
+    welcomeMessage?: string;
   };
-  welcomeMessage?: string;
   className?: string;
   showActions?: boolean;
   onPreviewChat?: () => void;
@@ -219,7 +219,6 @@ Each code block is independent and can be executed separately. Try modifying the
 
 const Chat: React.FC<ChatProps> = ({ 
   agentConfig, 
-  welcomeMessage, 
   className,
   showActions,
   onPreviewChat,
@@ -227,31 +226,33 @@ const Chat: React.FC<ChatProps> = ({
   artifactId,
   initialMessages = []
 }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isTyping, setIsTyping] = useState(false);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const { server } = useHyphaStore();
-  const [schemaAgents, setSchemaAgents] = useState<any>(null);
   const { executeCode, isReady: isThebeReady } = useThebe();
-
-  // Initialize messages with welcome message and initial messages
-  useEffect(() => {
+  
+  // Use useMemo to create initial messages
+  const initialMessagesList = React.useMemo(() => {
     const initMessages: Message[] = [];
-    if (welcomeMessage) {
-      initMessages.push({ role: 'assistant', content: [{ type: 'markdown', content: welcomeMessage }] });
+    if (agentConfig.welcomeMessage) {
+      initMessages.push({ 
+        role: 'assistant', 
+        content: [{ type: 'markdown', content: agentConfig.welcomeMessage }] 
+      });
     }
     if (initialMessages.length > 0) {
       initMessages.push(...initialMessages);
     }
-    if (initMessages.length > 0) {
-      setMessages(initMessages);
-    }
-  }, [welcomeMessage, initialMessages]);
+    return initMessages;
+  }, [agentConfig.welcomeMessage, initialMessages]);
 
-  // Scroll to bottom when messages change
+  const [messages, setMessages] = useState<Message[]>(initialMessagesList);
+  const [isTyping, setIsTyping] = useState(false);
+  const [schemaAgents, setSchemaAgents] = useState<any>(null);
+
+  // Update messages when initialMessagesList changes
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    setMessages(initialMessagesList);
+  }, [initialMessagesList]);
 
   // Initialize schema-agents
   useEffect(() => {
@@ -268,6 +269,13 @@ const Chat: React.FC<ChatProps> = ({
 
     initSchemaAgents();
   }, [server]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (messageEndRef.current) {
+      messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   // Handle code execution output
   const handleOutput = (output: OutputType) => {
