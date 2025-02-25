@@ -14,12 +14,13 @@ export interface OutputItem {
 }
 
 export interface ContentItem {
-  type: 'markdown' | 'code_execution' | 'tool_call' | 'image' | 'html';
+  type: 'markdown' | 'code_execution' | 'tool_call' | 'image' | 'html' | 'input_audio';
   content: string;
   attrs?: {
     language?: string;
     output?: OutputItem[];
     status?: string;
+    transcript?: string | null;
     [key: string]: any;
   };
 }
@@ -716,8 +717,12 @@ Note: All code runs in the same kernel, sharing state and variables.`,
         {/* Chat Input - Fixed at bottom */}
         <div className="flex-shrink-0 border-t border-gray-200 bg-white p-4 shadow-lg">
           <div className="max-w-4xl mx-auto">
-            <div className="flex items-end gap-2">
-              {enableVoiceMode && <VoiceButton />}
+            <div className="flex items-center gap-2">
+              {enableVoiceMode && (
+                <div className="flex-shrink-0 flex items-center">
+                  <VoiceButton />
+                </div>
+              )}
               <div className="flex-1">
                 <ChatInput 
                   onSend={handleSendMessage} 
