@@ -1,179 +1,134 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { UserIcon } from './icons/UserIcon';
-import { BotIcon } from './icons/BotIcon';
+import { useThebe } from './ThebeProvider';
 import { CodeBlock } from './CodeBlock';
-
-interface ContentItem {
-  type: 'markdown' | 'code_execution' | 'tool_call' | 'image' | 'html';
-  content: string;
-  attrs?: {
-    language?: string;
-    output?: string;
-    [key: string]: any;
-  };
-}
+import type { Components } from 'react-markdown';
+import type { Message, ContentItem, OutputItem } from './Chat';
+import rehypeRaw from 'rehype-raw';
 
 interface ChatMessageProps {
-  message: {
-    role: 'user' | 'assistant';
-    content: ContentItem[];
-  };
+  message: Message;
   isLoading?: boolean;
 }
 
-interface CodeNodeChild {
-  type: string;
-  tagName?: string;
-  value?: string;
-  children?: Array<{ type: string; value?: string }>;
-  properties?: {
-    className?: string[];
-  };
-}
-
-interface CodeNode {
-  type: string;
-  children?: CodeNodeChild[];
-}
-
-export const ChatMessage: React.FC<ChatMessageProps> = ({ 
-  message, 
-  isLoading
+// Component to handle stored content
+const StoredContent: React.FC<{ contentKey: string; type?: string; alt?: string }> = ({ 
+  contentKey, 
+  type,
+  alt 
 }) => {
-  const isUser = message.role === 'user';
-  const htmlContentRef = useRef<HTMLDivElement>(null);
+  const { getOutput } = useThebe();
+  const [content, setContent] = useState<string | null>(null);
 
   useEffect(() => {
-    // Execute scripts in HTML content after rendering
-    if (htmlContentRef.current) {
-      const scripts = htmlContentRef.current.getElementsByTagName('script');
-      Array.from(scripts).forEach(oldScript => {
-        const newScript = document.createElement('script');
-        Array.from(oldScript.attributes).forEach(attr => 
-          newScript.setAttribute(attr.name, attr.value)
-        );
-        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
-        oldScript.parentNode?.replaceChild(newScript, oldScript);
-      });
+    const fetchOutput = () => {
+      const output = getOutput(contentKey);
+      if (output) {
+        if (output.type === 'img') {
+          setContent(`<img src="${output.content}" alt="${alt || 'Output'}" class="max-w-full my-2 rounded shadow-sm" />`);
+        } else if (output.type === 'html') {
+          setContent(output.content);
+        } else if (output.type === 'svg') {
+          setContent(output.content);
+        } else {
+          setContent(output.content);
+        }
+      }
+    };
+
+    // Initial fetch
+    fetchOutput();
+
+    // Set up polling for content that might be added later
+    const interval = setInterval(fetchOutput, 500);
+
+    // Clean up interval
+    return () => clearInterval(interval);
+  }, [contentKey, getOutput, alt]);
+
+  if (!content) return null;
+
+  return <div dangerouslySetInnerHTML={{ __html: content }} />;
+};
+
+// Custom markdown components to handle stored content
+const MarkdownComponents: Components = {
+  div: ({ 
+    node,
+    children,
+    ...props
+  }: any) => {
+    // Extract data attributes from properties
+    const dataType = props['data-type'];
+    const dataId = props['data-id'];
+    const dataAlt = props['data-alt'];
+
+    if (dataId) {
+      return <StoredContent contentKey={dataId} type={dataType} alt={dataAlt} />;
     }
-  }, [message]);
+    return <div {...props}>{children}</div>;
+  }
+};
 
-  const renderContentItem = (item: ContentItem, index: number) => {
-    switch (item.type) {
-      case 'markdown':
-        return (
-          <ReactMarkdown
-            key={index}
-            className={`prose max-w-none ${isLoading ? 'opacity-60' : ''}`}
-            components={{
-              pre: ({ node, ...props }) => {
-                const codeNode = (node as unknown as CodeNode).children?.[0];
-                if (codeNode?.type === 'element' && codeNode.tagName === 'code') {
-                  const code = codeNode.children?.[0]?.value || '';
-                  const language = codeNode.properties?.className?.[0]?.replace('language-', '') || 'python';
-                  return <CodeBlock code={code} language={language} defaultCollapsed={true} />;
-                }
-                return (
-                  <div className="overflow-auto bg-gray-900 text-gray-100 p-4 rounded-lg my-2">
-                    <pre {...props} />
-                  </div>
-                );
-              },
-              code: ({ inline, ...props }: { inline?: boolean } & React.HTMLProps<HTMLElement>) =>
-                inline ? (
-                  <code className="bg-gray-100 text-gray-900 px-1 py-0.5 rounded" {...props} />
-                ) : (
-                  <code {...props} />
-                ),
-            }}
-          >
-            {item.content}
-          </ReactMarkdown>
-        );
-      
-      case 'code_execution':
-        return (
-          <div key={index} className="relative rounded-lg overflow-hidden bg-white border border-gray-200">
-            {/* Code block */}
-            <div className="relative">
-              <div className="pt-2">
-                <CodeBlock
-                  code={item.content}
-                  language={item.attrs?.language || 'python'}
-                  defaultCollapsed={false}
-                />
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading }) => {
+  return (
+    <div className={`py-6 ${message.role === 'assistant' ? 'bg-gray-50' : ''}`}>
+      <div className="max-w-4xl mx-auto px-6">
+        <div className="flex gap-4">
+          <div className="flex-shrink-0 w-8 h-8">
+            {message.role === 'assistant' ? (
+              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
               </div>
-            </div>
-
-            {/* Output block - only show if there's output */}
-            {item.attrs?.output && (
-              <div className="border-t border-gray-100">
-                <div className="px-4 py-2 bg-gray-50">
-                  <div className="flex items-center">
-                    <span className="text-xs text-gray-500">Output</span>
-                  </div>
-                  <pre className="mt-2 text-sm text-gray-700 font-mono whitespace-pre-wrap">{item.attrs.output}</pre>
-                </div>
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
               </div>
             )}
           </div>
-        );
-      
-      case 'tool_call':
-        return (
-          <div key={index} className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className="text-xs font-medium text-blue-700">Tool Call</span>
-            </div>
-            <pre className="whitespace-pre-wrap text-sm text-blue-700 font-mono">{item.content}</pre>
-          </div>
-        );
-      
-      case 'image':
-        return (
-          <div key={index} className="my-2">
-            <img src={item.content} alt={item.attrs?.alt || 'Generated image'} className="max-w-full rounded-lg" />
-          </div>
-        );
-      
-      case 'html':
-        return (
-          <div 
-            key={index} 
-            className="my-2 prose prose-sm max-w-none" 
-            ref={htmlContentRef}
-            dangerouslySetInnerHTML={{ __html: item.content }} 
-          />
-        );
-      
-      default:
-        return null;
-    }
-  };
 
-  return (
-    <div className={`flex gap-4 p-6 ${isUser ? 'bg-white' : 'bg-gray-50'}`}>
-      <div className="flex-shrink-0">
-        {isUser ? (
-          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-            <UserIcon className="w-5 h-5 text-blue-600" />
+          <div className="flex-1 min-w-0 space-y-4">
+            {message.content.map((item, index) => {
+              if (item.type === 'markdown') {
+                return (
+                  <div key={index} className="prose max-w-none break-words overflow-hidden">
+                    <ReactMarkdown 
+                      components={MarkdownComponents}
+                      rehypePlugins={[rehypeRaw]}
+                    >
+                      {item.content}
+                    </ReactMarkdown>
+                  </div>
+                );
+              }
+              if (item.type === 'code_execution') {
+                return (
+                  <div key={index} className="overflow-x-auto">
+                    <CodeBlock
+                      code={item.content}
+                      language={item.attrs?.language || 'python'}
+                      defaultCollapsed={false}
+                      initialOutputs={item.attrs?.output || []}
+                      initialStatus={item.attrs?.status || ''}
+                    />
+                  </div>
+                );
+              }
+              return null;
+            })}
+            {isLoading && (
+              <div className="flex gap-2 items-center text-gray-500">
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
-            <BotIcon className="w-5 h-5 text-purple-600" />
-          </div>
-        )}
-      </div>
-      <div className="flex-1 space-y-2 overflow-hidden">
-        <div className="font-medium text-sm text-gray-500">
-          {isUser ? 'You' : 'Assistant'}
         </div>
-        {message.content.map((item, index) => renderContentItem(item, index))}
       </div>
     </div>
   );

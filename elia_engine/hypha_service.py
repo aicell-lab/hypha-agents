@@ -9,6 +9,8 @@ from schema_agents.schema import StreamEvent
 from schema_agents.utils.common import EventBus
 from schema_agents.utils.jsonschema_pydantic import json_schema_to_pydantic_model
 from schema_agents import schema_tool
+import httpx
+import os
 
 example_code = """
 
@@ -99,6 +101,37 @@ def normalize_service_name(text):
     words = re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+', text)
     return ''.join(word if word.istitle() else word.capitalize() for word in words)
 
+async def get_realtime_token():
+    """Get a realtime session token from OpenAI."""
+    # Get the API key from environment variable
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable not set")
+
+    try:
+        # Create session with OpenAI's realtime API
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/realtime/sessions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-4o-realtime-preview",
+                    "voice": "verse"
+                }
+            )
+            response.raise_for_status()
+            session_data = response.json()
+
+            return session_data
+
+    except httpx.HTTPError as e:
+        raise ValueError(f"Failed to get realtime session: {str(e)}") from e
+    except Exception as e:
+        raise ValueError(f"Unexpected error getting realtime session: {str(e)}") from e
+
 async def register_agent_service(server):
     """Register a service with the server."""
 
@@ -157,6 +190,7 @@ async def register_agent_service(server):
         },
         "aask": aask,
         "acall": acall,
+        "get_realtime_token": get_realtime_token,
     })
     return svc
 

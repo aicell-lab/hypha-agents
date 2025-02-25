@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useThebe } from './ThebeProvider';
 import OutputDisplay from './OutputDisplay';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -18,18 +18,36 @@ interface CodeBlockProps {
   code: string;
   language?: string;
   defaultCollapsed?: boolean;
+  initialOutputs?: Array<{ type: string; content: string; attrs?: any }>;
+  initialStatus?: string;
 }
 
 export const CodeBlock: React.FC<CodeBlockProps> = ({ 
   code, 
   language = 'python',
-  defaultCollapsed = true 
+  defaultCollapsed = true,
+  initialOutputs = [],
+  initialStatus = ''
 }) => {
   const { executeCode, status, isReady } = useThebe();
-  const [outputs, setOutputs] = useState<Array<{ type: string; content: string; attrs?: any }>>([]);
+  const [outputs, setOutputs] = useState<Array<{ type: string; content: string; attrs?: any }>>(initialOutputs);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [executionStatus, setExecutionStatus] = useState<string>('');
+  const [executionStatus, setExecutionStatus] = useState<string>(initialStatus);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+
+  // Update outputs when initialOutputs changes
+  useEffect(() => {
+    if (initialOutputs.length > 0) {
+      setOutputs(initialOutputs);
+    }
+  }, [initialOutputs]);
+
+  // Update status when initialStatus changes
+  useEffect(() => {
+    if (initialStatus) {
+      setExecutionStatus(initialStatus);
+    }
+  }, [initialStatus]);
 
   // Get first line of code for preview
   const firstLine = code.split('\n')[0].trim();
@@ -47,7 +65,10 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       await executeCode(code, {
         onOutput: (output) => {
           console.log('Received new output:', output);
-          setOutputs(prev => [...prev, output]);
+          // don't show the output if it's just a newline
+          if (output.content.trim() !== '') {
+            setOutputs(prev => [...prev, output]);
+          }
         },
         onStatus: (status) => {
           console.log('Execution status changed:', status);
@@ -70,13 +91,14 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   };
 
   return (
-    <div className="relative">
+    <div className="relative border border-gray-200 rounded-lg overflow-hidden">
       {/* Header with collapse/expand and run buttons */}
-      <div className="flex justify-between items-center px-4 py-2">
+      <div className="flex justify-between items-center px-4 py-2 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="flex-shrink-0 text-gray-500 hover:text-gray-700 p-1 hover:bg-gray-100 rounded transition-colors"
+            title={isCollapsed ? "Expand code" : "Collapse code"}
           >
             <svg
               className={`w-4 h-4 transform transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
@@ -122,14 +144,14 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       
       {/* Code content - collapsible */}
       <div className={`transition-all duration-200 overflow-hidden ${isCollapsed ? 'h-0' : ''}`}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto bg-gray-50/50">
           <SyntaxHighlighter
             language={language}
             style={oneLight}
             customStyle={{
               margin: 0,
-              paddingTop: '0rem',
-              paddingBottom: '0rem',
+              paddingTop: '1rem',
+              paddingBottom: '1rem',
               paddingLeft: '1rem',
               paddingRight: '1rem',
               background: 'transparent',
@@ -142,9 +164,9 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       </div>
       
       {/* Outputs */}
-      {outputs.length > 0 && (
-        <div className="bg-gray-50 p-4 border-t border-gray-100">
-          <OutputDisplay outputs={outputs} />
+      {(outputs.length > 0 || initialOutputs.length > 0) && (
+        <div className="bg-gray-50 p-4 border-t border-gray-200">
+          <OutputDisplay outputs={outputs.length > 0 ? outputs : initialOutputs} />
         </div>
       )}
     </div>

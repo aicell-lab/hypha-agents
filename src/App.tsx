@@ -16,6 +16,7 @@ import { HyphaProvider } from './HyphaContext';
 import Create from './components/Create';
 import Chat from './components/chat/Chat';
 import ChatPage from './pages/ChatPage';
+import { VoiceModeProvider } from './components/chat/VoiceModeProvider';
 
 // Create a wrapper component that uses Router hooks
 const AppContent: React.FC = () => {
@@ -68,11 +69,13 @@ const AppContent: React.FC = () => {
 // Main App component that provides Router context
 const App: React.FC = () => {
   return (
-    <HyphaProvider>
-      <HashRouter>
-        <AppContent />
-      </HashRouter>
-    </HyphaProvider>
+    <VoiceModeProvider>
+      <HyphaProvider>
+        <HashRouter>
+          <AppContent />
+        </HashRouter>
+      </HyphaProvider>
+    </VoiceModeProvider>
   );
 };
 

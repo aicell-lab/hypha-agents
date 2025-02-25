@@ -63,10 +63,56 @@ const formatTraceback = (content: string): string => {
   return formatted.trim();
 };
 
+// CSS styles for pandas DataFrames
+const pandasStyles = `
+  .dataframe {
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.875rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    background: white;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+  .dataframe thead th {
+    background-color: #f8fafc;
+    color: #1e293b;
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  .dataframe tbody td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+  }
+  .dataframe tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .dataframe tbody tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+  .dataframe tbody tr:hover {
+    background-color: #f1f5f9;
+  }
+  .dataframe caption {
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    color: #64748b;
+  }
+`;
+
 const OutputDisplay: React.FC<OutputDisplayProps> = React.memo(({ outputs, theme = 'light' }) => {
   const htmlContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Add pandas styles
+    const styleElement = document.createElement('style');
+    styleElement.textContent = pandasStyles;
+    document.head.appendChild(styleElement);
+
     // Execute scripts in HTML content after rendering
     if (htmlContentRef.current) {
       const scripts = htmlContentRef.current.getElementsByTagName('script');
@@ -79,6 +125,10 @@ const OutputDisplay: React.FC<OutputDisplayProps> = React.memo(({ outputs, theme
         oldScript.parentNode?.replaceChild(newScript, oldScript);
       });
     }
+
+    return () => {
+      styleElement.remove();
+    };
   }, [outputs]);
 
   return (
@@ -94,7 +144,7 @@ const OutputDisplay: React.FC<OutputDisplayProps> = React.memo(({ outputs, theme
             return (
               <pre 
                 key={`${output.type}-${index}`} 
-                className={`${output.type} ${theme} p-2 rounded font-mono text-sm whitespace-pre-wrap ${
+                className={`${output.type} ${theme} p-1 rounded font-mono text-sm whitespace-pre-wrap ${
                   output.type === 'stderr' 
                     ? 'text-red-600 bg-red-50 border border-red-200' 
                     : 'text-gray-800 bg-gray-50'
@@ -117,7 +167,7 @@ const OutputDisplay: React.FC<OutputDisplayProps> = React.memo(({ outputs, theme
             return (
               <div 
                 key={`html-${index}`}
-                className="my-2 prose prose-sm max-w-none"
+                className="my-2 prose prose-sm max-w-none overflow-x-auto"
                 dangerouslySetInnerHTML={{ __html: output.content }}
                 {...output.attrs}
               />

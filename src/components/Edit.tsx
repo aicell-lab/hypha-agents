@@ -88,10 +88,10 @@ interface FileListItem {
 interface AgentConfig {
   // Basic Info
   name: string;
-  description: string; // renamed from instructions
+  description: string;
   welcomeMessage: string;
   
-  // Runtime Configuration (used directly by Chat.tsx)
+  // Runtime Configuration
   agent_config: {
     // Identity
     name: string;
@@ -102,7 +102,22 @@ interface AgentConfig {
     model: string;
     stream?: boolean;
     instructions?: string;
+
+    // Voice Settings
+    voice?: string;
+    temperature?: number;
+    max_output_tokens?: number;
+
+    // Tools Configuration
+    enabled_tools?: string[];
   };
+}
+
+// Add new interface for tool options
+interface ToolOption {
+  id: string;
+  name: string;
+  description: string;
 }
 
 const Edit: React.FC = () => {
@@ -153,7 +168,7 @@ const Edit: React.FC = () => {
   const [agentConfig, setAgentConfig] = useState<AgentConfig>({
     // Basic Info
     name: '',
-    description: '', // renamed from instructions
+    description: '',
     welcomeMessage: 'Hello, how can I assist you today?',
     
     // Runtime Configuration
@@ -171,6 +186,25 @@ const Edit: React.FC = () => {
 
   // Add new state for available extensions
   const [availableExtensions, setAvailableExtensions] = useState<Array<{id: string, name: string, description: string}>>([]);
+
+  // Add available tools state
+  const [availableTools] = useState<ToolOption[]>([
+    {
+      id: 'code_interpreter',
+      name: 'Code Interpreter',
+      description: 'Execute Python code and display results'
+    },
+    {
+      id: 'web_search',
+      name: 'Web Search',
+      description: 'Search the internet for information'
+    },
+    {
+      id: 'file_manager',
+      name: 'File Manager',
+      description: 'Upload, download, and manage files'
+    }
+  ]);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -1662,7 +1696,7 @@ const Edit: React.FC = () => {
       setAgentConfig({
         // Basic Info
         name: artifactInfo.manifest.name || '',
-        description: artifactInfo.manifest.description || '', // renamed from instructions
+        description: artifactInfo.manifest.description || '',
         welcomeMessage: artifactInfo.manifest.welcomeMessage || 'Hello, how can I assist you today?',
         
         // Runtime Configuration
@@ -1695,7 +1729,7 @@ const Edit: React.FC = () => {
         ...artifactInfo.manifest,
         // Basic Info
         name: agentConfig.name,
-        description: agentConfig.description, // renamed from instructions
+        description: agentConfig.description,
         welcomeMessage: agentConfig.welcomeMessage,
         
         // Runtime Configuration
@@ -1708,7 +1742,15 @@ const Edit: React.FC = () => {
           // Model Settings
           model: agentConfig.agent_config.model,
           stream: agentConfig.agent_config.stream,
-          instructions: agentConfig.description // renamed from instructions
+          instructions: agentConfig.description,
+
+          // Voice Settings
+          voice: agentConfig.agent_config.voice,
+          temperature: agentConfig.agent_config.temperature,
+          max_output_tokens: agentConfig.agent_config.max_output_tokens,
+
+          // Tools Configuration
+          enabled_tools: agentConfig.agent_config.enabled_tools
         }
       };
 
@@ -1828,7 +1870,9 @@ const Edit: React.FC = () => {
             </div>
 
             {/* Model Settings */}
-            <div className="space-y-4">
+            <div className="space-y-4 mb-6">
+              <h4 className="text-sm font-medium text-gray-900">Model Settings</h4>
+              
               <TextField
                 label="Model"
                 value={agentConfig.agent_config.model}
@@ -1860,6 +1904,117 @@ const Edit: React.FC = () => {
                 label="Enable streaming responses"
               />
             </div>
+
+            {/* Voice Settings */}
+            <div className="space-y-4 mb-6">
+              <h4 className="text-sm font-medium text-gray-900">Voice Settings</h4>
+              
+              <FormControl fullWidth>
+                <InputLabel>Voice</InputLabel>
+                <Select
+                  value={agentConfig.agent_config.voice || "sage"}
+                  onChange={(e) => setAgentConfig(prev => ({
+                    ...prev,
+                    agent_config: {
+                      ...prev.agent_config,
+                      voice: e.target.value
+                    }
+                  }))}
+                >
+                  <MenuItem value="sage">Sage</MenuItem>
+                  <MenuItem value="nova">Nova</MenuItem>
+                  <MenuItem value="shimmer">Shimmer</MenuItem>
+                </Select>
+              </FormControl>
+
+              <TextField
+                label="Temperature"
+                type="number"
+                value={agentConfig.agent_config.temperature || 0.8}
+                onChange={(e) => setAgentConfig(prev => ({
+                  ...prev,
+                  agent_config: {
+                    ...prev.agent_config,
+                    temperature: parseFloat(e.target.value)
+                  }
+                }))}
+                inputProps={{ min: 0, max: 1, step: 0.1 }}
+                fullWidth
+                helperText="Controls randomness in responses (0.0 to 1.0)"
+              />
+
+              <TextField
+                label="Max Output Tokens"
+                type="number"
+                value={agentConfig.agent_config.max_output_tokens || 1024}
+                onChange={(e) => setAgentConfig(prev => ({
+                  ...prev,
+                  agent_config: {
+                    ...prev.agent_config,
+                    max_output_tokens: parseInt(e.target.value)
+                  }
+                }))}
+                inputProps={{ min: 1, step: 1 }}
+                fullWidth
+                helperText="Maximum length of generated responses"
+              />
+            </div>
+
+            {/* Tools Configuration */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-gray-900">Enabled Tools</h4>
+              
+              <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-[3rem]">
+                {(agentConfig.agent_config.enabled_tools || ['code_interpreter']).map((toolId) => {
+                  const tool = availableTools.find(t => t.id === toolId);
+                  if (!tool) return null;
+                  
+                  return (
+                    <Chip
+                      key={tool.id}
+                      label={tool.name}
+                      onDelete={() => setAgentConfig(prev => ({
+                        ...prev,
+                        agent_config: {
+                          ...prev.agent_config,
+                          enabled_tools: prev.agent_config.enabled_tools?.filter(id => id !== tool.id)
+                        }
+                      }))}
+                      className="m-1"
+                    />
+                  );
+                })}
+              </div>
+
+              <FormControl fullWidth>
+                <InputLabel>Add Tool</InputLabel>
+                <Select
+                  value=""
+                  onChange={(e) => {
+                    const toolId = e.target.value;
+                    setAgentConfig(prev => ({
+                      ...prev,
+                      agent_config: {
+                        ...prev.agent_config,
+                        enabled_tools: [...(prev.agent_config.enabled_tools || []), toolId]
+                      }
+                    }));
+                  }}
+                >
+                  {availableTools
+                    .filter(tool => !(agentConfig.agent_config.enabled_tools || []).includes(tool.id))
+                    .map(tool => (
+                      <MenuItem key={tool.id} value={tool.id}>
+                        <div>
+                          <div className="font-medium">{tool.name}</div>
+                          <div className="text-sm text-gray-500">{tool.description}</div>
+                        </div>
+                      </MenuItem>
+                    ))
+                  }
+                </Select>
+              </FormControl>
+            </div>
           </div>
 
           {/* Save button */}
@@ -1884,41 +2039,11 @@ const Edit: React.FC = () => {
           agentConfig={{
             ...agentConfig.agent_config,
           }}
-          welcomeMessage={agentConfig.welcomeMessage}
           className="flex-1"
           showActions={true}
           onPreviewChat={() => artifactId && window.open(`#/chat/${artifactId.split('/').pop()}`, '_blank')}
           onPublish={() => setShowPublishDialog(true)}
           artifactId={artifactId}
-          initialMessages={[
-            {
-              role: 'assistant',
-              content: [
-                {
-                  type: 'markdown',
-                  content: '# hello \nHere is a test code block that you can execute:'
-                },
-                {
-                  type: 'code_execution',
-                  content: `# Matplotlib plot
-import matplotlib.pyplot as plt
-plt.plot([1, 2, 3, 4])
-plt.ylabel('some numbers')
-plt.show()
-
-# Plotly figure
-import plotly.express as px
-df = px.data.tips()
-fig = px.histogram(df, x="total_bill", y="tip", color="sex", marginal="rug",
-                  hover_data=df.columns)
-fig.show()`,
-                  attrs: {
-                    language: 'python'
-                  }
-                },
-              ],
-            }
-          ]}
         />
       </ThebeProvider>
     </div>

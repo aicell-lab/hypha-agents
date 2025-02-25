@@ -35,6 +35,14 @@ interface ServiceManager {
   };
 }
 
+interface OutputStore {
+  [key: string]: {
+    content: string;
+    type: string;
+    timestamp: number;
+  }
+}
+
 interface ThebeContextType {
   serviceManager: ServiceManager | null;
   session: SessionConnection | null;
@@ -43,7 +51,7 @@ interface ThebeContextType {
   isReady: boolean;
   connect: () => Promise<KernelConnection>;
   executeCode: (code: string, callbacks?: {
-    onOutput?: (output: { type: string; content: string; attrs?: any }) => void;
+    onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
   }) => Promise<void>;
   interruptKernel: () => Promise<void>;
@@ -52,6 +60,9 @@ interface ThebeContextType {
     pythonVersion?: string;
     pyodideVersion?: string;
   };
+  outputStore: OutputStore;
+  storeOutput: (content: string, type: string) => string; // returns the key
+  getOutput: (key: string) => { content: string; type: string } | null;
 }
 
 const ThebeContext = createContext<ThebeContextType>({
@@ -64,7 +75,10 @@ const ThebeContext = createContext<ThebeContextType>({
   executeCode: async () => {},
   interruptKernel: async () => { throw new Error('Thebe is not loaded yet'); },
   restartKernel: async () => { throw new Error('Thebe is not loaded yet'); },
-  kernelInfo: {}
+  kernelInfo: {},
+  outputStore: {},
+  storeOutput: () => '',
+  getOutput: () => null,
 });
 
 export const useThebe = () => useContext(ThebeContext);
@@ -106,6 +120,7 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children }) => {
   const [isScriptLoading, setIsScriptLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [kernelInfo, setKernelInfo] = useState<{ pythonVersion?: string; pyodideVersion?: string }>({});
+  const [outputStore, setOutputStore] = useState<OutputStore>({});
 
   // Load required scripts and initialize kernel
   useEffect(() => {
@@ -228,7 +243,7 @@ print(f"{sys.version.split()[0]}")
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Kernel startup timeout'));
-        }, 120000);
+        }, 1200000);
 
         kernel.statusChanged.connect((_: unknown, status: 'idle' | 'busy' | 'starting' | 'error') => {
           console.log('Kernel status changed:', status);
@@ -254,11 +269,60 @@ print(f"{sys.version.split()[0]}")
     }
   };
 
-  // Add executeCode function
+  // Function to generate a unique key for the store
+  const generateStoreKey = (type: string) => {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    return `${type}_${timestamp}_${random}`;
+  };
+
+  // Function to store output and return the key
+  const storeOutput = (content: string, type: string) => {
+    const key = generateStoreKey(type);
+    setOutputStore(prev => ({
+      ...prev,
+      [key]: {
+        content,
+        type,
+        timestamp: Date.now()
+      }
+    }));
+    return key;
+  };
+
+  // Function to get output from store
+  const getOutput = (key: string) => {
+    const output = outputStore[key];
+    return output ? { content: output.content, type: output.type } : null;
+  };
+
+  // Function to create a short representation of output
+  const createShortContent = (content: string, type: string): string => {
+    const maxLength = 200; // Adjust this value as needed
+    if (content.length <= maxLength) return content;
+    
+    switch (type) {
+      case 'stdout':
+      case 'stderr':
+        return `${content.substring(0, maxLength)}... [Full output stored with key: ${storeOutput(content, type)}]`;
+      case 'html':
+        return `[HTML content stored with key: ${storeOutput(content, type)}]`;
+      case 'img':
+        return `[Image stored with key: ${storeOutput(content, type)}]`;
+      case 'svg':
+        return `[SVG content stored with key: ${storeOutput(content, type)}]`;
+      case 'plotly':
+        return `[Plotly visualization stored with key: ${storeOutput(content, type)}]`;
+      default:
+        return `${content.substring(0, maxLength)}... [Full content stored with key: ${storeOutput(content, type)}]`;
+    }
+  };
+
+  // Update executeCode function to include short_content
   const executeCode = async (
     code: string,
     callbacks?: {
-      onOutput?: (output: { type: string; content: string; attrs?: any }) => void;
+      onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
       onStatus?: (status: string) => void;
     }
   ): Promise<void> => {
@@ -278,9 +342,11 @@ print(f"{sys.version.split()[0]}")
 
         switch (msgType) {
           case 'stream':
+            const streamContent = msg.content.text;
             onOutput?.({
               type: msg.content.name || 'stdout',
-              content: msg.content.text
+              content: streamContent,
+              short_content: createShortContent(streamContent, msg.content.name || 'stdout')
             });
             break;
           case 'display_data':
@@ -288,34 +354,46 @@ print(f"{sys.version.split()[0]}")
             // Handle rich display data
             const data = msg.content.data;
             if (data['text/html']) {
+              const htmlContent = data['text/html'];
               onOutput?.({
                 type: 'html',
-                content: data['text/html']
+                content: htmlContent,
+                short_content: createShortContent(htmlContent, 'html')
               });
             } else if (data['image/png']) {
+              const imgContent = `data:image/png;base64,${data['image/png']}`;
               onOutput?.({
                 type: 'img',
-                content: `data:image/png;base64,${data['image/png']}`
+                content: imgContent,
+                short_content: createShortContent(imgContent, 'img')
               });
             } else if (data['image/jpeg']) {
+              const jpegContent = `data:image/jpeg;base64,${data['image/jpeg']}`;
               onOutput?.({
                 type: 'img',
-                content: `data:image/jpeg;base64,${data['image/jpeg']}`
+                content: jpegContent,
+                short_content: createShortContent(jpegContent, 'img')
               });
             } else if (data['image/svg+xml']) {
+              const svgContent = data['image/svg+xml'];
               onOutput?.({
                 type: 'svg',
-                content: data['image/svg+xml']
+                content: svgContent,
+                short_content: createShortContent(svgContent, 'svg')
               });
             } else if (data['application/vnd.plotly.v1+json']) {
+              const plotlyContent = JSON.stringify(data['application/vnd.plotly.v1+json']);
               onOutput?.({
                 type: 'plotly',
-                content: JSON.stringify(data['application/vnd.plotly.v1+json'])
+                content: plotlyContent,
+                short_content: createShortContent(plotlyContent, 'plotly')
               });
             } else if (data['text/plain']) {
+              const plainContent = data['text/plain'];
               onOutput?.({
                 type: 'stdout',
-                content: data['text/plain']
+                content: plainContent,
+                short_content: createShortContent(plainContent, 'stdout')
               });
             }
             break;
@@ -323,7 +401,8 @@ print(f"{sys.version.split()[0]}")
             const errorText = msg.content.traceback.join('\n');
             onOutput?.({
               type: 'stderr',
-              content: errorText
+              content: errorText,
+              short_content: createShortContent(errorText, 'stderr')
             });
             onStatus?.('Error');
             break;
@@ -390,7 +469,10 @@ print(f"{sys.version.split()[0]}")
         executeCode,
         interruptKernel,
         restartKernel,
-        kernelInfo
+        kernelInfo,
+        outputStore,
+        storeOutput,
+        getOutput
       }}
     >
       {children}
