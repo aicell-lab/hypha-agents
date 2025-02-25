@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useHyphaStore } from '../store/hyphaStore';
 import Chat from '../components/chat/Chat';
+import { ThebeProvider } from '../components/chat/ThebeProvider';
 
 interface AgentConfig {
   name: string;
@@ -115,46 +116,48 @@ const ChatPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-[#F3F4F6]">
-      {/* Header */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
-        {agentConfig && (
-          <div className="max-w-4xl mx-auto flex items-center gap-3">
-            <button
-              onClick={() => navigate('/my-agents')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              aria-label="Back to My Agents"
-            >
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </button>
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-md">
-              <span className="text-white text-lg font-medium">
-                {agentConfig?.name?.[0]?.toUpperCase() || 'A'}
-              </span>
+    <ThebeProvider>
+      <div className="flex flex-col flex-1 min-h-0 bg-[#F3F4F6]">
+        {/* Header */}
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+          {agentConfig && (
+            <div className="max-w-4xl mx-auto flex items-center gap-3">
+              <button
+                onClick={() => navigate('/my-agents')}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Back to My Agents"
+              >
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </button>
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-md">
+                <span className="text-white text-lg font-medium">
+                  {agentConfig?.name?.[0]?.toUpperCase() || 'A'}
+                </span>
+              </div>
+              <div>
+                <h1 className="text-lg font-medium text-gray-900">
+                  {agentConfig?.name || 'AI Assistant'}
+                </h1>
+                <p className="text-sm text-gray-500">
+                  {agentConfig?.profile || 'Ready to help'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-medium text-gray-900">
-                {agentConfig?.name || 'AI Assistant'}
-              </h1>
-              <p className="text-sm text-gray-500">
-                {agentConfig?.profile || 'Ready to help'}
-              </p>
-            </div>
-          </div>
+          )}
+        </div>
+
+        {/* Chat Component - Only render when we have a complete config */}
+        {agentConfig && !loading && !error && (
+          <Chat
+            agentConfig={agentConfig}
+            className="flex-1"
+            artifactId={id}
+          />
         )}
       </div>
-
-      {/* Chat Component - Only render when we have a complete config */}
-      {agentConfig && !loading && !error && (
-        <Chat
-          agentConfig={agentConfig}
-          className="flex-1"
-          artifactId={id}
-        />
-      )}
-    </div>
+    </ThebeProvider>
   );
 };
 

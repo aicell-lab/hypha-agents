@@ -598,19 +598,38 @@ Note: All code runs in the same kernel, sharing state and variables.`,
       return parts.filter(Boolean).join('\n\n');
     };
 
-    const isDisabled = !schemaAgents || isTyping;
+    const isDisabled = !schemaAgents || isTyping || !isThebeReady;
+    const [isConnecting, setIsConnecting] = useState(false);
 
-    return (
-      <button
-        onClick={isRecording ? stopRecording : () => startRecording({
+    const handleStartRecording = async () => {
+      setIsConnecting(true);
+      try {
+        await startRecording({
           onItemCreated: handleItemCreated,
           instructions: composeInstructions(),
           voice: agentConfig.voice || "sage",
           temperature: agentConfig.temperature || (agentConfig.model?.includes("gpt-4") ? 0.7 : 0.8),
           max_output_tokens: agentConfig.max_output_tokens || 1024
-        })}
+        });
+      } catch (error) {
+        console.error('Failed to start recording:', error);
+        setIsConnecting(false);
+      }
+    };
+
+    const handleStopRecording = async () => {
+      try {
+        await stopRecording();
+      } finally {
+        setIsConnecting(false);
+      }
+    };
+
+    return (
+      <button
+        onClick={isRecording ? handleStopRecording : handleStartRecording}
         disabled={isDisabled}
-        className={`p-2 rounded-full transition-colors ${
+        className={`p-2 rounded-full transition-colors relative ${
           isDisabled
             ? 'bg-gray-300 cursor-not-allowed'
             : isRecording 
@@ -620,33 +639,52 @@ Note: All code runs in the same kernel, sharing state and variables.`,
         title={
           !schemaAgents 
             ? "Waiting for AI service..."
-            : isRecording 
-              ? "Stop Recording" 
-              : "Start Recording"
+            : !isThebeReady
+              ? "Waiting for code execution service..."
+              : isRecording 
+                ? "Stop Recording" 
+                : "Start Recording"
         }
       >
-        <svg 
-          className={`w-6 h-6 ${isDisabled ? 'text-gray-400' : 'text-white'}`}
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
-        >
-          {isRecording ? (
+        {isConnecting ? (
+          // Spinner
+          <div className="animate-spin">
+            <svg className="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : isRecording ? (
+          // Stop/Close button
+          <svg 
+            className={`w-6 h-6 ${isDisabled ? 'text-gray-400' : 'text-white'}`}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
             <path 
               strokeLinecap="round" 
               strokeLinejoin="round" 
               strokeWidth={2} 
-              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M16 8l-8 8 M8 8l8 8"
+              d="M6 18L18 6M6 6l12 12"
             />
-          ) : (
+          </svg>
+        ) : (
+          // Microphone button
+          <svg 
+            className={`w-6 h-6 ${isDisabled ? 'text-gray-400' : 'text-white'}`}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
             <path 
               strokeLinecap="round" 
               strokeLinejoin="round" 
               strokeWidth={2} 
               d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
             />
-          )}
-        </svg>
+          </svg>
+        )}
       </button>
     );
   };
