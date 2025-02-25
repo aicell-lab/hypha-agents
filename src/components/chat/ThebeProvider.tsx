@@ -158,7 +158,9 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children }) => {
       const installFuture = kernel.requestExecute({
         code: `
 import micropip
-await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc'])
+await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http'])
+import pyodide_http
+pyodide_http.patch_all()
 `
       });
       await installFuture.done;

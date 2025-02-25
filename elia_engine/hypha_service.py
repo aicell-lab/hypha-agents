@@ -119,7 +119,7 @@ async def get_realtime_token():
                 },
                 json={
                     "model": "gpt-4o-realtime-preview",
-                    "voice": "verse"
+                    "voice": "sage"
                 }
             )
             response.raise_for_status()

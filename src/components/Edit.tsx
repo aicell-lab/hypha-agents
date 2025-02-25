@@ -120,6 +120,19 @@ interface ToolOption {
   description: string;
 }
 
+// Add available voice options
+const VOICE_OPTIONS = [
+  'alloy',
+  'ash',
+  'coral',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'sage',
+  'shimmer'
+] as const;
+
 const Edit: React.FC = () => {
   const { artifactId } = useParams<{ artifactId: string }>();
   const navigate = useNavigate();
@@ -321,6 +334,11 @@ const Edit: React.FC = () => {
       });
 
       if (!fileList || fileList.length === 0) {
+        setFiles([]);
+        setUploadStatus({
+          message: 'No files found',
+          severity: 'info'
+        });
         return;
       }
 
@@ -338,6 +356,11 @@ const Edit: React.FC = () => {
         message: 'Files loaded successfully',
         severity: 'success'
       });
+
+      // Clear the status after a short delay
+      setTimeout(() => {
+        setUploadStatus(null);
+      }, 2000);
 
     } catch (error) {
       console.error('Error loading artifact files:', error);
@@ -1921,9 +1944,11 @@ const Edit: React.FC = () => {
                     }
                   }))}
                 >
-                  <MenuItem value="sage">Sage</MenuItem>
-                  <MenuItem value="nova">Nova</MenuItem>
-                  <MenuItem value="shimmer">Shimmer</MenuItem>
+                  {VOICE_OPTIONS.map((voice) => (
+                    <MenuItem key={voice} value={voice}>
+                      {voice.charAt(0).toUpperCase() + voice.slice(1)}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
 

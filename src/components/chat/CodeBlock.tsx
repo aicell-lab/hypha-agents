@@ -29,7 +29,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   initialOutputs = [],
   initialStatus = ''
 }) => {
-  const { executeCode, status, isReady } = useThebe();
+  const { executeCode, status, isReady, connect } = useThebe();
   const [outputs, setOutputs] = useState<Array<{ type: string; content: string; attrs?: any }>>(initialOutputs);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionStatus, setExecutionStatus] = useState<string>(initialStatus);
@@ -61,6 +61,12 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       setOutputs([]);
       setExecutionStatus('Starting...');
 
+      // If not ready, try to connect first
+      if (!isReady) {
+        setExecutionStatus('Connecting to kernel...');
+        await connect();
+      }
+
       // Execute code with real-time output and status handling
       await executeCode(code, {
         onOutput: (output) => {
@@ -73,19 +79,15 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
         onStatus: (status) => {
           console.log('Execution status changed:', status);
           setExecutionStatus(status);
-          if (status === 'Completed' || status === 'Error') {
-            setIsExecuting(false);
-          }
         }
       });
-      
-      setExecutionStatus('Completed');
     } catch (error) {
       console.error('Error executing code:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error executing code. Please try again.';
       setOutputs(prev => [...prev, { type: 'stderr', content: errorMessage }]);
       setExecutionStatus('Error');
     } finally {
+      // Always ensure we clear the executing state
       setIsExecuting(false);
     }
   };
@@ -130,9 +132,9 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
           )}
           <button
             onClick={handleExecute}
-            disabled={isExecuting || !isReady}
+            disabled={isExecuting}
             className={`px-3 py-1 rounded text-xs font-medium text-white ${
-              !isExecuting && isReady
+              !isExecuting
                 ? 'bg-blue-600 hover:bg-blue-700'
                 : 'bg-gray-400 cursor-not-allowed'
             }`}

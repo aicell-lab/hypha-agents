@@ -239,8 +239,11 @@ const Chat: React.FC<ChatProps> = ({
   const { executeCode, isReady: isThebeReady } = useThebe();
   const { 
     isRecording, 
+    isPaused,
     startRecording, 
-    stopRecording, 
+    stopRecording,
+    pauseRecording,
+    resumeRecording,
     error: voiceError, 
     registerTools, 
     status,
@@ -265,6 +268,7 @@ const Chat: React.FC<ChatProps> = ({
   const [messages, setMessages] = useState<Message[]>(initialMessagesList);
   const [isTyping, setIsTyping] = useState(false);
   const [schemaAgents, setSchemaAgents] = useState<any>(null);
+  const [hasIncomingVoice, setHasIncomingVoice] = useState(false);
 
   // Update messages when initialMessagesList changes
   useEffect(() => {
@@ -337,8 +341,19 @@ const Chat: React.FC<ChatProps> = ({
     }
   }, [messages]);
 
+  // Add effect to show ripple when receiving voice message
   useEffect(() => {
-    if (schemaAgents && isThebeReady) {
+    if (status?.includes('Audio response')) {
+      setHasIncomingVoice(true);
+      // Clear the effect after animation completes
+      const timer = setTimeout(() => setHasIncomingVoice(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
+
+  // Register tools when Thebe becomes ready
+  useEffect(() => {
+    if (isThebeReady && schemaAgents) {
       // Create a callback for code execution
       const runCode = async (code: string) => {
         let outputs: OutputItem[] = [];
@@ -401,7 +416,8 @@ Examples:
 1. Define & reuse variables:
    x = 42
    data = pd.DataFrame(...)
-   # Later blocks can use 'x' and 'data'
+   print("Data shape:", data.shape)  # Show data info
+   display(data.head())  # Show data preview
 
 2. Install packages:
    import micropip
@@ -417,7 +433,8 @@ Examples:
    - HTML widgets
    - DataFrames
    
-Note: All code runs in the same kernel, sharing state and variables.`,
+Note: All code runs in the same kernel, sharing state and variables.
+Remember to print or display all results for better user feedback.`,
         parameters: {
           type: 'object',
           properties: {
@@ -446,7 +463,7 @@ Note: All code runs in the same kernel, sharing state and variables.`,
 
       registerTools([runCodeTool]);
     }
-  }, [schemaAgents, isThebeReady, executeCode, registerTools, updateLastAssistantMessage]);
+  }, [isThebeReady, schemaAgents, executeCode, registerTools, updateLastAssistantMessage]);
 
   // Handle conversation items
   const handleItemCreated = useCallback((item: any) => {
@@ -585,6 +602,34 @@ Note: All code runs in the same kernel, sharing state and variables.`,
     }
   };
 
+  // Add ripple animations to the existing styles
+  const styles = `
+    @keyframes ripple {
+      0% {
+        transform: scale(1);
+        opacity: 0.25;
+      }
+      100% {
+        transform: scale(2);
+        opacity: 0;
+      }
+    }
+    
+    .animate-ripple-1 {
+      animation: ripple 2s linear infinite;
+    }
+    
+    .animate-ripple-2 {
+      animation: ripple 2s linear infinite;
+      animation-delay: 0.3s;
+    }
+    
+    .animate-ripple-3 {
+      animation: ripple 2s linear infinite;
+      animation-delay: 0.6s;
+    }
+  `;
+
   // Add voice button component
   const VoiceButton = () => {
     // Compose instructions from agent config
@@ -598,7 +643,7 @@ Note: All code runs in the same kernel, sharing state and variables.`,
       return parts.filter(Boolean).join('\n\n');
     };
 
-    const isDisabled = !schemaAgents || isTyping || !isThebeReady;
+    const isDisabled = !schemaAgents || isTyping;
     const [isConnecting, setIsConnecting] = useState(false);
 
     const handleStartRecording = async () => {
@@ -613,6 +658,7 @@ Note: All code runs in the same kernel, sharing state and variables.`,
         });
       } catch (error) {
         console.error('Failed to start recording:', error);
+      } finally {
         setIsConnecting(false);
       }
     };
@@ -625,72 +671,121 @@ Note: All code runs in the same kernel, sharing state and variables.`,
       }
     };
 
+    const handlePauseResume = async () => {
+      if (isPaused) {
+        await resumeRecording();
+      } else {
+        await pauseRecording();
+      }
+    };
+
     return (
-      <button
-        onClick={isRecording ? handleStopRecording : handleStartRecording}
-        disabled={isDisabled}
-        className={`p-2 rounded-full transition-colors relative ${
-          isDisabled
-            ? 'bg-gray-300 cursor-not-allowed'
-            : isRecording 
-              ? 'bg-red-500 hover:bg-red-600' 
-              : 'bg-blue-500 hover:bg-blue-600'
-        }`}
-        title={
-          !schemaAgents 
-            ? "Waiting for AI service..."
-            : !isThebeReady
-              ? "Waiting for code execution service..."
-              : isRecording 
-                ? "Stop Recording" 
-                : "Start Recording"
-        }
-      >
-        {isConnecting ? (
-          // Spinner
-          <div className="animate-spin">
-            <svg className="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-        ) : isRecording ? (
-          // Stop/Close button
-          <svg 
-            className={`w-6 h-6 ${isDisabled ? 'text-gray-400' : 'text-white'}`}
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
+      <div className="flex items-center gap-2">
+        <div className="relative">
+          <button
+            onClick={isRecording ? handlePauseResume : handleStartRecording}
+            disabled={isDisabled}
+            className={`p-3 rounded-full transition-all duration-300 relative group ${
+              isDisabled
+                ? 'bg-gray-300 cursor-not-allowed scale-100'
+                : isRecording 
+                  ? isPaused
+                    ? 'bg-yellow-500 hover:bg-yellow-600'
+                    : 'bg-red-500 hover:bg-red-600 animate-pulse' 
+                  : 'bg-blue-500 hover:bg-blue-600'
+            } transform hover:shadow-lg hover:scale-105`}
+            title={
+              !schemaAgents 
+                ? "Waiting for AI service..."
+                : isRecording 
+                  ? isPaused
+                    ? "Resume Recording"
+                    : "Pause Recording" 
+                  : "Start Recording"
+            }
           >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={2} 
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        ) : (
-          // Microphone button
-          <svg 
-            className={`w-6 h-6 ${isDisabled ? 'text-gray-400' : 'text-white'}`}
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={2} 
-              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-            />
-          </svg>
-        )}
-      </button>
+            {isConnecting ? (
+              // Spinner
+              <div className="animate-spin">
+                <svg className="w-8 h-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+            ) : isRecording ? (
+              isPaused ? (
+                // Play/Resume button with animation
+                <svg 
+                  className={`w-8 h-8 ${isDisabled ? 'text-gray-400' : 'text-white'} transform transition-transform duration-200 hover:scale-110`}
+                  fill="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              ) : (
+                // Pause button with animation
+                <svg 
+                  className={`w-8 h-8 ${isDisabled ? 'text-gray-400' : 'text-white'} transform transition-transform duration-200 hover:scale-110`}
+                  fill="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              )
+            ) : (
+              // Microphone button with wave animation
+              <div className="relative">
+                <svg 
+                  className={`w-8 h-8 ${isDisabled ? 'text-gray-400' : 'text-white'} transform transition-transform duration-200`}
+                  fill="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                  <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+                {isRecording && !isPaused && (
+                  <div className="absolute -inset-2 rounded-full border-4 border-red-300 opacity-75 animate-ping"></div>
+                )}
+              </div>
+            )}
+
+            {/* Small stop button in corner - only show on hover */}
+            {isRecording && (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStopRecording();
+                }}
+                className="absolute -top-1 -right-1 p-1 rounded-full bg-gray-600 hover:bg-gray-700 transition-all duration-300 transform hover:scale-110 shadow-lg z-10 opacity-0 group-hover:opacity-100 cursor-pointer"
+                title="Stop Recording"
+              >
+                <svg 
+                  className="w-4 h-4 text-white"
+                  fill="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+              </div>
+            )}
+
+            {/* Ripple effect for incoming voice */}
+            {hasIncomingVoice && (
+              <>
+                <div className="absolute inset-0 rounded-full animate-ripple-1 bg-blue-400 opacity-25"></div>
+                <div className="absolute inset-0 rounded-full animate-ripple-2 bg-blue-400 opacity-25"></div>
+                <div className="absolute inset-0 rounded-full animate-ripple-3 bg-blue-400 opacity-25"></div>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
     );
   };
 
   return (
     <VoiceModeProvider>
+      <style>{styles}</style>
       <div className={`flex flex-col h-full ${className}`}>
         {/* Actions Bar - Only show if showActions is true */}
         {showActions && (
@@ -779,21 +874,24 @@ Note: All code runs in the same kernel, sharing state and variables.`,
                 />
               </div>
             </div>
-            {voiceError && (
-              <p className="text-xs text-red-500 mt-2">
-                {voiceError}
-              </p>
-            )}
-            {(!schemaAgents || !isThebeReady) && (
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                {!schemaAgents ? "Connecting to AI service..." : "Waiting for code execution service..."}
-              </p>
-            )}
-            {status && (
-              <p className="text-xs text-blue-500 mt-2 text-center">
-                {status}
-              </p>
-            )}
+            {/* Status and Error Display */}
+            <div className="mt-2 text-xs text-center space-y-1">
+              {voiceError && (
+                <p className="text-red-500">
+                  {voiceError}
+                </p>
+              )}
+              {(!schemaAgents || !isThebeReady) && (
+                <p className="text-gray-500">
+                  {!schemaAgents ? "Connecting to AI service..." : "Waiting for code execution service..."}
+                </p>
+              )}
+              {status && (
+                <p className="text-blue-500">
+                  {status}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>

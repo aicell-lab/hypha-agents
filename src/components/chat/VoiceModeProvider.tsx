@@ -15,6 +15,7 @@ interface Tool {
 
 interface VoiceModeContextType {
   isRecording: boolean;
+  isPaused: boolean;
   startRecording: (config: {
     onItemCreated?: (item: any) => void;
     instructions?: string;
@@ -23,6 +24,8 @@ interface VoiceModeContextType {
     max_output_tokens?: number;
   }) => Promise<void>;
   stopRecording: () => Promise<void>;
+  pauseRecording: () => Promise<void>;
+  resumeRecording: () => Promise<void>;
   error: string | null;
   registerTools: (tools: Tool[]) => void;
   sendTextMessage: (text: string) => void;
@@ -51,6 +54,7 @@ interface OpenAISession {
 
 export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }) => {
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const { server } = useHyphaStore();
@@ -61,9 +65,58 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const registeredToolsRef = useRef<Record<string, Tool>>({});
-  const callbacksRef = useRef<{
+  const recordingConfigRef = useRef<{
     onItemCreated?: (item: any) => void;
+    instructions?: string;
+    voice?: string;
+    temperature?: number;
+    max_output_tokens?: number;
   }>({});
+
+  const updateSession = useCallback((config?: {
+    instructions?: string;
+    voice?: string;
+    temperature?: number;
+    max_output_tokens?: number;
+  }) => {
+    if (dataChannelRef.current?.readyState === 'open') {
+      const event = {
+        type: 'session.update',
+        session: {
+          modalities: ['text', 'audio'],
+          instructions: `${config?.instructions || "You are a helpful assistant."}\n\n
+Since we are communicating through voice, please keep your responses brief, clear, and concise while maintaining accuracy. Aim for responses that are easy to listen to and understand.
+
+When displaying outputs from code execution, you can use special div tags to embed different types of content:
+
+1. For images:
+<div data-type="image" data-id="[output_id]" data-alt="[description]"></div>
+
+2. For HTML content:
+<div data-type="html" data-id="[output_id]"></div>
+
+3. For SVG content:
+<div data-type="svg" data-id="[output_id]"></div>
+
+These tags will be automatically replaced with the actual content when rendered.
+Always preserve these tags exactly as they appear in the output.
+When describing images or plots, include the div tag followed by a brief description of what the image shows.
+
+Remember:
+- Keep responses concise and to the point
+- Use clear and natural language suitable for voice interaction
+- Break complex information into digestible chunks
+- Prioritize the most important information first`,
+          voice: config?.voice || recordingConfigRef.current?.voice || "sage",
+          output_audio_format: "pcm16",
+          tools: Object.values(registeredToolsRef.current).map(({ fn, ...tool }) => tool),
+          tool_choice: "auto",
+          temperature: config?.temperature || recordingConfigRef.current?.temperature || 0.8,
+        }
+      };
+      dataChannelRef.current.send(JSON.stringify(event));
+    }
+  }, []);
 
   // Function to register tools
   const registerTools = useCallback((tools: Tool[]) => {
@@ -72,7 +125,9 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
       return acc;
     }, {} as Record<string, Tool>);
     registeredToolsRef.current = toolsMap;
-  }, []);
+    // Update session with new tools if connection is open
+    updateSession();
+  }, [updateSession]);
 
   // Function to send text messages
   const sendTextMessage = useCallback((text: string) => {
@@ -93,19 +148,16 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
       };
       dataChannelRef.current.send(JSON.stringify(messageCreate));
 
-      // Then create a new response
+      // Then create a new response with text-only modality
       const responseCreate = {
-        type: 'response.create'
-        // response: {
-        //   modalities: ['text', 'audio'],
-        //   instructions: "Please assist the user.",
-        //   voice: "sage",
-        //   output_audio_format: "pcm16",
-        //   tools: Object.values(registeredToolsRef.current).map(({ fn, ...tool }) => tool),
-        //   tool_choice: "auto",
-        //   temperature: 0.8,
-        //   max_output_tokens: 1024
-        // }
+        type: 'response.create',
+        response: {
+          modalities: ['text'],
+          tools: Object.values(registeredToolsRef.current).map(({ fn, ...tool }) => tool),
+          tool_choice: "auto",
+          temperature: 0.8,
+          max_output_tokens: recordingConfigRef.current?.max_output_tokens
+        }
       };
       dataChannelRef.current.send(JSON.stringify(responseCreate));
     }
@@ -139,7 +191,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
             };
             console.log('Sending transcript message:', transcriptMessage);
             dataChannelRef.current?.send(JSON.stringify(transcriptMessage));
-            callbacksRef.current.onItemCreated?.(transcriptMessage.item);
+            recordingConfigRef.current.onItemCreated?.(transcriptMessage.item);
           } else if (msg.part?.type === 'text' && msg.part?.text) {
             // Create a message item for the text
             const textMessage = {
@@ -157,7 +209,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
             };
             console.log('Sending text message:', textMessage);
             dataChannelRef.current?.send(JSON.stringify(textMessage));
-            callbacksRef.current.onItemCreated?.(textMessage.item);
+            recordingConfigRef.current.onItemCreated?.(textMessage.item);
           }
           break;
 
@@ -223,7 +275,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
             };
             console.log('Sending text message:', textMessage);
             dataChannelRef.current?.send(JSON.stringify(textMessage));
-            callbacksRef.current.onItemCreated?.(textMessage.item);
+            recordingConfigRef.current.onItemCreated?.(textMessage.item);
           }
           setStatus('Response received');
           break;
@@ -263,7 +315,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
 
         case 'conversation.item.created':
           setStatus('Message added to conversation');
-          callbacksRef.current.onItemCreated?.(msg.item);
+          recordingConfigRef.current.onItemCreated?.(msg.item);
           break;
         
         case 'response.done':
@@ -287,7 +339,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
   }) => {
     try {
       // Store callbacks in ref for use in message handler
-      callbacksRef.current = config;
+      recordingConfigRef.current = config;
 
       setStatus('Initializing...');
       const schemaAgents = await server?.getService("schema-agents");
@@ -334,33 +386,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
         setStatus('Connected');
         
         // Send session update with registered tools
-        const event = {
-          type: 'session.update',
-          session: {
-            modalities: ['text', 'audio'],
-            instructions: `${config.instructions || "You are a helpful assistant."}\n\n
-            When displaying outputs from code execution, you can use special div tags to embed different types of content:
-            
-            1. For images:
-            <div data-type="image" data-id="[output_id]" data-alt="[description]"></div>
-            
-            2. For HTML content:
-            <div data-type="html" data-id="[output_id]"></div>
-            
-            3. For SVG content:
-            <div data-type="svg" data-id="[output_id]"></div>
-            
-            These tags will be automatically replaced with the actual content when rendered.
-            Always preserve these tags exactly as they appear in the output.
-            When describing images or plots, include the div tag followed by a description of what the image shows.`,
-            voice: config.voice || "sage",
-            output_audio_format: "pcm16",
-            tools: Object.values(registeredToolsRef.current).map(({ fn, ...tool }) => tool),
-            tool_choice: "auto",
-            temperature: config.temperature || 0.8,
-          }
-        };
-        dc.send(JSON.stringify(event));
+        updateSession();
       };
 
       dc.onclose = () => {
@@ -391,7 +417,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
 
       // Send the offer to OpenAI's realtime API
       const baseUrl = "https://api.openai.com/v1/realtime";
-      const model = "gpt-4o-realtime-preview-2024-12-17";
+      const model = "gpt-4o-realtime-preview";
       const response = await fetch(`${baseUrl}?model=${model}`, {
         method: "POST",
         body: offer.sdp,
@@ -422,13 +448,14 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
       setStatus('Failed to connect');
       await stopRecording();
     }
-  }, [server, handleDataChannelMessage]);
+  }, [server, handleDataChannelMessage, updateSession]);
 
   const stopRecording = useCallback(async () => {
     try {
       setStatus('Stopping...');
+      setIsPaused(false);
       // Clear callbacks
-      callbacksRef.current = {};
+      recordingConfigRef.current = {};
       
       // Stop and clean up media stream
       if (mediaStreamRef.current) {
@@ -463,11 +490,40 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
     }
   }, []);
 
+  const pauseRecording = useCallback(async () => {
+    try {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.enabled = false);
+        setIsPaused(true);
+        setStatus('Paused');
+      }
+    } catch (err) {
+      console.error('Error pausing recording:', err);
+      setError('Failed to pause recording');
+    }
+  }, []);
+
+  const resumeRecording = useCallback(async () => {
+    try {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.enabled = true);
+        setIsPaused(false);
+        setStatus('Recording resumed');
+      }
+    } catch (err) {
+      console.error('Error resuming recording:', err);
+      setError('Failed to resume recording');
+    }
+  }, []);
+
   return (
     <VoiceModeContext.Provider value={{
       isRecording,
+      isPaused,
       startRecording,
       stopRecording,
+      pauseRecording,
+      resumeRecording,
       error,
       registerTools,
       sendTextMessage,
