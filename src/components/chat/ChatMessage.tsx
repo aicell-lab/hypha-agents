@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useThebe } from './ThebeProvider';
-import { CodeBlock } from './CodeBlock';
+import { CodeBlockSelector } from './CodeBlockSelector';
 import type { Components } from 'react-markdown';
 import type { Message, ContentItem, OutputItem } from './Chat';
 import rehypeRaw from 'rehype-raw';
@@ -108,7 +108,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading }) 
               if (item.type === 'code_execution') {
                 return (
                   <div key={index} className="overflow-x-auto">
-                    <CodeBlock
+                    <CodeBlockSelector
                       code={item.content}
                       language={item.attrs?.language || 'python'}
                       defaultCollapsed={false}

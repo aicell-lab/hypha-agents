@@ -54,6 +54,9 @@ interface ThebeContextType {
     onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
   }) => Promise<void>;
+  executeCodeWithDOMOutput: (code: string, outputElement: HTMLElement, callbacks?: {
+    onStatus?: (status: string) => void;
+  }) => Promise<void>;
   interruptKernel: () => Promise<void>;
   restartKernel: () => Promise<void>;
   kernelInfo: {
@@ -73,6 +76,7 @@ const ThebeContext = createContext<ThebeContextType>({
   isReady: false,
   connect: async () => { throw new Error('Thebe is not loaded yet'); },
   executeCode: async () => {},
+  executeCodeWithDOMOutput: async () => {},
   interruptKernel: async () => { throw new Error('Thebe is not loaded yet'); },
   restartKernel: async () => { throw new Error('Thebe is not loaded yet'); },
   kernelInfo: {},
@@ -97,6 +101,7 @@ declare global {
       startJupyterLiteServer: (config?: any) => Promise<ServiceManager>;
     };
     setupThebeLite?: Promise<void>;
+    Plotly?: any; // Add Plotly to the global window interface
   }
 }
 
@@ -427,6 +432,443 @@ print(f"{sys.version.split()[0]}")
     }
   };
 
+  const executeCodeWithDOMOutput = async (code: string, outputElement: HTMLElement, callbacks?: {
+    onStatus?: (status: string) => void;
+  }) => {
+    const { onStatus } = callbacks || {};
+
+    // Get a ready kernel
+    const currentKernel = kernel && isReady ? kernel : await connect();
+
+    onStatus?.('Executing code...');
+
+    try {
+      // Clear previous output
+      outputElement.innerHTML = '';
+      
+      // Create a unique ID for this output area
+      const outputId = `output-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      outputElement.id = outputId;
+      
+      // Ensure Plotly is loaded before execution
+      const ensurePlotlyLoaded = () => {
+        return new Promise<void>((resolve) => {
+          if (typeof window.Plotly !== 'undefined') {
+            resolve();
+            return;
+          }
+          
+          console.log('Loading Plotly library...');
+          const script = document.createElement('script');
+          script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+          script.async = true;
+          script.onload = () => {
+            console.log('Plotly library loaded successfully');
+            resolve();
+          };
+          document.head.appendChild(script);
+        });
+      };
+      
+      // Check if code contains Plotly
+      if (code.includes('plotly') || code.includes('px.') || code.includes('fig.show()')) {
+        await ensurePlotlyLoaded();
+      }
+      
+      // First, execute code to set up the display hook to target our output element
+      const setupCode = `
+import sys
+import json
+from IPython.display import display, HTML, Javascript
+
+# Set up the display hook to target our specific output element
+display(HTML(f"""
+<div id="{outputId}-target"></div>
+<script>
+// Function to handle Jupyter display_data messages
+window.jupyterDisplayData = window.jupyterDisplayData || {{}};
+window.jupyterDisplayData["{outputId}"] = function(data) {{
+  const targetElement = document.getElementById("{outputId}-target");
+  if (!targetElement) return;
+  
+  if (data["text/html"]) {{
+    targetElement.innerHTML = data["text/html"];
+    
+    // For self-contained Plotly HTML, we need to execute any scripts
+    const scripts = targetElement.querySelectorAll('script');
+    if (scripts.length > 0) {{
+      scripts.forEach(oldScript => {{
+        if (!oldScript.parentNode) return;
+        
+        const newScript = document.createElement('script');
+        // Copy all attributes
+        Array.from(oldScript.attributes).forEach(attr => 
+          newScript.setAttribute(attr.name, attr.value)
+        );
+        
+        // If it has a src, just copy that
+        if (oldScript.src) {{
+          newScript.src = oldScript.src;
+        }} else {{
+          // Otherwise, copy the inline code
+          newScript.textContent = oldScript.textContent;
+        }}
+        
+        // Replace the old script with the new one
+        oldScript.parentNode.replaceChild(newScript, oldScript);
+      }});
+    }}
+    
+    // Look for Plotly divs that need initialization
+    const plotlyDivs = targetElement.querySelectorAll('[id^="plotly-"]');
+    if (plotlyDivs.length > 0 && typeof window.Plotly === 'undefined') {{
+      // Load Plotly if needed
+      const script = document.createElement('script');
+      script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+      script.onload = () => {{
+        // Once loaded, any plotly divs should initialize
+        console.log('Plotly loaded for HTML output');
+      }};
+      document.head.appendChild(script);
+    }}
+  }} else if (data["image/png"]) {{
+    const img = document.createElement("img");
+    img.src = "data:image/png;base64," + data["image/png"];
+    targetElement.appendChild(img);
+  }} else if (data["application/vnd.plotly.v1+json"]) {{
+    // For Plotly, create a dedicated div
+    const plotlyDiv = document.createElement("div");
+    plotlyDiv.className = "plotly-output";
+    plotlyDiv.setAttribute("data-plotly", "true");
+    plotlyDiv.style.width = "100%";
+    plotlyDiv.style.minHeight = "400px";
+    targetElement.appendChild(plotlyDiv);
+    
+    const plotlyData = data["application/vnd.plotly.v1+json"];
+    
+    const renderPlotly = () => {{
+      if (typeof window.Plotly !== 'undefined') {{
+        try {{
+          window.Plotly.newPlot(
+            plotlyDiv, 
+            plotlyData.data, 
+            plotlyData.layout || {{responsive: true}},
+            plotlyData.config || {{responsive: true}}
+          );
+        }} catch (err) {{
+          console.error('Error rendering Plotly:', err);
+          const errorDiv = document.createElement('div');
+          errorDiv.className = 'error-output';
+          errorDiv.textContent = 'Error rendering Plotly: ' + (err instanceof Error ? err.message : String(err));
+          plotlyDiv.appendChild(errorDiv);
+        }}
+      }} else {{
+        // If Plotly is not loaded yet, load it
+        const script = document.createElement("script");
+        script.src = "https://cdn.plot.ly/plotly-latest.min.js";
+        script.onload = function() {{
+          try {{
+            window.Plotly.newPlot(
+              plotlyDiv, 
+              plotlyData.data, 
+              plotlyData.layout || {{responsive: true}},
+              plotlyData.config || {{responsive: true}}
+            );
+          }} catch (err) {{
+            console.error('Error rendering Plotly:', err);
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-output';
+            errorDiv.textContent = 'Error rendering Plotly: ' + (err instanceof Error ? err.message : String(err));
+            plotlyDiv.appendChild(errorDiv);
+          }}
+        }};
+        document.head.appendChild(script);
+      }}
+    }};
+    
+    // Ensure we render after a small delay to make sure the DOM is ready
+    setTimeout(renderPlotly, 100);
+  }} else if (data["text/plain"]) {{
+    const pre = document.createElement("pre");
+    pre.textContent = data["text/plain"];
+    targetElement.appendChild(pre);
+  }}
+}};
+</script>
+"""))
+
+# Create a custom display function that will send data to our output element
+def custom_display_hook(*objs, **kwargs):
+    for obj in objs:
+        display(obj)
+        # Also send to our custom output element
+        display(Javascript(f"""
+        if (window.jupyterDisplayData && window.jupyterDisplayData["{outputId}"]) {{
+            window.jupyterDisplayData["{outputId}"](
+                {json.dumps(obj._repr_mimebundle_()[0] if hasattr(obj, '_repr_mimebundle_') else {{'text/plain': str(obj)}})}
+            );
+        }}
+        """))
+
+# For matplotlib, we need to set up the backend
+try:
+    import matplotlib
+    matplotlib.use('module://matplotlib_inline.backend_inline')
+    import matplotlib.pyplot as plt
+    plt.ion()  # Enable interactive mode
+except ImportError:
+    pass
+
+# For plotly, ensure it uses the right renderer
+try:
+    import plotly.io as pio
+    pio.renderers.default = 'jupyterlab'
+    
+    # Add a helper function to properly handle plotly express
+    def configure_plotly_express():
+        import plotly.io as pio
+        from IPython.display import display, HTML
+        
+        # Configure a renderer that works well in our environment
+        pio.renderers.default = 'jupyterlab'
+        
+        # Add a custom function to enable proper HTML rendering for plotly express
+        def display_plotly_express(fig):
+            """
+            Properly display a plotly figure with its required JavaScript in our environment
+            """
+            # Create a div with a specific id
+            import uuid
+            import json
+            
+            div_id = f"plotly-{uuid.uuid4().hex}"
+            plot_json = json.dumps(fig.to_dict())
+            
+            # Create a self-contained HTML element
+            html = f"""
+            <div id="{div_id}" style="width:100%; height:500px;"></div>
+            <script>
+                (function() {{
+                    function loadPlotly() {{
+                        if (window.Plotly) {{
+                            Plotly.newPlot(
+                                '{div_id}', 
+                                {plot_json}.data, 
+                                {plot_json}.layout || {{}},
+                                {plot_json}.config || {{responsive: true}}
+                            );
+                        }} else {{
+                            setTimeout(loadPlotly, 100);
+                        }}
+                    }}
+                    
+                    if (!window.Plotly) {{
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+                        script.onload = loadPlotly;
+                        document.head.appendChild(script);
+                    }} else {{
+                        loadPlotly();
+                    }}
+                }})();
+            </script>
+            """
+            
+            display(HTML(html))
+        
+        # Monkey patch the plotly express show method to use our custom function
+        try:
+            import plotly.express as px
+            original_show = px.Figure.show
+            
+            def patched_show(self, *args, **kwargs):
+                display_plotly_express(self)
+                return self
+                
+            px.Figure.show = patched_show
+            
+            # Also patch plotly.graph_objects.Figure.show
+            import plotly.graph_objects as go
+            go_original_show = go.Figure.show
+            
+            def go_patched_show(self, *args, **kwargs):
+                display_plotly_express(self)
+                return self
+                
+            go.Figure.show = go_patched_show
+            
+            print("Plotly Express configured for interactive output")
+        except ImportError:
+            pass
+    
+    # Call the function to configure plotly express
+    configure_plotly_express()
+    
+except ImportError:
+    pass
+`;
+
+      // Execute the setup code first
+      const setupFuture = currentKernel.requestExecute({ code: setupCode });
+      await setupFuture.done;
+
+      // Now execute the actual code
+      const future = currentKernel.requestExecute({ code });
+      
+      // Handle kernel messages
+      future.onIOPub = (msg: KernelMessage) => {
+        console.log('Kernel message:', msg);
+        const msgType = msg.msg_type || msg.header.msg_type;
+
+        switch (msgType) {
+          case 'stream':
+            const streamContent = msg.content.text;
+            const streamDiv = document.createElement('pre');
+            streamDiv.className = 'stream-output';
+            streamDiv.textContent = streamContent;
+            outputElement.appendChild(streamDiv);
+            break;
+          case 'display_data':
+          case 'execute_result':
+            // The display data will be handled by our custom display hook
+            // But we can still handle basic outputs here as a fallback
+            const data = msg.content.data;
+            if (data['text/html']) {
+              const div = document.createElement('div');
+              div.innerHTML = data['text/html'];
+              
+              // Execute any scripts in the HTML
+              setTimeout(() => {
+                const scripts = div.querySelectorAll('script');
+                scripts.forEach(oldScript => {
+                  if (!oldScript.parentNode) return;
+                  
+                  const newScript = document.createElement('script');
+                  // Copy all attributes
+                  Array.from(oldScript.attributes).forEach(attr => 
+                    newScript.setAttribute(attr.name, attr.value)
+                  );
+                  
+                  // If it has a src, just copy that
+                  if (oldScript.src) {
+                    newScript.src = oldScript.src;
+                  } else {
+                    // Otherwise, copy the inline code
+                    newScript.textContent = oldScript.textContent;
+                  }
+                  
+                  // Replace the old script with the new one
+                  oldScript.parentNode.replaceChild(newScript, oldScript);
+                });
+                
+                // Check for Plotly divs that need initialization
+                const plotlyDivs = div.querySelectorAll('[id^="plotly-"]');
+                if (plotlyDivs.length > 0 && typeof window.Plotly === 'undefined') {
+                  // Load Plotly if needed
+                  const script = document.createElement('script');
+                  script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+                  script.onload = () => {
+                    console.log('Plotly loaded for HTML output in JS handler');
+                  };
+                  document.head.appendChild(script);
+                }
+              }, 0);
+              
+              outputElement.appendChild(div);
+            } else if (data['image/png']) {
+              const img = document.createElement('img');
+              img.src = `data:image/png;base64,${data['image/png']}`;
+              outputElement.appendChild(img);
+            } else if (data['application/vnd.plotly.v1+json']) {
+              // Handle Plotly data directly
+              const plotlyDiv = document.createElement('div');
+              plotlyDiv.className = 'plotly-output';
+              plotlyDiv.setAttribute('data-plotly', 'true');
+              plotlyDiv.style.width = '100%';
+              plotlyDiv.style.minHeight = '400px';
+              outputElement.appendChild(plotlyDiv);
+              
+              const plotlyData = data['application/vnd.plotly.v1+json'];
+              
+              // Create a function to render the plot
+              const renderPlot = () => {
+                if (typeof window.Plotly !== 'undefined') {
+                  try {
+                    window.Plotly.newPlot(
+                      plotlyDiv, 
+                      plotlyData.data, 
+                      plotlyData.layout || {responsive: true},
+                      plotlyData.config || {responsive: true}
+                    );
+                  } catch (err) {
+                    console.error('Error rendering Plotly:', err);
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'error-output';
+                    errorDiv.textContent = 'Error rendering Plotly: ' + (err instanceof Error ? err.message : String(err));
+                    plotlyDiv.appendChild(errorDiv);
+                  }
+                } else {
+                  // If Plotly is not loaded yet, load it
+                  const script = document.createElement('script');
+                  script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+                  script.onload = function() {
+                    try {
+                      window.Plotly.newPlot(
+                        plotlyDiv, 
+                        plotlyData.data, 
+                        plotlyData.layout || {responsive: true},
+                        plotlyData.config || {responsive: true}
+                      );
+                    } catch (err) {
+                      console.error('Error rendering Plotly:', err);
+                      const errorDiv = document.createElement('div');
+                      errorDiv.className = 'error-output';
+                      errorDiv.textContent = 'Error rendering Plotly: ' + (err instanceof Error ? err.message : String(err));
+                      plotlyDiv.appendChild(errorDiv);
+                    }
+                  };
+                  document.head.appendChild(script);
+                }
+              };
+              
+              // Render the plot after a small delay to ensure the DOM is ready
+              setTimeout(renderPlot, 100);
+            } else if (data['text/plain'] && !outputElement.querySelector('.stream-output')) {
+              const pre = document.createElement('pre');
+              pre.textContent = data['text/plain'];
+              outputElement.appendChild(pre);
+            }
+            break;
+          case 'error':
+            const errorText = msg.content.traceback.join('\n');
+            const errorDiv = document.createElement('pre');
+            errorDiv.className = 'error-output';
+            errorDiv.style.color = 'red';
+            errorDiv.textContent = errorText;
+            outputElement.appendChild(errorDiv);
+            onStatus?.('Error');
+            break;
+          case 'status':
+            const state = msg.content.execution_state;
+            if (state === 'busy') {
+              onStatus?.('Running...');
+            } else if (state === 'idle') {
+              onStatus?.('Completed');
+            }
+            break;
+        }
+      };
+      
+      // Wait for execution to complete
+      await future.done;
+    } catch (error) {
+      console.error('Error executing code:', error);
+      outputElement.innerHTML += `<pre class="error-output" style="color: red;">Error: ${error instanceof Error ? error.message : String(error)}</pre>`;
+      onStatus?.('Error');
+      throw error;
+    }
+  };
+
   const interruptKernel = async () => {
     if (!kernel) {
       throw new Error('No kernel available');
@@ -469,6 +911,7 @@ print(f"{sys.version.split()[0]}")
         isReady,
         connect,
         executeCode,
+        executeCodeWithDOMOutput,
         interruptKernel,
         restartKernel,
         kernelInfo,

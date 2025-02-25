@@ -5,7 +5,7 @@ import { ChatInput } from './ChatInput';
 import { useThebe } from './ThebeProvider';
 import { hyphaWebsocketClient } from 'hypha-rpc';
 import { useVoiceMode, VoiceModeProvider } from './VoiceModeProvider';
-import { CodeBlock } from './CodeBlock';
+import { CodeBlockSelector } from './CodeBlockSelector';
 
 export interface OutputItem {
   type: string;
@@ -236,7 +236,7 @@ const Chat: React.FC<ChatProps> = ({
 }) => {
   const messageEndRef = useRef<HTMLDivElement>(null);
   const { server } = useHyphaStore();
-  const { executeCode, isReady: isThebeReady } = useThebe();
+  const { executeCode, executeCodeWithDOMOutput, isReady: isThebeReady } = useThebe();
   const { 
     isRecording, 
     isPaused,
@@ -361,33 +361,82 @@ const Chat: React.FC<ChatProps> = ({
         
         updateLastAssistantMessage(code, 'running', []);
         
+        // Create a hidden div to hold the output that will be processed via DOM
+        const outputElement = document.createElement('div');
+        outputElement.style.display = 'none';
+        document.body.appendChild(outputElement);
+        
+        // Flag to track if we've already executed the code via DOM
+        let alreadyExecuted = false;
+        
         try {
-          await executeCode(code, {
-            onOutput: (out: { type: string; content: string; short_content?: string; attrs?: any }) => {
-              outputs.push(out);
-              // For images, create a div tag with data attributes
-              if (out.type === 'img') {
-                shortOutput += `<div data-type="image" data-id="${out.attrs?.id || ''}" data-alt="Output Image"></div>\n`;
-              }
-              // For HTML/SVG content
-              else if (out.type === 'html' || out.type === 'svg') {
-                shortOutput += `<div data-type="${out.type}" data-id="${out.attrs?.id || ''}"></div>\n`;
-              }
-              // For text content
-              else {
-                shortOutput += (out.short_content || out.content) + '\n';
-              }
-              updateLastAssistantMessage(code, 'running', outputs);
-            },
+          // First, execute with DOM output to properly render scripts and widgets
+          await executeCodeWithDOMOutput(code, outputElement, {
             onStatus: (status: string) => {
-              console.log('Execution status:', status);
+              console.log('DOM execution status:', status);
+              // When DOM execution completes, capture rendered content
               if (status === 'Completed') {
-                updateLastAssistantMessage(code, 'success', outputs);
-              } else if (status === 'Error') {
-                updateLastAssistantMessage(code, 'error', outputs);
+                // Set the flag to indicate we've executed the code
+                alreadyExecuted = true;
+                
+                // Clone the output element to capture its content
+                const clonedOutput = outputElement.cloneNode(true) as HTMLElement;
+                
+                // Add a custom output item for the DOM content
+                const htmlOutputItem = {
+                  type: 'html',
+                  content: clonedOutput.innerHTML,
+                  attrs: {
+                    isRenderedDOM: true
+                  }
+                };
+                
+                outputs.push(htmlOutputItem);
+                
+                // Add a placeholder in the shortOutput for the rich DOM content
+                shortOutput += `<div data-type="dom-output" data-note="Rich content from code execution available in UI"></div>\n`;
+                
+                // Update message with the new DOM output
+                updateLastAssistantMessage(code, 'running', outputs);
               }
             }
           });
+          
+          // If the code was already executed via DOM, we can skip the regular execute
+          // This avoids double execution
+          if (!alreadyExecuted) {
+            // Then also execute with standard output handling to get structured output data
+            await executeCode(code, {
+              onOutput: (out: { type: string; content: string; short_content?: string; attrs?: any }) => {
+                outputs.push(out);
+                // For images, create a div tag with data attributes
+                if (out.type === 'img') {
+                  shortOutput += `<div data-type="image" data-id="${out.attrs?.id || ''}" data-alt="Output Image"></div>\n`;
+                }
+                // For HTML/SVG content
+                else if (out.type === 'html' || out.type === 'svg') {
+                  shortOutput += `<div data-type="${out.type}" data-id="${out.attrs?.id || ''}"></div>\n`;
+                }
+                // For text content
+                else {
+                  shortOutput += (out.short_content || out.content) + '\n';
+                }
+                updateLastAssistantMessage(code, 'running', outputs);
+              },
+              onStatus: (status: string) => {
+                console.log('Execution status:', status);
+                if (status === 'Completed') {
+                  updateLastAssistantMessage(code, 'success', outputs);
+                } else if (status === 'Error') {
+                  updateLastAssistantMessage(code, 'error', outputs);
+                }
+              }
+            });
+          } else {
+            // If already executed, just update the status
+            updateLastAssistantMessage(code, 'success', outputs);
+          }
+          
           return { outputs, shortOutput };
         } catch (error) {
           console.error('Error executing code:', error);
@@ -396,7 +445,14 @@ const Chat: React.FC<ChatProps> = ({
             content: error instanceof Error ? error.message : 'Error executing code'
           };
           updateLastAssistantMessage(code, 'error', [errorOutput]);
+          
           throw error;
+        } finally {
+          // Clean up the temporary output element in the finally block
+          // to ensure it happens whether there's an error or not
+          if (document.body.contains(outputElement)) {
+            document.body.removeChild(outputElement);
+          }
         }
       };
 
@@ -430,11 +486,12 @@ Examples:
 4. Rich output:
    - Text/print output
    - Interactive plots
-   - HTML widgets
+   - HTML widgets with JavaScript
    - DataFrames
    
 Note: All code runs in the same kernel, sharing state and variables.
-Remember to print or display all results for better user feedback.`,
+Remember to print or display all results for better user feedback.
+HTML and JavaScript in the output will be properly rendered.`,
         parameters: {
           type: 'object',
           properties: {
@@ -455,9 +512,29 @@ Remember to print or display all results for better user feedback.`,
             return prev;
           });
           
-          const { outputs, shortOutput } = await runCode(args.code);
-          // Return the short output for the LLM
-          return shortOutput;
+          try {
+            const { outputs, shortOutput } = await runCode(args.code);
+            
+            // Make sure DOM outputs are properly included in the message
+            const hasDOMOutput = outputs.some(out => 
+              out.type === 'html' && out.attrs?.isRenderedDOM
+            );
+            
+            // Log outputs for debugging
+            console.log('Code execution complete with outputs:', 
+              outputs.map(o => ({ type: o.type, hasAttrs: !!o.attrs }))
+            );
+            
+            if (hasDOMOutput) {
+              console.log('DOM output is included in the results');
+            }
+            
+            // Return the short output for the LLM
+            return shortOutput;
+          } catch (error) {
+            console.error('Error in runCodeTool:', error);
+            return `Error executing code: ${error instanceof Error ? error.message : String(error)}`;
+          }
         }
       };
 
@@ -850,6 +927,24 @@ Remember to print or display all results for better user feedback.`,
         {/* Chat Input - Fixed at bottom */}
         <div className="flex-shrink-0 border-t border-gray-200 bg-white p-4 shadow-lg">
           <div className="max-w-4xl mx-auto">
+            {/* Status and Error Display - Moved to top */}
+            <div className="mb-2 text-xs text-center space-y-1">
+              {voiceError && (
+                <p className="text-red-500">
+                  {voiceError}
+                </p>
+              )}
+              {(!schemaAgents || !isThebeReady) && (
+                <p className="text-gray-500">
+                  {!schemaAgents ? "Connecting to AI service..." : "Waiting for code execution service..."}
+                </p>
+              )}
+              {status && (
+                <p className="text-blue-500">
+                  {status}
+                </p>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {enableVoiceMode && (
                 <div className="flex-shrink-0 flex items-center">
@@ -873,24 +968,6 @@ Remember to print or display all results for better user feedback.`,
                   }
                 />
               </div>
-            </div>
-            {/* Status and Error Display */}
-            <div className="mt-2 text-xs text-center space-y-1">
-              {voiceError && (
-                <p className="text-red-500">
-                  {voiceError}
-                </p>
-              )}
-              {(!schemaAgents || !isThebeReady) && (
-                <p className="text-gray-500">
-                  {!schemaAgents ? "Connecting to AI service..." : "Waiting for code execution service..."}
-                </p>
-              )}
-              {status && (
-                <p className="text-blue-500">
-                  {status}
-                </p>
-              )}
             </div>
           </div>
         </div>
