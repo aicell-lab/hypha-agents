@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useHyphaStore } from '../store/hyphaStore';
 import ReactMarkdown from 'react-markdown';
 import { Menu } from '@headlessui/react';
+import { SITE_ID, SERVER_URL } from '../utils/env';
 
 interface TestResult {
   name: string;
@@ -32,6 +33,8 @@ const ModelTester: React.FC<ModelTesterProps> = ({ artifactId, version, isDisabl
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [output, setOutput] = useState('');
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
@@ -70,9 +73,9 @@ const ModelTester: React.FC<ModelTesterProps> = ({ artifactId, version, isDisabl
     setIsOpen(false);
     
     try {
-      const runner = await server.getService('elia-platform/elia-model-runner', {mode: "last"});
+      const runner = await server.getService(`${SITE_ID}/elia-model-runner`, {mode: "last"});
       const modelId = artifactId.split('/').pop();
-      const zipUrl = `https://hypha.aicell.io/elia-platform/artifacts/${modelId}/create-zip-file${version ? `?version=${version}` : ''}`;
+      const zipUrl = `${SERVER_URL}/${SITE_ID}/artifacts/${modelId}/create-zip-file${version ? `?version=${version}` : ''}`;
       const result = await runner.test_model(modelId, zipUrl);
       setTestResult(result);
       setIsOpen(true);

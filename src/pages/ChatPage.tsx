@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useHyphaStore } from '../store/hyphaStore';
 import Chat from '../components/chat/Chat';
 import { ThebeProvider } from '../components/chat/ThebeProvider';
+import { SITE_ID } from '../utils/env';
 
 interface AgentConfig {
   name: string;
@@ -36,7 +37,7 @@ const ChatPage: React.FC = () => {
       try {
         setLoading(true);
         const artifact = await artifactManager.read({
-          artifact_id: `elia-platform/${id}`,
+          artifact_id: `${SITE_ID}/${id}`,
           _rkwargs: true
         });
         const manifest = artifact.manifest as ArtifactManifest;

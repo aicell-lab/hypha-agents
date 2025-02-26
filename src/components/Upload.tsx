@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import ModelTester from './ModelTester';
 import ModelValidator from './ModelValidator';
+import { SITE_ID, SITE_NAME } from '../utils/env';
 
 interface FileNode {
   name: string;
@@ -283,7 +284,7 @@ const Upload: React.FC<UploadProps> = ({ artifactId, onBack }) => {
         artifactId = uploadedArtifact.id;
       } else {
         const artifact =await artifactManager.create({
-          parent_id: "elia-platform/agents",
+          parent_id: `${SITE_ID}/agents`,
           type: manifest.type,
           manifest: manifest,
           config: {
@@ -542,10 +543,10 @@ const Upload: React.FC<UploadProps> = ({ artifactId, onBack }) => {
         <div className="bg-white border-b border-gray-80">
           <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 text-center">
             <h1 className="text-2xl font-semibold text-gray-900">
-              Contribute to the Elia Platform
+              Contribute to the {SITE_NAME}
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              Share your specialized AI agents with the telecom community
+              Share your AI models and agents with the community
             </p>
           </div>
         </div>
@@ -782,7 +783,7 @@ const Upload: React.FC<UploadProps> = ({ artifactId, onBack }) => {
                       Guidelines for Agent Contributions:
                     </h3>
                     <ol className="list-decimal list-inside space-y-3 text-gray-600 text-base">
-                      <li className="leading-relaxed">Prepare your agent following the Elia Platform specifications</li>
+                      <li className="leading-relaxed">Prepare your agent following the {SITE_NAME} specifications</li>
                       <li className="leading-relaxed">Include a detailed <code className="bg-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">rdf.yaml</code> file with agent configuration and metadata</li>
                       <li className="leading-relaxed">Add documentation about your agent's capabilities and use cases</li>
                       <li className="leading-relaxed">Package all agent files into a ZIP archive for upload</li>

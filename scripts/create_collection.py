@@ -6,24 +6,26 @@ from hypha_rpc import connect_to_server
 load_dotenv()
 
 SERVER_URL = os.getenv("SERVER_URL", "https://hypha.aicell.io")
+SITE_ID = os.getenv("REACT_APP_SITE_ID", "elia-platform")
+SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Elia Platform")
 
 async def create_collection():
     server = await connect_to_server({
         "server_url": SERVER_URL,
-        "workspace": "elia-platform",
+        "workspace": SITE_ID,
         "token": os.environ.get("WORKSPACE_TOKEN")
     })
     artifact_manager = await server.get_service("public/artifact-manager")
 
     collection = await artifact_manager.create(
-        alias="elia-platform/agents",
+        alias=f"{SITE_ID}/agents",
         type="collection",
         manifest={
-            "name": "Elia Platform Agents",
-            "description": "A collection of AI agents and resources for the Elia Platform",
+            "name": f"{SITE_NAME} Agents",
+            "description": f"A collection of AI agents and resources for the {SITE_NAME}",
             "version": "0.1.0",
             "authors": [],
-            "tags": ["elia-platform", "ai-agents", "telecom"],
+            "tags": [SITE_ID, "ai-agents", "telecom"],
             "license": "MIT",
             "documentation": "",
             "covers": [],

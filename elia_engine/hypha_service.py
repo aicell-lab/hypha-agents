@@ -11,6 +11,12 @@ from schema_agents.utils.jsonschema_pydantic import json_schema_to_pydantic_mode
 from schema_agents import schema_tool
 import httpx
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Elia Platform")
 
 example_code = """
 
@@ -183,7 +189,7 @@ async def register_agent_service(server):
             return await agent.acall(question, tools=tools, tool_usage_prompt=tool_usage_prompt, **kwargs)
     
     svc = await server.register_service({
-        "name": "Schema Agents",
+        "name": f"{SITE_NAME}",
         "id": "schema-agents",
         "config": {
             "visibility": "public"

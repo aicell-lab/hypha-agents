@@ -8,8 +8,13 @@ import { IoDocumentTextOutline, IoCloudUploadOutline } from 'react-icons/io5';
 import { AiOutlineInfoCircle } from 'react-icons/ai';
 import { RiLoginBoxLine } from 'react-icons/ri';
 import { useHyphaStore } from '../store/hyphaStore';
+import { SITE_NAME } from '../utils/env';
 
-const Navbar: React.FC = () => {
+interface NavbarProps {
+  className?: string;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -36,16 +41,16 @@ const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-white border-b border-gray-200">
+    <nav className={`sticky top-0 z-50 bg-white border-b border-gray-200 ${className}`}>
       <div className="max-w-[1400px] mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Left section with logo */}
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
-              <div className="flex items-center text-2xl font-bold text-blue-600">
-                <BiCube className="mr-2" size={24} />
-                Elia Platform
-              </div>
+              <BiCube className="h-8 w-8 text-blue-600" />
+              <span className="ml-2 text-xl font-bold text-gray-900 hidden md:block">
+                {SITE_NAME}
+              </span>
             </Link>
           </div>
 
@@ -83,6 +88,13 @@ const Navbar: React.FC = () => {
                   My Agents
                 </Link>
               )}
+              <Link
+                to="/notebook"
+                className="hover:bg-gray-50 px-4 py-2 rounded-md flex items-center"
+              >
+                <IoDocumentTextOutline className="mr-2" size={18} />
+                Notebook
+              </Link>
               <LoginButton />
             </div>
             
@@ -90,6 +102,7 @@ const Navbar: React.FC = () => {
             <button 
               className="md:hidden"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label="Toggle mobile menu"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -118,6 +131,14 @@ const Navbar: React.FC = () => {
             >
               <IoCloudUploadOutline className="mr-2" size={18} />
               Create
+            </Link>
+            <Link 
+              to="/notebook" 
+              className={mobileNavLinkClasses("/notebook")}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <IoDocumentTextOutline className="mr-2" size={18} />
+              Notebook
             </Link>
             <Link 
               to="/about" 

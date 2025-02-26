@@ -129,7 +129,7 @@ export const ResourceGrid: React.FC<ResourceGridProps> = ({ type }) => {
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
   return (
-    <div className="container mx-auto px-4 sm:px-4 md:px-4 lg:px-4">
+    <div className="container mx-auto px-1 sm:px-1 md:px-2 lg:px-4">
       <div className="relative mb-8">
         <div 
           className="absolute right-10 -bottom-6 w-64 h-64 bg-contain bg-no-repeat bg-right-bottom opacity-20 pointer-events-none" 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHyphaStore } from '../store/hyphaStore';
 import { LinearProgress } from '@mui/material';
+import { SITE_ID } from '../utils/env';
 
 const Create: React.FC = () => {
   const navigate = useNavigate();
@@ -35,7 +36,7 @@ const Create: React.FC = () => {
       };
 
       const artifact = await artifactManager.create({
-        parent_id: "elia-platform/agents",
+        parent_id: `${SITE_ID}/agents`,
         type: "agent",
         manifest,
         config: {},

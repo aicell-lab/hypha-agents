@@ -3,6 +3,13 @@ import re
 import inspect
 from pydantic import BaseModel
 from hypha_rpc import connect_to_server, login
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Elia Platform")
 
 async def main(server_url):
     # server = await connect_to_server({
@@ -20,6 +27,9 @@ async def main(server_url):
         },
         # "aask": aask,
         "acall": acall,
+        "manifest": {
+            "name": f"{SITE_NAME}",
+        },
     })
     print(f"Agent service registered: {svc.id}")
     await server.serve()

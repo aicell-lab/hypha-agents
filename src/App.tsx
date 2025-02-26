@@ -16,6 +16,7 @@ import { HyphaProvider } from './HyphaContext';
 import Create from './components/Create';
 import Chat from './components/chat/Chat';
 import ChatPage from './pages/ChatPage';
+import NotebookPage from './pages/NotebookPage';
 import { VoiceModeProvider } from './components/chat/VoiceModeProvider';
 
 // Create a wrapper component that uses Router hooks
@@ -58,8 +59,19 @@ const AppContent: React.FC = () => {
           <Route path="/my-agents" element={<MyArtifacts />} />
           <Route path="/edit/:artifactId" element={<Edit />} />
           <Route path="/create" element={<Create />} />
-          <Route path="/chat" element={<Chat />} />
+          <Route path="/chat" element={
+            <Chat 
+              agentConfig={{
+                name: "Code Interpreter",
+                profile: "AI Assistant with Python execution capabilities",
+                goal: "Help you with coding and data analysis tasks",
+                model: "gpt-4-mini",
+                stream: true
+              }} 
+            />
+          } />
           <Route path="/chat/:id" element={<ChatPage />} />
+          <Route path="/notebook" element={<NotebookPage />} />
         </Routes>
       </main>
     </div>

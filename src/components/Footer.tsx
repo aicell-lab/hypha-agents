@@ -1,16 +1,17 @@
 import React from 'react';
 import { BiCube } from 'react-icons/bi';
+import { SITE_ID, SITE_NAME } from '../utils/env';
 
 const footerLinks = [
   {
     label: "View source code on GitHub",
-    href: "https://github.com/your-org/elia-platform",
+    href: `https://github.com/your-org/${SITE_ID}`,
     icon: "/img/github.png",
     caption: "Source Code"
   },
   {
     label: "Report issues or request features",
-    href: "https://github.com/your-org/elia-platform/issues",
+    href: `https://github.com/your-org/${SITE_ID}/issues`,
     icon: "/img/feedback-icon.png",
     caption: "Feedback"
   }
@@ -55,15 +56,18 @@ const Footer: React.FC = () => {
           <div className="border-t border-gray-200 pt-6">
             <div className="flex items-center justify-center text-2xl font-bold text-blue-600 mb-4">
               <BiCube className="mr-2" size={24} />
-              Elia Platform
+              {SITE_NAME}
             </div>
             <p className="text-base text-gray-700 font-medium mb-4">
               Build and deploy intelligent AI agents for telecommunications
             </p>
             <p className="text-sm text-gray-600 leading-relaxed px-4">
-              Elia Platform enables organizations to create customized AI agents with deep telecom expertise. Join our community to build, share, and improve intelligent agents together.
+              {SITE_NAME} enables organizations to create customized AI agents with deep telecom expertise. Join our community to build, share, and improve intelligent agents together.
             </p>
           </div>
+          <p className="text-sm text-gray-600 leading-relaxed px-4">
+            &copy; {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>

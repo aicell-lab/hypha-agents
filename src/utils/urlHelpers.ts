@@ -1,3 +1,5 @@
+import { SITE_ID, SERVER_URL } from './env';
+
 /**
  * Resolves a relative URL to a full Hypha artifact URL
  * @param path - The relative path to resolve
@@ -16,5 +18,9 @@ export const resolveHyphaUrl = (path: string, resourceId: string): string => {
   const id = resourceId.split('/').pop();
   
   // Construct the full URL
-  return `https://hypha.aicell.io/elia-platform/artifacts/${id}/files/${path}?use_proxy=true`;
-}; 
+  return `${SERVER_URL}/${SITE_ID}/artifacts/${id}/files/${path}?use_proxy=true`;
+};
+
+export function getArtifactFileUrl(id: string, path: string): string {
+  return `${SERVER_URL}/${SITE_ID}/artifacts/${id}/files/${path}?use_proxy=true`;
+} 

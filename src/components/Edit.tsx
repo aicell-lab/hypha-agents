@@ -14,6 +14,7 @@ import ModelTester from './ModelTester';
 import ModelValidator from './ModelValidator';
 import Chat from './chat/Chat';
 import { ThebeProvider } from './chat/ThebeProvider';
+import { SITE_NAME } from '../utils/env';
 
 interface FileNode {
   name: string;
@@ -148,7 +149,7 @@ const Edit: React.FC = () => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [unsavedChanges, setUnsavedChanges] = useState<{[key: string]: string}>({});
   const [showComments, setShowComments] = useState(false);
-  const [activeTab, setActiveTab] = useState<'files' | 'review' | 'config' | 'chat'>(() => {
+  const [selectedTab, setSelectedTab] = useState<'files' | 'review' | 'config' | 'chat'>(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam?.startsWith('@')) {
       return 'files';
@@ -718,9 +719,9 @@ const Edit: React.FC = () => {
     }
   ];
 
-  // Update renderContent to use activeTab
+  // Update renderContent to use selectedTab
   const renderContent = () => {
-    const showActionBar = activeTab === 'files' || activeTab === 'config';
+    const showActionBar = selectedTab === 'files' || selectedTab === 'config';
     
     return (
       <>
@@ -770,7 +771,7 @@ const Edit: React.FC = () => {
 
                 {/* Buttons section */}
                 <div className="flex gap-2 flex-shrink-0">
-                  {activeTab === 'files' ? (
+                  {selectedTab === 'files' ? (
                     renderActionButtons()
                   ) : (
                     <div className="flex gap-2">
@@ -793,9 +794,9 @@ const Edit: React.FC = () => {
 
         {/* Main content */}
         <div className="flex-1 overflow-y-auto">
-          {activeTab === 'config' ? (
+          {selectedTab === 'config' ? (
             renderConfig()
-          ) : activeTab === 'review' ? (
+          ) : selectedTab === 'review' ? (
             <div className="h-full px-6 py-4">
               {/* Preview Section with integrated admin actions */}
               <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -870,7 +871,7 @@ const Edit: React.FC = () => {
                 <Comments artifactId={artifactId!} />
               </div>
             </div>
-          ) : activeTab === 'chat' ? (
+          ) : selectedTab === 'chat' ? (
             renderChat()
           ) : (
             renderFileContent()
@@ -914,7 +915,7 @@ const Edit: React.FC = () => {
           <button
             onClick={() => handleTabChange('config')}
             className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
-              ${activeTab === 'config' 
+              ${selectedTab === 'config' 
                 ? 'bg-blue-50 text-blue-700 border-blue-200' 
                 : 'bg-white text-gray-700 border hover:bg-gray-50'}`}
           >
@@ -927,7 +928,7 @@ const Edit: React.FC = () => {
           <button
             onClick={() => handleTabChange('chat')}
             className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
-              ${activeTab === 'chat' 
+              ${selectedTab === 'chat' 
                 ? 'bg-blue-50 text-blue-700 border-blue-200' 
                 : 'bg-white text-gray-700 border hover:bg-gray-50'}`}
           >
@@ -944,7 +945,7 @@ const Edit: React.FC = () => {
               className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
                 ${shouldDisableActions
                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : activeTab === 'review'
+                  : selectedTab === 'review'
                     ? 'bg-blue-50 text-blue-700 border-blue-200'
                     : 'bg-white text-gray-700 border hover:bg-gray-50'}`}
             >
@@ -976,9 +977,11 @@ const Edit: React.FC = () => {
             <p>
               You are about to publish this artifact to:
             </p>
-            <ul className="list-disc pl-5 space-y-2">
-              <li>The Elia Platform</li>
-              <li>Zenodo (with DOI assignment)</li>
+            <ul className="list-disc pl-5 space-y-2 text-gray-600">
+              <li>The {SITE_NAME}</li>
+              <li>Telecom industry standards and protocols</li>
+              <li>Network architecture and operations</li>
+              <li>Customer service best practices</li>
             </ul>
             <p className="text-red-600 font-medium">
               ⚠️ Warning: This action cannot be undone. Once published, the artifact cannot be withdrawn from either platform.
@@ -1049,7 +1052,7 @@ const Edit: React.FC = () => {
 
   // Update URL when tab changes
   const handleTabChange = (tab: 'files' | 'review' | 'config' | 'chat', filePath?: string) => {
-    setActiveTab(tab);
+    setSelectedTab(tab);
     if (tab === 'files' && filePath) {
       setSearchParams({ tab: `@${filePath}` });
     } else {
@@ -1068,13 +1071,13 @@ const Edit: React.FC = () => {
         const fileToSelect = files.find(f => f.path === filePath);
         
         if (fileToSelect) {
-          setActiveTab('files');
+          setSelectedTab('files');
           handleFileSelect(fileToSelect);
         }
       } else {
         // If no tab is specified in URL, set it to 'config'
         const tab = tabParam as 'files' | 'review' | 'config' | 'chat' || 'config';
-        setActiveTab(tab);
+        setSelectedTab(tab);
         if (!tabParam) {
           setSearchParams({ tab: 'config' });
         }
@@ -1092,7 +1095,7 @@ const Edit: React.FC = () => {
 
   // Add this effect to handle tab state when staged status changes
   useEffect(() => {
-    if (!isStaged && activeTab === 'review') {
+    if (!isStaged && selectedTab === 'review') {
       handleTabChange('files');
     }
   }, [isStaged]);
@@ -2059,18 +2062,25 @@ const Edit: React.FC = () => {
   // Update renderChat function
   const renderChat = () => (
     <div className="flex-1 flex flex-col" style={{ height: 'calc(100vh - 107px)' }}> {/* 104px = 64px (navbar) + 40px (back button bar) */}
-      <ThebeProvider>
-        <Chat 
-          agentConfig={{
-            ...agentConfig.agent_config,
-          }}
-          className="flex-1"
-          showActions={true}
-          onPreviewChat={() => artifactId && window.open(`#/chat/${artifactId.split('/').pop()}`, '_blank')}
-          onPublish={() => setShowPublishDialog(true)}
-          artifactId={artifactId}
-        />
-      </ThebeProvider>
+      {selectedTab === 'chat' && (
+        <ThebeProvider>
+          <Chat 
+            agentConfig={{
+              ...agentConfig.agent_config,
+            }}
+            className="flex-1"
+            showActions={true}
+            onPreviewChat={() => artifactId && window.open(`#/chat/${artifactId.split('/').pop()}`, '_blank')}
+            onPublish={() => setShowPublishDialog(true)}
+            artifactId={artifactId}
+          />
+        </ThebeProvider>
+      )}
+      {selectedTab !== 'chat' && (
+        <div className="flex-1 flex items-center justify-center text-gray-500">
+          Select the chat tab to start a conversation
+        </div>
+      )}
     </div>
   );
 

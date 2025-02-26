@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { hyphaWebsocketClient } from 'hypha-rpc';
 // import { hRPC } from 'hypha';
 import { Resource } from '../types/resource';
+import { SITE_ID, SERVER_URL } from '../utils/env';
 
 
 // Add a type for connection config
@@ -133,7 +134,7 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
       const offset = (page - 1) * get().itemsPerPage;
       
       // Construct the base URL
-      let url = `https://hypha.aicell.io/elia-platform/artifacts/agents/children?pagination=true&offset=${offset}&limit=${get().itemsPerPage}`;
+      let url = `${SERVER_URL}/${SITE_ID}/artifacts/agents/children?pagination=true&offset=${offset}&limit=${get().itemsPerPage}`;
       
       // Add type filter if resourceType is specified
       if (get().resourceType) {
@@ -169,8 +170,8 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
       // Handle both formats: workspace/name or just name
       const [workspace, artifactName] = id.includes('/') 
         ? id.split('/')
-        : ['elia-platform', id];
-      const url = `https://hypha.aicell.io/${workspace}/artifacts/${artifactName}`;
+        : [SITE_ID, id];
+      const url = `${SERVER_URL}/${workspace}/artifacts/${artifactName}`;
       
       const response = await fetch(url);
       if (!response.ok) {

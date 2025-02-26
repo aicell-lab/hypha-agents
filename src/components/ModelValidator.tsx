@@ -3,6 +3,8 @@ import { useHyphaStore } from '../store/hyphaStore';
 import ReactMarkdown from 'react-markdown';
 import { Menu } from '@headlessui/react';
 import yaml from 'js-yaml';
+import { SITE_ID } from '../utils/env';
+
 interface ValidationResult {
   success: boolean;
   details: string;
@@ -33,7 +35,7 @@ const ModelValidator: React.FC<ModelValidatorProps> = ({
     setIsMenuOpen(false);
     
     try {
-      const runner = await server.getService('elia-platform/elia-model-runner', {mode: "last"});
+      const runner = await server.getService(`${SITE_ID}/elia-model-runner`, {mode: "last"});
       const rdfDict = yaml.load(rdfContent);
       const result = await runner.validate(rdfDict);
       

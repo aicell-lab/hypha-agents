@@ -111,7 +111,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading }) 
                     <CodeBlockSelector
                       code={item.content}
                       language={item.attrs?.language || 'python'}
-                      defaultCollapsed={false}
+                      defaultCollapsed={true}
                       initialOutputs={item.attrs?.output || []}
                       initialStatus={item.attrs?.status || ''}
                     />

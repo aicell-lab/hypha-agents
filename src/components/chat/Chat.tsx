@@ -363,79 +363,39 @@ const Chat: React.FC<ChatProps> = ({
         
         // Create a hidden div to hold the output that will be processed via DOM
         const outputElement = document.createElement('div');
-        outputElement.style.display = 'none';
-        document.body.appendChild(outputElement);
-        
-        // Flag to track if we've already executed the code via DOM
-        let alreadyExecuted = false;
-        
+    
+
         try {
-          // First, execute with DOM output to properly render scripts and widgets
+          // Execute with DOM output to properly render scripts and widgets
           await executeCodeWithDOMOutput(code, outputElement, {
+            onOutput: (out: { type: string; content: string; short_content?: string; attrs?: any }) => {
+              shortOutput += out.short_content + '\n';
+              updateLastAssistantMessage(code, 'running', outputs);
+            },
             onStatus: (status: string) => {
               console.log('DOM execution status:', status);
-              // When DOM execution completes, capture rendered content
-              if (status === 'Completed') {
-                // Set the flag to indicate we've executed the code
-                alreadyExecuted = true;
-                
-                // Clone the output element to capture its content
-                const clonedOutput = outputElement.cloneNode(true) as HTMLElement;
-                
+              // When DOM execution completes, directly use the outputElement
+              if (status === 'Completed' && outputElement.innerHTML) {
                 // Add a custom output item for the DOM content
                 const htmlOutputItem = {
                   type: 'html',
-                  content: clonedOutput.innerHTML,
+                  content: outputElement.innerHTML,
                   attrs: {
-                    isRenderedDOM: true
+                    isRenderedDOM: true,
+                    domElement: outputElement // Pass the actual DOM element
                   }
                 };
                 
                 outputs.push(htmlOutputItem);
                 
-                // Add a placeholder in the shortOutput for the rich DOM content
-                shortOutput += `<div data-type="dom-output" data-note="Rich content from code execution available in UI"></div>\n`;
+                // Update message with the DOM element
+                updateLastAssistantMessage(code, 'success', outputs);
                 
-                // Update message with the new DOM output
-                updateLastAssistantMessage(code, 'running', outputs);
+                // Don't remove the element since we're using it directly
+                outputElement.style.display = ''; // Make it visible
               }
             }
           });
-          
-          // If the code was already executed via DOM, we can skip the regular execute
-          // This avoids double execution
-          if (!alreadyExecuted) {
-            // Then also execute with standard output handling to get structured output data
-            await executeCode(code, {
-              onOutput: (out: { type: string; content: string; short_content?: string; attrs?: any }) => {
-                outputs.push(out);
-                // For images, create a div tag with data attributes
-                if (out.type === 'img') {
-                  shortOutput += `<div data-type="image" data-id="${out.attrs?.id || ''}" data-alt="Output Image"></div>\n`;
-                }
-                // For HTML/SVG content
-                else if (out.type === 'html' || out.type === 'svg') {
-                  shortOutput += `<div data-type="${out.type}" data-id="${out.attrs?.id || ''}"></div>\n`;
-                }
-                // For text content
-                else {
-                  shortOutput += (out.short_content || out.content) + '\n';
-                }
-                updateLastAssistantMessage(code, 'running', outputs);
-              },
-              onStatus: (status: string) => {
-                console.log('Execution status:', status);
-                if (status === 'Completed') {
-                  updateLastAssistantMessage(code, 'success', outputs);
-                } else if (status === 'Error') {
-                  updateLastAssistantMessage(code, 'error', outputs);
-                }
-              }
-            });
-          } else {
-            // If already executed, just update the status
-            updateLastAssistantMessage(code, 'success', outputs);
-          }
           
           return { outputs, shortOutput };
         } catch (error) {
@@ -447,12 +407,6 @@ const Chat: React.FC<ChatProps> = ({
           updateLastAssistantMessage(code, 'error', [errorOutput]);
           
           throw error;
-        } finally {
-          // Clean up the temporary output element in the finally block
-          // to ensure it happens whether there's an error or not
-          if (document.body.contains(outputElement)) {
-            document.body.removeChild(outputElement);
-          }
         }
       };
 
@@ -460,38 +414,18 @@ const Chat: React.FC<ChatProps> = ({
       const runCodeTool = {
         type: 'function' as const,
         name: 'runCode',
-        description: `Python code execution environment with persistent kernel state and rich output display.
-
-Key Features:
-- Shared kernel: Variables and imports persist between executions
-- Top-level await support
-- Inline output display (text, plots, HTML)
+        description: `Execute Python code with persistent kernel state and rich output display.
+Features:
+- Persistent variables and imports between runs
+- Rich output: text, plots, HTML/JS widgets
 - Pre-installed: numpy, scipy, pandas, matplotlib, plotly
 
-Examples:
-1. Define & reuse variables:
-   x = 42
-   data = pd.DataFrame(...)
-   print("Data shape:", data.shape)  # Show data info
-   display(data.head())  # Show data preview
+Usage:
+1. Basic code: print(), display()
+2. Package install: await micropip.install(['pkg'])
+3. Plots: plt.plot(); plt.show() or fig.show()
 
-2. Install packages:
-   import micropip
-   await micropip.install(['package'])
-
-3. Visualization:
-   plt.plot(...); plt.show()  # Static plots
-   fig.show()  # Interactive plotly
-
-4. Rich output:
-   - Text/print output
-   - Interactive plots
-   - HTML widgets with JavaScript
-   - DataFrames
-   
-Note: All code runs in the same kernel, sharing state and variables.
-Remember to print or display all results for better user feedback.
-HTML and JavaScript in the output will be properly rendered.`,
+Note: Output is visible in UI. First comment used as block title.`,
         parameters: {
           type: 'object',
           properties: {

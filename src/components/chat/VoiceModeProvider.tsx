@@ -87,21 +87,6 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
           instructions: `${config?.instructions || "You are a helpful assistant."}\n\n
 Since we are communicating through voice, please keep your responses brief, clear, and concise while maintaining accuracy. Aim for responses that are easy to listen to and understand.
 
-When displaying outputs from code execution, you can use special div tags to embed different types of content:
-
-1. For images:
-<div data-type="image" data-id="[output_id]" data-alt="[description]"></div>
-
-2. For HTML content:
-<div data-type="html" data-id="[output_id]"></div>
-
-3. For SVG content:
-<div data-type="svg" data-id="[output_id]"></div>
-
-These tags will be automatically replaced with the actual content when rendered.
-Always preserve these tags exactly as they appear in the output.
-When describing images or plots, include the div tag followed by a brief description of what the image shows.
-
 Remember:
 - Keep responses concise and to the point
 - Use clear and natural language suitable for voice interaction

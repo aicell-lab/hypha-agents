@@ -55,6 +55,7 @@ interface ThebeContextType {
     onStatus?: (status: string) => void;
   }) => Promise<void>;
   executeCodeWithDOMOutput: (code: string, outputElement: HTMLElement, callbacks?: {
+    onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
   }) => Promise<void>;
   interruptKernel: () => Promise<void>;
@@ -433,9 +434,10 @@ print(f"{sys.version.split()[0]}")
   };
 
   const executeCodeWithDOMOutput = async (code: string, outputElement: HTMLElement, callbacks?: {
+    onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
   }) => {
-    const { onStatus } = callbacks || {};
+    const { onOutput, onStatus } = callbacks || {};
 
     // Get a ready kernel
     const currentKernel = kernel && isReady ? kernel : await connect();
@@ -460,7 +462,7 @@ print(f"{sys.version.split()[0]}")
           
           console.log('Loading Plotly library...');
           const script = document.createElement('script');
-          script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+          script.src = 'https://cdn.plot.ly/plotly-3.0.1.min.js';
           script.async = true;
           script.onload = () => {
             console.log('Plotly library loaded successfully');
@@ -524,7 +526,7 @@ window.jupyterDisplayData["{outputId}"] = function(data) {{
     if (plotlyDivs.length > 0 && typeof window.Plotly === 'undefined') {{
       // Load Plotly if needed
       const script = document.createElement('script');
-      script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+      script.src = 'https://cdn.plot.ly/plotly-3.0.1.min.js';
       script.onload = () => {{
         // Once loaded, any plotly divs should initialize
         console.log('Plotly loaded for HTML output');
@@ -565,7 +567,7 @@ window.jupyterDisplayData["{outputId}"] = function(data) {{
       }} else {{
         // If Plotly is not loaded yet, load it
         const script = document.createElement("script");
-        script.src = "https://cdn.plot.ly/plotly-latest.min.js";
+        script.src = "https://cdn.plot.ly/plotly-3.0.1.min.js";
         script.onload = function() {{
           try {{
             window.Plotly.newPlot(
@@ -664,7 +666,7 @@ try:
                     
                     if (!window.Plotly) {{
                         const script = document.createElement('script');
-                        script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+                        script.src = 'https://cdn.plot.ly/plotly-3.0.1.min.js';
                         script.onload = loadPlotly;
                         document.head.appendChild(script);
                     }} else {{
@@ -727,6 +729,11 @@ except ImportError:
             streamDiv.className = 'stream-output';
             streamDiv.textContent = streamContent;
             outputElement.appendChild(streamDiv);
+            onOutput?.({
+              type: msg.content.name || 'stdout',
+              content: streamContent,
+              short_content: createShortContent(streamContent, msg.content.name || 'stdout')
+            });
             break;
           case 'display_data':
           case 'execute_result':
@@ -736,6 +743,12 @@ except ImportError:
             if (data['text/html']) {
               const div = document.createElement('div');
               div.innerHTML = data['text/html'];
+              
+              onOutput?.({
+                type: 'html',
+                content: data['text/html'],
+                short_content: createShortContent(data['text/html'], 'html')
+              });
               
               // Execute any scripts in the HTML
               setTimeout(() => {
@@ -766,7 +779,7 @@ except ImportError:
                 if (plotlyDivs.length > 0 && typeof window.Plotly === 'undefined') {
                   // Load Plotly if needed
                   const script = document.createElement('script');
-                  script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+                  script.src = 'https://cdn.plot.ly/plotly-3.0.1.min.js';
                   script.onload = () => {
                     console.log('Plotly loaded for HTML output in JS handler');
                   };
@@ -777,8 +790,15 @@ except ImportError:
               outputElement.appendChild(div);
             } else if (data['image/png']) {
               const img = document.createElement('img');
-              img.src = `data:image/png;base64,${data['image/png']}`;
+              const imgContent = `data:image/png;base64,${data['image/png']}`;
+              img.src = imgContent;
               outputElement.appendChild(img);
+              
+              onOutput?.({
+                type: 'img',
+                content: imgContent,
+                short_content: createShortContent(imgContent, 'img')
+              });
             } else if (data['application/vnd.plotly.v1+json']) {
               // Handle Plotly data directly
               const plotlyDiv = document.createElement('div');
@@ -789,6 +809,13 @@ except ImportError:
               outputElement.appendChild(plotlyDiv);
               
               const plotlyData = data['application/vnd.plotly.v1+json'];
+              const plotlyContent = JSON.stringify(plotlyData);
+              
+              onOutput?.({
+                type: 'plotly',
+                content: plotlyContent,
+                short_content: createShortContent(plotlyContent, 'plotly')
+              });
               
               // Create a function to render the plot
               const renderPlot = () => {
@@ -810,7 +837,7 @@ except ImportError:
                 } else {
                   // If Plotly is not loaded yet, load it
                   const script = document.createElement('script');
-                  script.src = 'https://cdn.plot.ly/plotly-latest.min.js';
+                  script.src = 'https://cdn.plot.ly/plotly-3.0.1.min.js';
                   script.onload = function() {
                     try {
                       window.Plotly.newPlot(
@@ -834,9 +861,16 @@ except ImportError:
               // Render the plot after a small delay to ensure the DOM is ready
               setTimeout(renderPlot, 100);
             } else if (data['text/plain'] && !outputElement.querySelector('.stream-output')) {
+              const plainContent = data['text/plain'];
               const pre = document.createElement('pre');
-              pre.textContent = data['text/plain'];
+              pre.textContent = plainContent;
               outputElement.appendChild(pre);
+              
+              onOutput?.({
+                type: 'stdout',
+                content: plainContent,
+                short_content: createShortContent(plainContent, 'stdout')
+              });
             }
             break;
           case 'error':
@@ -846,6 +880,12 @@ except ImportError:
             errorDiv.style.color = 'red';
             errorDiv.textContent = errorText;
             outputElement.appendChild(errorDiv);
+            
+            onOutput?.({
+              type: 'stderr',
+              content: errorText,
+              short_content: createShortContent(errorText, 'stderr')
+            });
             onStatus?.('Error');
             break;
           case 'status':

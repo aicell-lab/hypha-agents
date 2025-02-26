@@ -17,6 +17,7 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import Link from '@mui/material/Link';
 import ChatIcon from '@mui/icons-material/Chat';
+import { SITE_ID, SERVER_URL } from '../utils/env';
 
 const ResourceDetails = () => {
   const { id } = useParams();
@@ -32,7 +33,7 @@ const ResourceDetails = () => {
 
   useEffect(() => {
     if (id) {
-      fetchResource(`elia-platform/${id}`);
+      fetchResource(`${SITE_ID}/${id}`);
     }
   }, [id, fetchResource]);
 
@@ -55,9 +56,8 @@ const ResourceDetails = () => {
   }, [selectedResource?.id, selectedResource?.manifest.documentation]);
 
   const handleDownload = () => {
-    const id = selectedResource?.id.split('/').pop();
     if (id) {
-      window.open(`https://hypha.aicell.io/elia-platform/artifacts/${id}/create-zip-file`, '_blank');
+      window.open(`${SERVER_URL}/${SITE_ID}/artifacts/${id}/create-zip-file`, '_blank');
     }
   };
 

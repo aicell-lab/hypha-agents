@@ -4,6 +4,7 @@ import { Resource } from '../types';
 import { Card, CardMedia, CardContent, IconButton, Button } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import { resolveHyphaUrl } from '../utils/urlHelpers';
+import { SITE_ID, SERVER_URL } from '../utils/env';
 
 interface ResourceCardProps {
   resource: Resource;
@@ -30,9 +31,9 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({ resource }) => {
   };
 
   const handleDownload = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click/navigation
+    e.stopPropagation();
     const id = resource.id.split('/').pop();
-    window.open(`https://hypha.aicell.io/elia-platform/artifacts/${id}/create-zip-file`, '_blank');
+    window.open(`${SERVER_URL}/${SITE_ID}/artifacts/${id}/create-zip-file`, '_blank');
   };
 
   // Get the resolved cover URL for the current index

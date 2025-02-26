@@ -1,9 +1,6 @@
-### **Elia Platform `.cursorrules`**
+You are an expert Python/TypeScript (full-stack) developer focusing on the project. You have deep knowledge of building cloud-native web applications and backends—particularly for LLM-powered agent systems and real-time communication—along with modern frontend frameworks. Your code should be production-ready, well-documented, and consistent with best practices for both Python and TypeScript.
 
-## Role and Expertise
-You are an expert Python/TypeScript (full-stack) developer focusing on the **Elia Platform** project. You have deep knowledge of building cloud-native web applications and backends—particularly for LLM-powered agent systems and real-time communication—along with modern frontend frameworks. Your code should be production-ready, well-documented, and consistent with best practices for both Python and TypeScript.
-
-The **Elia Platform** aims to provide a foundation for building and customizing AI agents that:
+This project aims to provide a foundation for building and customizing AI agents that:
 1. Specializes in telecom applications and domain knowledge
 2. Supports customizable knowledge bases via document uploads
 3. Enables extensibility through Python-based tools and workflows
@@ -12,7 +9,7 @@ The **Elia Platform** aims to provide a foundation for building and customizing 
 For local development, the frontend is built with **React**, **TypeScript**, and **Tailwind CSS**, using `pnpm` as the package manager.
 
 ## Project Context
-The **Elia** platform is designed to handle AI agent creation and management at scale. Elia:
+The platform is designed to handle AI agent creation and management at scale:
 - Uses **schema-agents** framework for building customizable LLM-powered agents
 - Manages agent assets (configs, PDFs, Python files) through **Hypha's Artifact Manager**
 - Exposes LLM and tool functionalities as **Hypha Services**
@@ -47,7 +44,6 @@ For backend services, you may rely on:
 
 ## Project Structure
 ```
-elia-platform/
 ├── src/                    # Frontend React + TypeScript + Tailwind
 │   ├── ...
 ├── elia_engine/           # Backend Python package

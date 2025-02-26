@@ -10,6 +10,7 @@ import AdminResourceCard from './AdminResourceCard';
 import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { SITE_ID, SERVER_URL } from '../utils/env';
 
 interface Artifact {
   id: string;
@@ -212,7 +213,7 @@ const MyArtifacts: React.FC = () => {
                     ...(artifact.manifest?.tags || [])
                   ]}
                   image={artifact.manifest?.cover || undefined}
-                  downloadUrl={`https://hypha.aicell.io/elia-platform/artifacts/${artifact.id.split('/').pop()}/create-zip-file`}
+                  downloadUrl={`${SERVER_URL}/${SITE_ID}/artifacts/${artifact.id.split('/').pop()}/create-zip-file`}
                   onEdit={() => navigate(`/edit/${encodeURIComponent(artifact.id)}`)}
                   onDelete={() => {
                     setArtifactToDelete(artifact);
