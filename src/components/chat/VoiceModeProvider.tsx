@@ -6,16 +6,16 @@ import { useTools } from './ToolProvider';
 interface VoiceModeContextType {
   isRecording: boolean;
   isPaused: boolean;
-  startRealTimeChat: (config: {
+  startTimeChat: (config: {
     onItemCreated?: (item: any) => void;
     instructions?: string;
     voice?: string;
     temperature?: number;
     tools?: Tool[];
   }) => Promise<void>;
-  stopRealTimeChat: () => Promise<void>;
-  pauseRealTimeChat: () => Promise<void>;
-  resumeRealTimeChat: () => Promise<void>;
+  stopChat: () => Promise<void>;
+  pauseChat: () => Promise<void>;
+  resumeChat: () => Promise<void>;
   error: string | null;
   sendTextMessage: (text: string) => void;
   status: string;
@@ -280,7 +280,7 @@ Remember:
     }
   }, []);
 
-  const startRealTimeChat = useCallback(async (config: {
+  const startTimeChat = useCallback(async (config: {
     onItemCreated?: (item: any) => void;
     instructions?: string;
     voice?: string;
@@ -311,7 +311,7 @@ Remember:
       // Check if there's an existing connection and close it first
       if (isRecording || peerConnectionRef.current || dataChannelRef.current || mediaStreamRef.current) {
         console.log('Existing WebRTC connection detected, closing it before starting a new one');
-        await stopRealTimeChat();
+        await stopChat();
         // Small delay to ensure cleanup is complete
         await new Promise(resolve => setTimeout(resolve, 300));
       }
@@ -378,7 +378,7 @@ Remember:
       dc.onerror = async (error) => {
         console.error('Data channel error:', error);
         // Stop recording when data channel error occurs
-        await stopRealTimeChat();
+        await stopChat();
         setError('Data channel error occurred');
         setStatus('Connection error');
       };
@@ -394,7 +394,7 @@ Remember:
         // Auto-cleanup on disconnected or failed states
         if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
           console.log('Connection state indicates WebRTC disconnection, cleaning up resources');
-          stopRealTimeChat().catch(err => {
+          stopChat().catch(err => {
             console.error('Error during auto-cleanup:', err);
           });
         }
@@ -443,7 +443,7 @@ Remember:
       console.error('Recording error:', err);
       setStatus('Failed to connect');
       setConnectionState('failed');
-      await stopRealTimeChat();
+      await stopChat();
       
       // Clear the timeout and release the connection lock
       if (lockTimeout) {
@@ -453,7 +453,7 @@ Remember:
     }
   }, [server, handleDataChannelMessage, updateSession, formatToolsForOpenAI]);
 
-  const stopRealTimeChat = useCallback(async () => {
+  const stopChat = useCallback(async () => {
     try {
       setStatus('Stopping...');
       setIsPaused(false);
@@ -532,7 +532,7 @@ Remember:
     }
   }, []);
 
-  const pauseRealTimeChat = useCallback(async () => {
+  const pauseChat = useCallback(async () => {
     try {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.enabled = false);
@@ -545,7 +545,7 @@ Remember:
     }
   }, []);
 
-  const resumeRealTimeChat = useCallback(async () => {
+  const resumeChat = useCallback(async () => {
     try {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.enabled = true);
@@ -606,10 +606,10 @@ Remember:
     <VoiceModeContext.Provider value={{
       isRecording,
       isPaused,
-      startRealTimeChat,
-      stopRealTimeChat,
-      pauseRealTimeChat,
-      resumeRealTimeChat,
+      startTimeChat,
+      stopChat,
+      pauseChat,
+      resumeChat,
       error,
       sendTextMessage,
       status,

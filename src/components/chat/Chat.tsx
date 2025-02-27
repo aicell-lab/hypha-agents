@@ -222,7 +222,7 @@ const useToolRegistration = (
   schemaAgents: any, 
   executeCode: any, 
   executeCodeWithDOMOutput: any,
-  stopRealTimeChat: () => Promise<void>,
+  stopChat: () => Promise<void>,
   updateLastAssistantMessage: (code: string, status: string, outputs: OutputItem[]) => void,
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
 ) => {
@@ -386,7 +386,7 @@ This will stop the voice recording and close the connection.`,
           
           // Wait a moment for the message to be displayed before shutting down
           setTimeout(() => {
-            stopRealTimeChat();
+            stopChat();
           }, 1000);
           
           return `Agent shutdown initiated. Reason: ${args.reason || "Conversation ended"}`;
@@ -396,7 +396,7 @@ This will stop the voice recording and close the connection.`,
       // Register both tools
       registerTools([runCodeTool, shutdownTool]);
     }
-  }, [isThebeReady, schemaAgents, executeCode, executeCodeWithDOMOutput, registerTools, stopRealTimeChat, updateLastAssistantMessage, setMessages]);
+  }, [isThebeReady, schemaAgents, executeCode, executeCodeWithDOMOutput, registerTools, stopChat, updateLastAssistantMessage, setMessages]);
 };
 
 // Create a separate component for the chat content
@@ -418,10 +418,10 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   const { 
     isRecording, 
     isPaused,
-    startRealTimeChat, 
-    stopRealTimeChat,
-    pauseRealTimeChat,
-    resumeRealTimeChat,
+    startTimeChat, 
+    stopChat,
+    pauseChat,
+    resumeChat,
     error: voiceError, 
     status,
     sendTextMessage 
@@ -535,7 +535,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     schemaAgents,
     executeCode,
     executeCodeWithDOMOutput,
-    stopRealTimeChat,
+    stopChat,
     updateLastAssistantMessage,
     setMessages
   );
@@ -743,10 +743,10 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     const isDisabled = !schemaAgents || isTyping;
     const [isConnecting, setIsConnecting] = useState(false);
 
-    const handleStartRealTimeChat = async () => {
+    const handlestartTimeChat = async () => {
       setIsConnecting(true);
       try {
-        await startRealTimeChat({
+        await startTimeChat({
           onItemCreated: handleItemCreated,
           instructions: composeInstructions(),
           voice: agentConfig.voice || "sage",
@@ -760,9 +760,9 @@ const ChatContent: React.FC<ChatProps> = (props) => {
       }
     };
 
-    const handleStopRealTimeChat = async () => {
+    const handlestopChat = async () => {
       try {
-        await stopRealTimeChat();
+        await stopChat();
       } finally {
         setIsConnecting(false);
       }
@@ -770,9 +770,9 @@ const ChatContent: React.FC<ChatProps> = (props) => {
 
     const handlePauseResume = async () => {
       if (isPaused) {
-        await resumeRealTimeChat();
+        await resumeChat();
       } else {
-        await pauseRealTimeChat();
+        await pauseChat();
       }
     };
 
@@ -780,7 +780,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
       <div className="flex items-center gap-2">
         <div className="relative">
           <button
-            onClick={isRecording ? handlePauseResume : handleStartRealTimeChat}
+            onClick={isRecording ? handlePauseResume : handlestartTimeChat}
             disabled={isDisabled}
             className={`p-3 rounded-full transition-all duration-300 relative group ${
               isDisabled
@@ -851,7 +851,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleStopRealTimeChat();
+                  handlestopChat();
                 }}
                 className="absolute -top-1 -right-1 p-1 rounded-full bg-gray-600 hover:bg-gray-700 transition-all duration-300 transform hover:scale-110 shadow-lg z-10 opacity-0 group-hover:opacity-100 cursor-pointer"
                 title="Stop Recording"
