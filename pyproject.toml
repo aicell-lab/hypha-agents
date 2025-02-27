@@ -19,7 +19,7 @@ classifiers = [
 dependencies = [
     "python-dotenv",
     "schema-agents==0.2.0rc3",
-    "hypha-rpc>=0.20.47",
+    "hypha-rpc>=0.20.48",
     "requests",
     "pypdf",
     "pillow",

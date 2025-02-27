@@ -1,5 +1,5 @@
 schema-agents==0.2.0rc3
-hypha-rpc>=0.20.47
+hypha-rpc>=0.20.48
 hypha>=0.20.47
 requests
 pypdf
@@ -20,3 +20,4 @@ python-dotenv==1.0.1
 fastapi==0.106.0
 asyncpg
 greenlet
+pyte>=0.8.1

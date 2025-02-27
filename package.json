@@ -29,7 +29,7 @@
     "date-fns": "^4.1.0",
     "events": "^3.3.0",
     "framer-motion": "^12.4.1",
-    "hypha-rpc": "^0.20.47",
+    "hypha-rpc": "^0.20.48",
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
     "katex": "^0.16.21",

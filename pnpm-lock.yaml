@@ -87,8 +87,8 @@ importers:
         specifier: ^12.4.1
         version: 12.4.2(@emotion/is-prop-valid@1.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       hypha-rpc:
-        specifier: ^0.20.47
-        version: 0.20.47
+        specifier: ^0.20.48
+        version: 0.20.48
       js-yaml:
         specifier: ^4.1.0
         version: 4.1.0
@@ -5239,8 +5239,8 @@ packages:
     resolution: {integrity: sha512-B4FFZ6q/T2jhhksgkbEW3HBvWIfDW85snkQgawt07S7J5QXTk6BkNV+0yAeZrM5QpMAdYlocGoljn0sJ/WQkFw==}
     engines: {node: '>=10.17.0'}
 
-  hypha-rpc@0.20.47:
-    resolution: {integrity: sha512-vB+vMEMf0rDs14cskAeZ0rMfcYYYBdeUIcNVfLW6az7FVDvqT7vAPFPGX8WLNAJs1IDRGXgNd4xdFvXwX013VA==}
+  hypha-rpc@0.20.48:
+    resolution: {integrity: sha512-yMxVMM5xPeo1ksb8QVSkFlxxkBcLNv3t3Il7ZCF9gUXFlb/nDqni2LX7iLw2cdvqlpBRFnGtUWVQ7rpI8VYJWQ==}
     engines: {node: '>=19.0.0'}
 
   iconv-lite@0.4.24:
@@ -16508,7 +16508,7 @@ snapshots:
 
   human-signals@2.1.0: {}
 
-  hypha-rpc@0.20.47:
+  hypha-rpc@0.20.48:
     dependencies:
       '@msgpack/msgpack': 2.8.0
 
