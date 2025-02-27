@@ -418,7 +418,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   const { 
     isRecording, 
     isPaused,
-    startTimeChat, 
+    startChat, 
     stopChat,
     pauseChat,
     resumeChat,
@@ -743,10 +743,10 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     const isDisabled = !schemaAgents || isTyping;
     const [isConnecting, setIsConnecting] = useState(false);
 
-    const handlestartTimeChat = async () => {
+    const handlestartChat = async () => {
       setIsConnecting(true);
       try {
-        await startTimeChat({
+        await startChat({
           onItemCreated: handleItemCreated,
           instructions: composeInstructions(),
           voice: agentConfig.voice || "sage",
@@ -780,7 +780,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
       <div className="flex items-center gap-2">
         <div className="relative">
           <button
-            onClick={isRecording ? handlePauseResume : handlestartTimeChat}
+            onClick={isRecording ? handlePauseResume : handlestartChat}
             disabled={isDisabled}
             className={`p-3 rounded-full transition-all duration-300 relative group ${
               isDisabled

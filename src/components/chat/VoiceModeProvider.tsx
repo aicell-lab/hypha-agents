@@ -6,7 +6,7 @@ import { useTools } from './ToolProvider';
 interface VoiceModeContextType {
   isRecording: boolean;
   isPaused: boolean;
-  startTimeChat: (config: {
+  startChat: (config: {
     onItemCreated?: (item: any) => void;
     instructions?: string;
     voice?: string;
@@ -280,7 +280,7 @@ Remember:
     }
   }, []);
 
-  const startTimeChat = useCallback(async (config: {
+  const startChat = useCallback(async (config: {
     onItemCreated?: (item: any) => void;
     instructions?: string;
     voice?: string;
@@ -606,7 +606,7 @@ Remember:
     <VoiceModeContext.Provider value={{
       isRecording,
       isPaused,
-      startTimeChat,
+      startChat,
       stopChat,
       pauseChat,
       resumeChat,
