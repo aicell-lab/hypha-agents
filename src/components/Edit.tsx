@@ -114,6 +114,7 @@ interface AgentConfig {
     // Model Settings
     model: string;
     stream?: boolean;
+    disableStreaming?: boolean; // Add this option
     instructions?: string;
 
     // Voice Settings
@@ -1776,6 +1777,7 @@ const Edit: React.FC = () => {
           // Model Settings
           model: modelToUse,
           stream: artifactInfo.manifest.agent_config?.stream ?? true,
+          disableStreaming: artifactInfo.manifest.agent_config?.disableStreaming,
           instructions: artifactInfo.manifest.description || '',
           
           // Voice Settings
@@ -1833,6 +1835,7 @@ const Edit: React.FC = () => {
           // Model Settings
           model: modelToUse,
           stream: agentConfig.agent_config.stream,
+          disableStreaming: agentConfig.agent_config.disableStreaming,
           instructions: agentConfig.description,
 
           // Voice Settings
@@ -1996,21 +1999,49 @@ const Edit: React.FC = () => {
                 </FormHelperText>
               </FormControl>
 
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={agentConfig.agent_config.stream}
-                    onChange={(e) => setAgentConfig(prev => ({
-                      ...prev,
-                      agent_config: {
-                        ...prev.agent_config,
-                        stream: e.target.checked
-                      }
-                    }))}
-                  />
-                }
-                label="Enable streaming responses"
-              />
+              {/* Streaming options */}
+              <div className="space-y-2">
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={agentConfig.agent_config.stream !== false}
+                      onChange={(e) => setAgentConfig(prev => ({
+                        ...prev,
+                        agent_config: {
+                          ...prev.agent_config,
+                          stream: e.target.checked
+                        }
+                      }))}
+                      disabled={agentConfig.agent_config.disableStreaming}
+                    />
+                  }
+                  label="Enable streaming responses"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={!!agentConfig.agent_config.disableStreaming}
+                      onChange={(e) => {
+                        const disableStreaming = e.target.checked;
+                        setAgentConfig(prev => ({
+                          ...prev,
+                          agent_config: {
+                            ...prev.agent_config,
+                            disableStreaming,
+                            // If disabling streaming, also set stream to false
+                            stream: disableStreaming ? false : prev.agent_config.stream
+                          }
+                        }));
+                      }}
+                    />
+                  }
+                  label="Disable streaming (for models that don't support it)"
+                />
+                <FormHelperText>
+                  Some models don't support streaming. Check this option if you're experiencing issues with streaming responses.
+                </FormHelperText>
+              </div>
             </div>
 
             {/* Mode Selection */}

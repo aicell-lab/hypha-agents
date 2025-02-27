@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import { useHyphaStore } from '../../store/hyphaStore';
 import { Tool } from './ToolProvider';
 import { useTools } from './ToolProvider';
+import OpenAI from 'openai';
 
 interface TextModeContextType {
   isRecording: boolean;
@@ -13,6 +14,7 @@ interface TextModeContextType {
     temperature?: number;
     tools?: Tool[];
     model?: string;
+    disableStreaming?: boolean;
   }) => Promise<void>;
   stopChat: () => Promise<void>;
   pauseChat: () => Promise<void>;
@@ -21,6 +23,7 @@ interface TextModeContextType {
   sendText: (text: string) => void;
   status: string;
   connectionState: string;
+  streamingText: string | null;
 }
 
 const TextModeContext = createContext<TextModeContextType | undefined>(undefined);
@@ -49,8 +52,12 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const [connectionState, setConnectionState] = useState<string>('disconnected');
+  const [streamingText, setStreamingText] = useState<string | null>(null);
   const { server } = useHyphaStore();
   const { onToolsChange } = useTools();
+  
+  // OpenAI client reference
+  const openaiClientRef = useRef<OpenAI | null>(null);
   
   // Chat session configuration
   const chatConfigRef = useRef<{
@@ -62,6 +69,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
     apiKey?: string;
     messages: any[];
     model?: string;
+    disableStreaming?: boolean;
   }>({
     messages: []
   });
@@ -74,7 +82,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
     if (!tools || tools.length === 0) return [];
     
     return tools.map(tool => ({
-      type: 'function',
+      type: 'function' as const,
       function: {
         name: tool.name,
         description: tool.description,
@@ -84,7 +92,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
   }, []);
 
   // Process the OpenAI response
-  const processResponse = useCallback(async (response: any) => {
+  const processResponse = useCallback(async (response: OpenAI.Chat.ChatCompletion) => {
     try {
       if (!response || !response.choices || response.choices.length === 0) {
         throw new Error('Invalid response from OpenAI');
@@ -96,6 +104,12 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       // Handle function calls
       if (message.tool_calls && message.tool_calls.length > 0) {
         setStatus('Executing function...');
+        
+        // Ensure all tool calls have the required 'type' field
+        message.tool_calls = message.tool_calls.map((toolCall: any) => ({
+          ...toolCall,
+          type: toolCall.type || 'function'
+        }));
         
         // Add assistant message to the conversation
         chatConfigRef.current.messages.push(message);
@@ -131,7 +145,8 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
               const functionOutputItem = {
                 type: 'function_call_output',
                 call_id: toolCall.id,
-                output: typeof result === 'string' ? result : JSON.stringify(result)
+                output: typeof result === 'string' ? result : JSON.stringify(result),
+                content: typeof result === 'string' ? result : JSON.stringify(result)
               };
               
               // Notify about function call and result
@@ -154,7 +169,8 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
               const errorItem = {
                 type: 'function_call_output',
                 call_id: toolCall.id,
-                output: `Error executing code: ${error instanceof Error ? error.stack || error.message : String(error)}`
+                output: `Error executing code: ${error instanceof Error ? error.stack || error.message : String(error)}`,
+                content: `Error executing code: ${error instanceof Error ? error.stack || error.message : String(error)}`
               };
               
               chatConfigRef.current.onItemCreated?.(errorItem);
@@ -183,51 +199,173 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
         chatConfigRef.current.onItemCreated?.(textMessage);
         setStatus('Response received');
       }
+      
+      // Clear streaming text when processing is complete
+      setStreamingText(null);
     } catch (error) {
       console.error('Error processing response:', error);
       setError(`Error processing response: ${error instanceof Error ? error.message : String(error)}`);
       setStatus('Error processing response');
+      setStreamingText(null); // Clear streaming text on error
     }
   }, []);
 
-  // Continue the conversation after function calls
   const continueConversation = useCallback(async () => {
     try {
       setStatus('Assistant is thinking...');
       
-      const schemaAgents = await server?.getService("schema-agents");
-      const session: OpenAISession = await schemaAgents?.get_openai_token();
-      const API_KEY = session.client_secret.value;
+      // Ensure OpenAI client is initialized
+      if (!openaiClientRef.current || !chatConfigRef.current.apiKey) {
+        throw new Error('OpenAI client not initialized');
+      }
       
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`
-        },
-        body: JSON.stringify({
+      // Check if streaming is disabled
+      if (chatConfigRef.current.disableStreaming) {
+        // Use non-streaming API
+        const response = await openaiClientRef.current.chat.completions.create({
           model: chatConfigRef.current.model || 'gpt-4o-mini',
           messages: chatConfigRef.current.messages,
           tools: formatToolsForOpenAI(chatConfigRef.current.tools),
           tool_choice: 'auto',
-          temperature: chatConfigRef.current.temperature || 0.7
-        })
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
+          temperature: chatConfigRef.current.temperature || 0.7,
+          stream: false
+        });
+        
+        await processResponse(response);
+        return;
       }
       
-      const data = await response.json();
-      await processResponse(data);
+      // Use streaming API
+      const stream = await openaiClientRef.current.chat.completions.create({
+        model: chatConfigRef.current.model || 'gpt-4o-mini',
+        messages: chatConfigRef.current.messages,
+        tools: formatToolsForOpenAI(chatConfigRef.current.tools),
+        tool_choice: 'auto',
+        temperature: chatConfigRef.current.temperature || 0.7,
+        stream: true // Enable streaming
+      });
+      
+      // Initialize streaming text
+      setStreamingText('');
+      
+      // Process the stream
+      let fullResponse = '';
+      let fullMessage: any = null;
+      
+      for await (const chunk of stream) {
+        const choice = chunk.choices[0];
+        
+        // Handle tool calls
+        if (choice?.delta?.tool_calls) {
+          // If we get a tool call, we'll handle it after the stream completes
+          if (!fullMessage) {
+            fullMessage = {
+              role: 'assistant',
+              content: '',
+              tool_calls: []
+            };
+          }
+          
+          // Update tool calls
+          if (choice.delta.tool_calls) {
+            for (const toolCall of choice.delta.tool_calls) {
+              const existingToolCall = fullMessage.tool_calls.find((tc: any) => tc.index === toolCall.index);
+              
+              if (existingToolCall) {
+                // Update existing tool call
+                if (toolCall.function?.name) {
+                  existingToolCall.function.name = (existingToolCall.function.name || '') + toolCall.function.name;
+                }
+                if (toolCall.function?.arguments) {
+                  existingToolCall.function.arguments = (existingToolCall.function.arguments || '') + toolCall.function.arguments;
+                }
+                if (toolCall.id) {
+                  existingToolCall.id = toolCall.id;
+                }
+                if (toolCall.type) {
+                  existingToolCall.type = toolCall.type;
+                } else if (!existingToolCall.type) {
+                  existingToolCall.type = 'function';
+                }
+              } else if (toolCall.index !== undefined) {
+                // Add new tool call
+                fullMessage.tool_calls.push({
+                  index: toolCall.index,
+                  id: toolCall.id || '',
+                  type: 'function',
+                  function: {
+                    name: toolCall.function?.name || '',
+                    arguments: toolCall.function?.arguments || ''
+                  }
+                });
+              }
+            }
+          }
+          
+          // Update streaming text to show tool call is being prepared
+          // Get unique tool names from the current tool calls
+          const toolNames = fullMessage.tool_calls
+            .map((tc: any) => tc.function?.name)
+            .filter((name: string | undefined) => name && name.trim() !== '')
+            .filter((name: string, index: number, self: string[]) => 
+              self.indexOf(name) === index
+            );
+          
+          // Create a formatted list of tools with emojis
+          if (toolNames.length > 0) {
+            const toolList = toolNames.map((name: string) => `🔧 ${name}`).join('\n');
+            setStreamingText(`Calling tools:\n${toolList}`);
+          } else {
+            setStreamingText(`Preparing to call tools... 🔧`);
+          }
+        } 
+        // Handle regular text content
+        else if (choice?.delta?.content) {
+          fullResponse += choice.delta.content;
+          setStreamingText(fullResponse);
+          
+          if (!fullMessage) {
+            fullMessage = {
+              role: 'assistant',
+              content: fullResponse
+            };
+          } else {
+            fullMessage.content = fullResponse;
+          }
+        }
+      }
+      
+      // Process the complete message
+      if (fullMessage) {
+        // Ensure all tool calls have the required 'type' field
+        if (fullMessage.tool_calls && fullMessage.tool_calls.length > 0) {
+          fullMessage.tool_calls = fullMessage.tool_calls.map((toolCall: any) => ({
+            ...toolCall,
+            type: toolCall.type || 'function'
+          }));
+        }
+        
+        await processResponse({
+          id: 'streaming-response',
+          choices: [{ 
+            message: fullMessage, 
+            index: 0, 
+            finish_reason: 'stop',
+            logprobs: null
+          }],
+          created: Date.now(),
+          model: chatConfigRef.current.model || 'gpt-4o-mini',
+          object: 'chat.completion'
+        } as OpenAI.Chat.ChatCompletion);
+      }
       
     } catch (error) {
       console.error('Error continuing conversation:', error);
       setError(`Error continuing conversation: ${error instanceof Error ? error.message : String(error)}`);
       setStatus('Error continuing conversation');
+      setStreamingText(null); // Clear streaming text on error
     }
-  }, [server, formatToolsForOpenAI, processResponse]);
+  }, [formatToolsForOpenAI, processResponse]);
 
   const stopChat = useCallback(async () => {
     try {
@@ -239,6 +377,12 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       chatConfigRef.current = {
         messages: []
       };
+      
+      // Clear OpenAI client
+      openaiClientRef.current = null;
+      
+      // Clear streaming text
+      setStreamingText(null);
       
       setIsRecording(false);
       setStatus('Stopped');
@@ -252,6 +396,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       
       // Force reset even if errors occurred
       setIsRecording(false);
+      setStreamingText(null);
       
       // Release the connection lock even on error
       connectionLockRef.current = false;
@@ -265,6 +410,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
     temperature?: number;
     tools?: Tool[];
     model?: string;
+    disableStreaming?: boolean;
   }) => {
     // Declare and initialize timeout variable at the top of the function
     let lockTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -299,7 +445,8 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       chatConfigRef.current = {
         ...config,
         messages: [],
-        model: config.model || 'gpt-4o-mini'
+        model: config.model || 'gpt-4o-mini',
+        disableStreaming: config.disableStreaming
       };
 
       setStatus('Initializing...');
@@ -314,6 +461,12 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       
       // Store API key in config
       chatConfigRef.current.apiKey = API_KEY;
+      
+      // Initialize OpenAI client
+      openaiClientRef.current = new OpenAI({
+        apiKey: API_KEY,
+        dangerouslyAllowBrowser: true // Required for browser usage
+      });
       
       // Add system message with instructions
       chatConfigRef.current.messages.push({
@@ -407,6 +560,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       console.error('Error sending text:', err);
       setError(`Failed to send message: ${err instanceof Error ? err.message : String(err)}`);
       setStatus('Error sending message');
+      setStreamingText(null); // Clear streaming text on error
     }
   }, [isRecording, continueConversation]);
 
@@ -434,7 +588,8 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       error,
       sendText,
       status,
-      connectionState
+      connectionState,
+      streamingText
     }}>
       {children}
     </TextModeContext.Provider>

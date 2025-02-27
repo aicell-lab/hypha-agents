@@ -37,6 +37,7 @@ interface ChatProps {
     goal?: string;
     model?: string;
     stream?: boolean;
+    disableStreaming?: boolean;
     instructions?: string;
     welcomeMessage?: string;
     voice?: string;
@@ -236,7 +237,6 @@ const useToolRegistration = (
       const runCode = async (code: string) => {
         let outputs: OutputItem[] = [];
         let shortOutput = '';
-        
         updateLastAssistantMessage(code, 'running', []);
         
         // Create a hidden div to hold the output that will be processed via DOM
@@ -435,7 +435,8 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     resumeChat,
     error: modeError, 
     status,
-    sendText 
+    sendText,
+    streamingText // Get streamingText from the mode provider
   } = useVoiceBasedOnConfig ? voiceMode : textMode;
   
   const { tools } = useTools();
@@ -538,12 +539,12 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     initSchemaAgents();
   }, [server]);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or streaming text changes
   useEffect(() => {
     if (messageEndRef.current) {
       messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages]);
+  }, [messages, streamingText]);
 
   // Add effect to show ripple when receiving voice message
   useEffect(() => {
@@ -805,7 +806,8 @@ const ChatContent: React.FC<ChatProps> = (props) => {
         instructions: composeInstructions(),
         temperature: agentConfig.temperature || 0.7,
         tools: tools,
-        model: agentConfig.model || 'gpt-4o-mini'
+        model: agentConfig.model || 'gpt-4o-mini',
+        disableStreaming: agentConfig.disableStreaming
       }).catch(error => {
         console.error('Failed to auto-start text chat:', error);
       });
@@ -823,7 +825,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
         });
       }
     };
-  }, [useVoiceBasedOnConfig, schemaAgents, isThebeReady, startChat, stopChat, handleItemCreated, composeInstructions, tools, agentConfig.temperature, agentConfig.model]);
+  }, [useVoiceBasedOnConfig, schemaAgents, isThebeReady, startChat, stopChat, handleItemCreated, composeInstructions, tools, agentConfig.temperature, agentConfig.model, agentConfig.disableStreaming]);
 
   // Render voice button component
   const renderVoiceButton = useCallback(() => {
@@ -962,6 +964,23 @@ print("Hello, world!")
     }
   }, [handleSendMessage]);
 
+  // Render streaming message component
+  const renderStreamingMessage = useCallback(() => {
+    if (!streamingText) return null;
+    
+    return (
+      <div className="mb-4">
+        <ChatMessage 
+          message={{ 
+            role: 'assistant', 
+            content: [{ type: 'markdown', content: streamingText }] 
+          }} 
+          isLoading={false}
+        />
+      </div>
+    );
+  }, [streamingText]);
+
   return (
     <>
       <style>{styles}</style>
@@ -1011,8 +1030,11 @@ print("Hello, world!")
               />
             ))}
             
-            {/* Typing Indicator */}
-            {isTyping && (
+            {/* Streaming Text Message */}
+            {renderStreamingMessage()}
+            
+            {/* Typing Indicator - Only show if not streaming */}
+            {isTyping && !streamingText && (
               <ChatMessage 
                 message={{ 
                   role: 'assistant', 
@@ -1090,7 +1112,9 @@ const Chat: React.FC<ChatProps> = (props) => {
       // For text mode, use the specified model or default to gpt-4o-mini
       model: useVoiceBasedOnConfig 
         ? "gpt-4o-realtime-preview" 
-        : (props.agentConfig.model || "gpt-4o-mini")
+        : (props.agentConfig.model || "gpt-4o-mini"),
+      // Preserve disableStreaming option
+      disableStreaming: props.agentConfig.disableStreaming
     }
   };
   

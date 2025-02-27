@@ -311,7 +311,7 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
   const firstLine = codeValue.split('\n')[0].trim();
   const previewText = firstLine.startsWith('#') ? 
     firstLine.substring(2) : // Remove '# ' from comment
-    'executable code block';
+    'Executable Code Block';
 
   const handleRunCode = async () => {
     if (!outputRef.current || isExecuting) return;

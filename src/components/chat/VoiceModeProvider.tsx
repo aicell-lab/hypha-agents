@@ -21,6 +21,7 @@ interface VoiceModeContextType {
   sendText: (text: string) => void;
   status: string;
   connectionState: string;
+  streamingText: string | null;
 }
 
 const VoiceModeContext = createContext<VoiceModeContextType | undefined>(undefined);
@@ -49,6 +50,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const [connectionState, setConnectionState] = useState<string>('disconnected');
+  const [streamingText, setStreamingText] = useState<string | null>(null);
   const { server } = useHyphaStore();
   const { onToolsChange } = useTools();
   
@@ -463,6 +465,9 @@ Remember:
       // Clear callbacks
       recordingConfigRef.current = {};
       
+      // Clear streaming text
+      setStreamingText(null);
+      
       // Stop and clean up media stream
       if (mediaStreamRef.current) {
         try {
@@ -615,7 +620,8 @@ Remember:
       error,
       sendText,
       status,
-      connectionState
+      connectionState,
+      streamingText
     }}>
       {children}
     </VoiceModeContext.Provider>
