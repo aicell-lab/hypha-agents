@@ -126,6 +126,21 @@ Remember:
       console.log('Received message:', msg);
       
       switch (msg.type) {
+        case 'response.audio_transcript.delta':
+          // Handle streaming transcript
+          setStreamingText((prevText) => {
+            // If this is the first chunk, initialize with the delta
+            if (prevText === null) return msg.delta;
+            // Otherwise append the new delta to the existing text
+            return prevText + msg.delta;
+          });
+          break;
+          
+        case 'response.audio_transcript.done':
+          // Clear streaming text when transcript is complete
+          setStreamingText(null);
+          break;
+          
         case 'response.content_part.done':
           if (msg.part?.type === 'audio' && msg.part?.transcript) {
             // Create a message item for the transcript
@@ -145,6 +160,9 @@ Remember:
             console.log('Sending transcript message:', transcriptMessage);
             dataChannelRef.current?.send(JSON.stringify(transcriptMessage));
             recordingConfigRef.current.onItemCreated?.(transcriptMessage.item);
+            
+            // Clear streaming text when transcript is complete
+            setStreamingText(null);
           } else if (msg.part?.type === 'text' && msg.part?.text) {
             // Create a message item for the text
             const textMessage = {
@@ -163,6 +181,9 @@ Remember:
             console.log('Sending text message:', textMessage);
             dataChannelRef.current?.send(JSON.stringify(textMessage));
             recordingConfigRef.current.onItemCreated?.(textMessage.item);
+            
+            // Clear streaming text when text is complete
+            setStreamingText(null);
           }
           break;
 
@@ -230,16 +251,22 @@ Remember:
             dataChannelRef.current?.send(JSON.stringify(textMessage));
             recordingConfigRef.current.onItemCreated?.(textMessage.item);
           }
+          // Clear streaming text when text response is complete
+          setStreamingText(null);
           setStatus('Response received');
           break;
 
         case 'error':
           console.error('Error occurred:', msg.error);
           setStatus('Error occurred');
+          // Clear streaming text on error
+          setStreamingText(null);
           break;
 
         case 'response.create.started':
           setStatus('Assistant is thinking...');
+          // Initialize streaming text
+          setStreamingText(null);
           break;
 
         case 'response.create.completed':
@@ -264,6 +291,8 @@ Remember:
 
         case 'response.text.started':
           setStatus('Receiving text response...');
+          // Initialize streaming text for text response
+          setStreamingText('');
           break;
 
         case 'conversation.item.created':
@@ -273,6 +302,24 @@ Remember:
         
         case 'response.done':
           setStatus('Response completed');
+          // Clear streaming text when response is complete
+          setStreamingText(null);
+          break;
+
+        case 'response.audio_transcript.started':
+          setStatus('Receiving audio transcript...');
+          // Initialize streaming text for audio transcript
+          setStreamingText('');
+          break;
+
+        case 'response.text.delta':
+          // Handle streaming text
+          setStreamingText((prevText) => {
+            // If this is the first chunk, initialize with the delta
+            if (prevText === null) return msg.delta;
+            // Otherwise append the new delta to the existing text
+            return prevText + msg.delta;
+          });
           break;
 
         default:
@@ -381,6 +428,8 @@ Remember:
 
       dc.onerror = async (error) => {
         console.error('Data channel error:', error);
+        // Clear streaming text on error
+        setStreamingText(null);
         // Stop recording when data channel error occurs
         await stopChat();
         setError('Data channel error occurred');
@@ -542,9 +591,18 @@ Remember:
   const pauseChat = useCallback(async () => {
     try {
       if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.enabled = false);
+        // Disable all audio tracks to mute the microphone
+        mediaStreamRef.current.getAudioTracks().forEach(track => {
+          track.enabled = false;
+        });
         setIsPaused(true);
-        setStatus('Paused');
+        setStatus('Paused - microphone muted');
+        
+        // Don't send messages to the data channel as it might cause errors
+        // Just log the state change
+        console.log('Microphone paused - voice input disabled');
+      } else {
+        console.warn('No active media stream to pause');
       }
     } catch (err) {
       console.error('Error pausing recording:', err);
@@ -555,9 +613,18 @@ Remember:
   const resumeChat = useCallback(async () => {
     try {
       if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.enabled = true);
+        // Re-enable all audio tracks to unmute the microphone
+        mediaStreamRef.current.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
         setIsPaused(false);
         setStatus('Recording resumed');
+        
+        // Don't send messages to the data channel as it might cause errors
+        // Just log the state change
+        console.log('Microphone resumed - voice input enabled');
+      } else {
+        console.warn('No active media stream to resume');
       }
     } catch (err) {
       console.error('Error resuming recording:', err);
