@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { useHyphaStore } from '../../store/hyphaStore';
 import { Tool } from './ToolProvider';
+import { useTools } from './ToolProvider';
 
 interface VoiceModeContextType {
   isRecording: boolean;
@@ -48,6 +49,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
   const [status, setStatus] = useState<string>('');
   const [connectionState, setConnectionState] = useState<string>('disconnected');
   const { server } = useHyphaStore();
+  const { onToolsChange } = useTools();
   
   // WebRTC related refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -63,6 +65,18 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
   }>({});
   // Connection lock to prevent multiple simultaneous connection attempts
   const connectionLockRef = useRef<boolean>(false);
+
+  // Format tools for OpenAI function calling format
+  const formatToolsForOpenAI = useCallback((tools?: Tool[]) => {
+    if (!tools || tools.length === 0) return [];
+    
+    return tools.map(tool => ({
+      name: tool.name,
+      type: tool.type,
+      description: tool.description, 
+      parameters: tool.parameters
+    }));
+  }, []);
 
   // Update session when explicitly called
   const updateSession = useCallback((config?: {
@@ -91,16 +105,16 @@ Remember:
 - Prioritize the most important information first`,
           voice: sessionConfig?.voice || "sage",
           output_audio_format: "pcm16",
-          tools: sessionConfig?.tools?.map(({ fn, ...tool }) => tool) || [],
+          tools: formatToolsForOpenAI(sessionConfig?.tools),
           tool_choice: "auto",
           temperature: sessionConfig?.temperature || 0.8,
         }
       };
       dataChannelRef.current.send(JSON.stringify(event));
       console.log('======> updated session with config:', sessionConfig);
-      console.log('======> registered tools:', sessionConfig?.tools || []);
+      console.log('======> registered tools:', formatToolsForOpenAI(sessionConfig?.tools));
     }
-  }, []);
+  }, [formatToolsForOpenAI]);
 
   // Handle data channel messages
   const handleDataChannelMessage = useCallback(async (e: MessageEvent) => {
@@ -437,7 +451,7 @@ Remember:
       }
       connectionLockRef.current = false;
     }
-  }, [server, handleDataChannelMessage, updateSession]);
+  }, [server, handleDataChannelMessage, updateSession, formatToolsForOpenAI]);
 
   const stopRealTimeChat = useCallback(async () => {
     try {
@@ -571,6 +585,22 @@ Remember:
       console.error('Data channel not open, sending text message failed');
     }
   }, []);
+
+  // Register a callback to update the session when tools change
+  useEffect(() => {
+    // Only set up the listener if we're recording and onToolsChange is available
+    if (isRecording && dataChannelRef.current?.readyState === 'open' && onToolsChange) {
+      const unsubscribe = onToolsChange((updatedTools) => {
+        console.log('Tools changed, updating session with new tools:', updatedTools);
+        updateSession({
+          ...recordingConfigRef.current,
+          tools: updatedTools
+        });
+      });
+      
+      return unsubscribe;
+    }
+  }, [isRecording, onToolsChange, updateSession]);
 
   return (
     <VoiceModeContext.Provider value={{

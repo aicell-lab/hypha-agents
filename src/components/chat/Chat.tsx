@@ -5,7 +5,6 @@ import { ChatInput } from './ChatInput';
 import { useThebe } from './ThebeProvider';
 import { useVoiceMode, VoiceModeProvider } from './VoiceModeProvider';
 import { ToolProvider, useTools } from './ToolProvider';
-import { ToolSelector } from './ToolSelector';
 
 export interface OutputItem {
   type: string;
@@ -241,6 +240,7 @@ const useToolRegistration = (
         // Create a hidden div to hold the output that will be processed via DOM
         const outputElement = document.createElement('div');
     
+
         try {
           // Execute with DOM output to properly render scripts and widgets
           await executeCodeWithDOMOutput(code, outputElement, {
@@ -587,20 +587,42 @@ const ChatContent: React.FC<ChatProps> = (props) => {
               ...c.attrs,
               language: 'python',
               status: 'running',
-              call_id: c.attrs.call_id
-                }
-              };
+              output: [], // Initialize with empty output array
+              call_id: c.attrs?.call_id
             }
+          };
+        }
         else if(c.type === 'tool_call_output') {
           // Use short_content if available
           const content = c.content?.short_content || c.content;
+          
+          // Check if the content is an array or object that needs to be processed
+          let outputItems = [];
+          
+          if (typeof content === 'object' && content !== null) {
+            // If it's already an array of output items
+            if (Array.isArray(content)) {
+              outputItems = content;
+            } else {
+              // If it's a single output item
+              outputItems = [content];
+            }
+          } else if (typeof content === 'string') {
+            // Create a text output item
+            outputItems = [{
+              type: 'text',
+              content: content
+            }];
+          }
+          
           return {
             type: 'code_execution',
-            content: '',
+            content: c.attrs?.code || '',
             attrs: {
               ...c.attrs,
-              output: content,
-              status: c.attrs.success ? 'success' : 'error'
+              language: 'python',
+              output: outputItems,
+              status: c.attrs?.success ? 'success' : 'error'
             }
           };
         }
