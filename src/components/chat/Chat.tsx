@@ -4,6 +4,8 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useThebe } from './ThebeProvider';
 import { useVoiceMode, VoiceModeProvider } from './VoiceModeProvider';
+import { ToolProvider, useTools } from './ToolProvider';
+import { ToolSelector } from './ToolSelector';
 
 export interface OutputItem {
   type: string;
@@ -39,7 +41,6 @@ interface ChatProps {
     welcomeMessage?: string;
     voice?: string;
     temperature?: number;
-    max_output_tokens?: number;
   };
   className?: string;
   showActions?: boolean;
@@ -49,12 +50,6 @@ interface ChatProps {
   initialMessages?: Message[];
   enableVoiceMode?: boolean;
 }
-
-const generateSessionId = () => {
-  const timestamp = new Date().getTime();
-  const random = Math.random();
-  return `${timestamp}-${random}`;
-};
 
 const defaultInitialMessages: Message[] = [
   {
@@ -222,16 +217,201 @@ Each code block is independent and can be executed separately. Try modifying the
   }
 ];
 
-const Chat: React.FC<ChatProps> = ({ 
-  agentConfig, 
-  className,
-  showActions,
-  onPreviewChat,
-  onPublish,
-  artifactId,
-  initialMessages = defaultInitialMessages,
-  enableVoiceMode = true
-}) => {
+// Custom hook for tool registration
+const useToolRegistration = (
+  isThebeReady: boolean, 
+  schemaAgents: any, 
+  executeCode: any, 
+  executeCodeWithDOMOutput: any,
+  stopRealTimeChat: () => Promise<void>,
+  updateLastAssistantMessage: (code: string, status: string, outputs: OutputItem[]) => void,
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+) => {
+  const { registerTools } = useTools();
+
+  useEffect(() => {
+    if (isThebeReady && schemaAgents) {
+      // Create a callback for code execution
+      const runCode = async (code: string) => {
+        let outputs: OutputItem[] = [];
+        let shortOutput = '';
+        
+        updateLastAssistantMessage(code, 'running', []);
+        
+        // Create a hidden div to hold the output that will be processed via DOM
+        const outputElement = document.createElement('div');
+    
+        try {
+          // Execute with DOM output to properly render scripts and widgets
+          await executeCodeWithDOMOutput(code, outputElement, {
+            onOutput: (out: { type: string; content: string; short_content?: string; attrs?: any }) => {
+              shortOutput += out.short_content + '\n';
+              updateLastAssistantMessage(code, 'running', outputs);
+            },
+            onStatus: (status: string) => {
+              console.log('DOM execution status:', status);
+              // When DOM execution completes, directly use the outputElement
+              if (status === 'Completed' && outputElement.innerHTML) {
+                // Add a custom output item for the DOM content
+                const htmlOutputItem = {
+                  type: 'html',
+                  content: outputElement.innerHTML,
+                  attrs: {
+                    isRenderedDOM: true,
+                    domElement: outputElement // Pass the actual DOM element
+                  }
+                };
+                
+                outputs.push(htmlOutputItem);
+                
+                // Update message with the DOM element
+                updateLastAssistantMessage(code, 'success', outputs);
+                
+                // Don't remove the element since we're using it directly
+                outputElement.style.display = ''; // Make it visible
+              }
+            }
+          });
+          
+          return { outputs, shortOutput };
+        } catch (error) {
+          console.error('Error executing code:', error);
+          const errorOutput: OutputItem = {
+            type: 'error',
+            content: error instanceof Error ? error.message : 'Error executing code'
+          };
+          updateLastAssistantMessage(code, 'error', [errorOutput]);
+          
+          throw error;
+        }
+      };
+
+      // Register the runCode tool
+      const runCodeTool = {
+        type: 'function' as const,
+        name: 'runCode',
+        description: `Execute Python code with persistent kernel state and rich output display.
+Features:
+- Persistent variables and imports between runs
+- Rich output: text, plots, HTML/JS widgets
+- Pre-installed: numpy, scipy, pandas, matplotlib, plotly
+
+Usage:
+1. Basic code: print(), display()
+2. Package install: await micropip.install(['pkg'])
+3. Plots: plt.plot(); plt.show() or fig.show()
+
+Note: Output is visible in UI. First comment used as block title.`,
+        category: 'Code Execution',
+        icon: '<svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>',
+        parameters: {
+          type: 'object',
+          properties: {
+            code: { type: 'string' }
+          },
+          required: ['code']
+        },
+        fn: async (args: { code: string }) => {
+          // Ensure there's an assistant message before running code
+          setMessages(prev => {
+            const lastMessage = prev[prev.length - 1];
+            if (!lastMessage || lastMessage.role !== 'assistant') {
+              return [...prev, {
+                role: 'assistant',
+                content: []
+              }];
+            }
+            return prev;
+          });
+          
+          try {
+            const { outputs, shortOutput } = await runCode(args.code);
+            
+            // Make sure DOM outputs are properly included in the message
+            const hasDOMOutput = outputs.some(out => 
+              out.type === 'html' && out.attrs?.isRenderedDOM
+            );
+            
+            // Log outputs for debugging
+            console.log('Code execution complete with outputs:', 
+              outputs.map(o => ({ type: o.type, hasAttrs: !!o.attrs }))
+            );
+            
+            if (hasDOMOutput) {
+              console.log('DOM output is included in the results');
+            }
+            
+            // Return the short output for the LLM
+            return shortOutput;
+          } catch (error) {
+            console.error('Error in runCodeTool:', error);
+            return `Error executing code: ${error instanceof Error ? error.message : String(error)}`;
+          }
+        }
+      };
+
+      // Register the shutdown tool
+      const shutdownTool = {
+        type: 'function' as const,
+        name: 'shutdown',
+        description: `Shutdown the agent and end the current conversation session.
+Use this when the conversation has reached a natural conclusion or when explicitly asked to end the session.
+This will stop the voice recording and close the connection.`,
+        category: 'System',
+        icon: '<svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>',
+        parameters: {
+          type: 'object',
+          properties: {
+            reason: { 
+              type: 'string',
+              description: 'Optional reason for shutting down the agent'
+            }
+          },
+          required: []
+        },
+        fn: async (args: { reason?: string }) => {
+          // Add a final message from the assistant
+          const finalMessage = args.reason || "I'm shutting down now. The conversation has ended.";
+          
+          setMessages(prev => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: [{ 
+                type: 'markdown', 
+                content: finalMessage 
+              }]
+            }
+          ]);
+          
+          // Wait a moment for the message to be displayed before shutting down
+          setTimeout(() => {
+            stopRealTimeChat();
+          }, 1000);
+          
+          return `Agent shutdown initiated. Reason: ${args.reason || "Conversation ended"}`;
+        }
+      };
+
+      // Register both tools
+      registerTools([runCodeTool, shutdownTool]);
+    }
+  }, [isThebeReady, schemaAgents, executeCode, executeCodeWithDOMOutput, registerTools, stopRealTimeChat, updateLastAssistantMessage, setMessages]);
+};
+
+// Create a separate component for the chat content
+const ChatContent: React.FC<ChatProps> = (props) => {
+  const { 
+    agentConfig, 
+    className,
+    showActions,
+    onPreviewChat,
+    onPublish,
+    artifactId,
+    initialMessages = defaultInitialMessages,
+    enableVoiceMode = true
+  } = props;
+  
   const messageEndRef = useRef<HTMLDivElement>(null);
   const { server } = useHyphaStore();
   const { executeCode, executeCodeWithDOMOutput, isReady: isThebeReady } = useThebe();
@@ -243,10 +423,10 @@ const Chat: React.FC<ChatProps> = ({
     pauseRealTimeChat,
     resumeRealTimeChat,
     error: voiceError, 
-    registerTools, 
     status,
     sendTextMessage 
   } = useVoiceMode();
+  const { tools } = useTools();
   
   // Use useMemo to create initial messages
   const initialMessagesList = React.useMemo(() => {
@@ -349,130 +529,16 @@ const Chat: React.FC<ChatProps> = ({
     }
   }, [status]);
 
-  // Register tools when Thebe becomes ready
-  useEffect(() => {
-    if (isThebeReady && schemaAgents) {
-      // Create a callback for code execution
-      const runCode = async (code: string) => {
-        let outputs: OutputItem[] = [];
-        let shortOutput = '';
-        
-        updateLastAssistantMessage(code, 'running', []);
-        
-        // Create a hidden div to hold the output that will be processed via DOM
-        const outputElement = document.createElement('div');
-    
-
-        try {
-          // Execute with DOM output to properly render scripts and widgets
-          await executeCodeWithDOMOutput(code, outputElement, {
-            onOutput: (out: { type: string; content: string; short_content?: string; attrs?: any }) => {
-              shortOutput += out.short_content + '\n';
-              updateLastAssistantMessage(code, 'running', outputs);
-            },
-            onStatus: (status: string) => {
-              console.log('DOM execution status:', status);
-              // When DOM execution completes, directly use the outputElement
-              if (status === 'Completed' && outputElement.innerHTML) {
-                // Add a custom output item for the DOM content
-                const htmlOutputItem = {
-                  type: 'html',
-                  content: outputElement.innerHTML,
-                  attrs: {
-                    isRenderedDOM: true,
-                    domElement: outputElement // Pass the actual DOM element
-                  }
-                };
-                
-                outputs.push(htmlOutputItem);
-                
-                // Update message with the DOM element
-                updateLastAssistantMessage(code, 'success', outputs);
-                
-                // Don't remove the element since we're using it directly
-                outputElement.style.display = ''; // Make it visible
-              }
-            }
-          });
-          
-          return { outputs, shortOutput };
-        } catch (error) {
-          console.error('Error executing code:', error);
-          const errorOutput: OutputItem = {
-            type: 'error',
-            content: error instanceof Error ? error.message : 'Error executing code'
-          };
-          updateLastAssistantMessage(code, 'error', [errorOutput]);
-          
-          throw error;
-        }
-      };
-
-      // Register the runCode tool
-      const runCodeTool = {
-        type: 'function' as const,
-        name: 'runCode',
-        description: `Execute Python code with persistent kernel state and rich output display.
-Features:
-- Persistent variables and imports between runs
-- Rich output: text, plots, HTML/JS widgets
-- Pre-installed: numpy, scipy, pandas, matplotlib, plotly
-
-Usage:
-1. Basic code: print(), display()
-2. Package install: await micropip.install(['pkg'])
-3. Plots: plt.plot(); plt.show() or fig.show()
-
-Note: Output is visible in UI. First comment used as block title.`,
-        parameters: {
-          type: 'object',
-          properties: {
-            code: { type: 'string' }
-          },
-          required: ['code']
-        },
-        fn: async (args: { code: string }) => {
-          // Ensure there's an assistant message before running code
-          setMessages(prev => {
-            const lastMessage = prev[prev.length - 1];
-            if (!lastMessage || lastMessage.role !== 'assistant') {
-              return [...prev, {
-                role: 'assistant',
-                content: []
-              }];
-            }
-            return prev;
-          });
-          
-          try {
-            const { outputs, shortOutput } = await runCode(args.code);
-            
-            // Make sure DOM outputs are properly included in the message
-            const hasDOMOutput = outputs.some(out => 
-              out.type === 'html' && out.attrs?.isRenderedDOM
-            );
-            
-            // Log outputs for debugging
-            console.log('Code execution complete with outputs:', 
-              outputs.map(o => ({ type: o.type, hasAttrs: !!o.attrs }))
-            );
-            
-            if (hasDOMOutput) {
-              console.log('DOM output is included in the results');
-            }
-            
-            // Return the short output for the LLM
-            return shortOutput;
-          } catch (error) {
-            console.error('Error in runCodeTool:', error);
-            return `Error executing code: ${error instanceof Error ? error.message : String(error)}`;
-          }
-        }
-      };
-
-      registerTools([runCodeTool]);
-    }
-  }, [isThebeReady, schemaAgents, executeCode, registerTools, updateLastAssistantMessage]);
+  // Use the custom hook for tool registration
+  useToolRegistration(
+    isThebeReady,
+    schemaAgents,
+    executeCode,
+    executeCodeWithDOMOutput,
+    stopRealTimeChat,
+    updateLastAssistantMessage,
+    setMessages
+  );
 
   // Handle conversation items
   const handleItemCreated = useCallback((item: any) => {
@@ -646,8 +712,8 @@ Note: Output is visible in UI. First comment used as block title.`,
       const parts = [
         `You are ${agentConfig.name}, ${agentConfig.profile}.`,
         `Your goal is: ${agentConfig.goal}`,
-        `Note: Some outputs may be stored in a key-value store for efficiency. When you see a message like "[Content stored with key: type_timestamp_random]", you can access the full content by using the key in a div tag like this: <div id="type_timestamp_random"></div>. This will be replaced with the full content when rendered.`,
-        agentConfig.instructions
+        agentConfig.instructions,
+        `Additional note: You should always respond with audio if the user ask via audio.`,
       ];
       return parts.filter(Boolean).join('\n\n');
     };
@@ -663,7 +729,7 @@ Note: Output is visible in UI. First comment used as block title.`,
           instructions: composeInstructions(),
           voice: agentConfig.voice || "sage",
           temperature: agentConfig.temperature || (agentConfig.model?.includes("gpt-4") ? 0.7 : 0.8),
-          max_output_tokens: agentConfig.max_output_tokens || 1024
+          tools: tools
         });
       } catch (error) {
         console.error('Failed to start recording:', error);
@@ -792,8 +858,24 @@ Note: Output is visible in UI. First comment used as block title.`,
     );
   };
 
+  // Handle tool selection
+  const handleToolSelect = useCallback((tool: any) => {
+    // For now, just insert the tool name into the chat input
+    // Later, we can implement more sophisticated handling
+    if (tool.name === 'runCode') {
+      // Insert a code block template
+      const codeTemplate = `\`\`\`python
+# Your code here
+print("Hello, world!")
+\`\`\``;
+      handleSendMessage(codeTemplate);
+    } else {
+      handleSendMessage(`I'd like to use the ${tool.name} tool.`);
+    }
+  }, [handleSendMessage]);
+
   return (
-    <VoiceModeProvider>
+    <>
       <style>{styles}</style>
       <div className={`flex flex-col h-full ${className}`}>
         {/* Actions Bar - Only show if showActions is true */}
@@ -898,13 +980,24 @@ Note: Output is visible in UI. First comment used as block title.`,
                           ? "Please wait..."
                           : "Type your message..."
                   }
+                  onSelectTool={handleToolSelect}
                 />
               </div>
             </div>
           </div>
         </div>
       </div>
-    </VoiceModeProvider>
+    </>
+  );
+};
+
+const Chat: React.FC<ChatProps> = (props) => {
+  return (
+    <ToolProvider>
+      <VoiceModeProvider>
+        <ChatContent {...props} />
+      </VoiceModeProvider>
+    </ToolProvider>
   );
 };
 

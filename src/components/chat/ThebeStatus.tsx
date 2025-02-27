@@ -1,98 +1,125 @@
-import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useThebe } from './ThebeProvider';
 
-const MAX_LINES = 10000;
-const MAX_HISTORY = 50;
+// Custom Terminal Component
+interface TerminalProps {
+  commands?: Record<string, { method: () => string; options: string[] }>;
+  description?: Record<string, string>;
+  msg?: string;
+  promptSymbol?: string;
+  onCommand: (command: string) => void;
+}
 
-export const ThebeStatus: React.FC = () => {
-  const { isReady, status, interruptKernel, restartKernel, kernelInfo, kernel } = useThebe();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isRestarting, setIsRestarting] = useState(false);
-  const [kernelOutput, setKernelOutput] = useState<string>('');
-  const [currentInput, setCurrentInput] = useState('');
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+const CustomTerminal = React.forwardRef<{ pushToStdout: (text: string) => void }, TerminalProps>(({
+  commands = {},
+  description = {},
+  msg = 'Terminal',
+  promptSymbol = '>',
+  onCommand
+}, ref) => {
+  const [input, setInput] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [output, setOutput] = useState<string[]>([msg]);
+  const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const outputRef = useRef<HTMLPreElement>(null);
 
-  // Focus input when terminal opens
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+  const scrollToBottom = () => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
-  }, [isOpen]);
-
-  // Scroll to bottom when output changes
-  useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }
-  }, [kernelOutput]);
-
-  // Helper function to manage the output buffer
-  const appendToOutput = (newContent: string) => {
-    setKernelOutput(prev => {
-      const combinedOutput = prev + newContent;
-      const lines = combinedOutput.split('\n');
-      if (lines.length > MAX_LINES) {
-        // Keep only the last MAX_LINES lines
-        return lines.slice(-MAX_LINES).join('\n');
-      }
-      return combinedOutput;
-    });
   };
 
-  // Handle command execution
-  const executeCommand = async (command: string) => {
-    if (!command.trim()) return;
+  useEffect(() => {
+    scrollToBottom();
+  }, [output]);
 
-    // Add command to history
-    setCommandHistory(prev => {
-      const newHistory = [...prev, command];
-      return newHistory.slice(-MAX_HISTORY);
-    });
-    setHistoryIndex(-1);
-
-    // Show command in output
-    appendToOutput(`\n>>> ${command}\n`);
-
-    try {
-      if (kernel && isReady) {
-        const future = kernel.requestExecute({ code: command });
-        future.onIOPub = handleIOPubMessage;
-        await future.done;
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const cmd = input.trim();
+      
+      if (cmd) {
+        // Add to history
+        setHistory(prev => [...prev, cmd]);
+        setHistoryIndex(-1);
+        
+        // Display command
+        setOutput(prev => [...prev, `${promptSymbol} ${cmd}`]);
+        
+        // Process command
+        if (commands[cmd] && typeof commands[cmd].method === 'function') {
+          const result = commands[cmd].method();
+          if (result) {
+            setOutput(prev => [...prev, result]);
+          }
+        } else {
+          onCommand(cmd);
+        }
+        
+        // Clear input
+        setInput('');
       }
-    } catch (error) {
-      appendToOutput(`\x1b[31mError: ${error}\x1b[0m\n`);
-    }
-
-    setCurrentInput('');
-  };
-
-  // Handle keyboard events
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      executeCommand(currentInput);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (historyIndex < commandHistory.length - 1) {
+      if (history.length > 0 && historyIndex < history.length - 1) {
         const newIndex = historyIndex + 1;
         setHistoryIndex(newIndex);
-        setCurrentInput(commandHistory[commandHistory.length - 1 - newIndex]);
+        setInput(history[history.length - 1 - newIndex]);
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (historyIndex > 0) {
         const newIndex = historyIndex - 1;
         setHistoryIndex(newIndex);
-        setCurrentInput(commandHistory[commandHistory.length - 1 - newIndex]);
+        setInput(history[history.length - 1 - newIndex]);
       } else if (historyIndex === 0) {
         setHistoryIndex(-1);
-        setCurrentInput('');
+        setInput('');
       }
     }
   };
+
+  const pushToStdout = (text: string) => {
+    setOutput(prev => [...prev, text]);
+  };
+
+  // Expose methods to parent component
+  React.useImperativeHandle(ref, () => ({
+    pushToStdout
+  }));
+
+  return (
+    <div 
+      className="bg-black text-green-500 font-mono p-2 h-full overflow-auto"
+      ref={terminalRef}
+      onClick={() => inputRef.current?.focus()}
+    >
+      {output.map((line, i) => (
+        <div key={i} className="whitespace-pre-wrap">{line}</div>
+      ))}
+      <div className="flex">
+        <span>{promptSymbol}</span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="bg-transparent outline-none border-none flex-1 ml-1"
+          autoFocus
+          aria-label="Terminal input"
+          placeholder="Type a command..."
+        />
+      </div>
+    </div>
+  );
+});
+
+export const ThebeStatus: React.FC = () => {
+  const { isReady, status, interruptKernel, restartKernel, kernelInfo, kernel } = useThebe();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const terminalRef = useRef<{ pushToStdout: (text: string) => void } | null>(null);
 
   // Helper function to handle IOPub messages
   const handleIOPubMessage = (msg: any) => {
@@ -100,30 +127,36 @@ export const ThebeStatus: React.FC = () => {
     
     switch (msgType) {
       case 'stream':
-        appendToOutput(msg.content.text);
+        if (terminalRef.current) {
+          terminalRef.current.pushToStdout(msg.content.text);
+        }
         break;
       case 'display_data':
       case 'execute_result':
         const data = msg.content.data;
-        if (data['text/plain']) {
-          appendToOutput(data['text/plain'] + '\n');
+        if (data['text/plain'] && terminalRef.current) {
+          terminalRef.current.pushToStdout(data['text/plain'] + '\n');
         }
-        if (data['text/html']) {
-          appendToOutput('[HTML Output]\n');
+        if (data['text/html'] && terminalRef.current) {
+          terminalRef.current.pushToStdout('[HTML Output]\n');
         }
-        if (data['image/png'] || data['image/jpeg']) {
-          appendToOutput('[Image Output]\n');
+        if ((data['image/png'] || data['image/jpeg']) && terminalRef.current) {
+          terminalRef.current.pushToStdout('[Image Output]\n');
         }
         break;
       case 'error':
-        const errorText = msg.content.traceback.join('\n');
-        appendToOutput(`\x1b[31m${errorText}\x1b[0m\n`);
+        if (terminalRef.current) {
+          const errorText = msg.content.traceback.join('\n');
+          terminalRef.current.pushToStdout(`\x1b[31m${errorText}\x1b[0m\n`);
+        }
         break;
     }
   };
 
+  // Initialize kernel info when terminal is opened
   useEffect(() => {
-    if (isOpen && kernel && isReady) {
+    if (isOpen && kernel && isReady && terminalRef.current) {
+      terminalRef.current.pushToStdout("Initializing Python environment...\n");
       kernel.requestExecute({
         code: `
 import sys
@@ -136,10 +169,76 @@ print(f"Platform: {platform.platform()}")
 print(f"Path: {sys.path}")
 `
       }).onIOPub = handleIOPubMessage;
-    } else {
-      setKernelOutput('');
     }
   }, [isOpen, kernel, isReady]);
+
+  const handleRestart = async () => {
+    try {
+      setIsRestarting(true);
+      if (terminalRef.current) {
+        terminalRef.current.pushToStdout("\n=== Restarting Kernel ===\n");
+      }
+      await restartKernel();
+      
+      if (kernel && isReady && terminalRef.current) {
+        terminalRef.current.pushToStdout("Kernel restarted successfully.\n");
+        kernel.requestExecute({
+          code: `
+import sys
+import pyodide
+import platform
+
+print(f"Python {sys.version}")
+print(f"Pyodide {pyodide.__version__}")
+print(f"Platform: {platform.platform()}")
+print(f"Path: {sys.path}")
+`
+        }).onIOPub = handleIOPubMessage;
+      }
+    } catch (error) {
+      console.error('Failed to restart kernel:', error);
+      if (terminalRef.current) {
+        terminalRef.current.pushToStdout(`\x1b[31mError: Failed to restart kernel: ${error}\x1b[0m\n`);
+      }
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
+  const handleInterrupt = async () => {
+    try {
+      if (terminalRef.current) {
+        terminalRef.current.pushToStdout('\n=== Interrupting Kernel ===\n');
+      }
+      await interruptKernel();
+    } catch (error) {
+      console.error('Failed to interrupt kernel:', error);
+      if (terminalRef.current) {
+        terminalRef.current.pushToStdout(`\x1b[31mError: Failed to interrupt kernel: ${error}\x1b[0m\n`);
+      }
+    }
+  };
+
+  const executeCommand = async (command: string) => {
+    if (!command.trim()) return;
+
+    // Show command in output
+    if (terminalRef.current) {
+      terminalRef.current.pushToStdout(`\n>>> ${command}\n`);
+    }
+
+    try {
+      if (kernel && isReady) {
+        const future = kernel.requestExecute({ code: command });
+        future.onIOPub = handleIOPubMessage;
+        await future.done;
+      }
+    } catch (error) {
+      if (terminalRef.current) {
+        terminalRef.current.pushToStdout(`\x1b[31mError: ${error}\x1b[0m\n`);
+      }
+    }
+  };
 
   const getStatusColor = () => {
     if (!isReady) return 'text-gray-400';
@@ -196,41 +295,56 @@ print(f"Path: {sys.path}")
     }
   };
 
-  const handleRestart = async () => {
-    try {
-      setIsRestarting(true);
-      await restartKernel();
-      
-      if (kernel && isReady) {
-        kernel.requestExecute({
-          code: `
-import sys
-import pyodide
-import platform
+  const terminalCommands = {
+    'restart': {
+      method: () => {
+        handleRestart();
+        return 'Restarting kernel...';
+      },
+      options: [],
+    },
+    'interrupt': {
+      method: () => {
+        handleInterrupt();
+        return 'Interrupting kernel...';
+      },
+      options: [],
+    },
+    'status': {
+      method: () => {
+        return `Kernel status: ${status}`;
+      },
+      options: [],
+    },
+    'clear': {
+      method: () => {
+        return 'Terminal cleared';
+      },
+      options: [],
+    },
+    'help': {
+      method: () => {
+        return `
+Available commands:
+  restart    - Restart the Python kernel
+  interrupt  - Interrupt the running kernel
+  status     - Show kernel status
+  clear      - Clear the terminal
+  help       - Show this help message
 
-print(f"Python {sys.version}")
-print(f"Pyodide {pyodide.__version__}")
-print(f"Platform: {platform.platform()}")
-print(f"Path: {sys.path}")
-`
-        }).onIOPub = handleIOPubMessage;
-      }
-    } catch (error) {
-      console.error('Failed to restart kernel:', error);
-      appendToOutput(`\x1b[31mError: Failed to restart kernel: ${error}\x1b[0m\n`);
-    } finally {
-      setIsRestarting(false);
-    }
+Any other input will be executed as Python code.
+        `;
+      },
+      options: [],
+    },
   };
 
-  const handleInterrupt = async () => {
-    try {
-      appendToOutput('\n=== Interrupting Kernel ===\n');
-      await interruptKernel();
-    } catch (error) {
-      console.error('Failed to interrupt kernel:', error);
-      appendToOutput(`\x1b[31mError: Failed to interrupt kernel: ${error}\x1b[0m\n`);
-    }
+  const terminalDescriptions = {
+    'restart': 'Restart the Python kernel',
+    'interrupt': 'Interrupt the running kernel',
+    'status': 'Show kernel status',
+    'clear': 'Clear the terminal',
+    'help': 'Show available commands',
   };
 
   return (
@@ -243,11 +357,11 @@ print(f"Path: {sys.path}")
         {getStatusIcon()}
       </button>
 
-      {/* Dropdown menu */}
+      {/* Terminal Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 bottom-full mb-2 w-[480px] bg-white rounded-lg shadow-lg border border-gray-200 divide-y divide-gray-100 z-50">
+        <div className="absolute right-0 bottom-full mb-2 w-[600px] bg-white rounded-lg shadow-lg border border-gray-200 z-50">
           {/* Status Section */}
-          <div className="p-4">
+          <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-gray-700">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -262,34 +376,20 @@ print(f"Path: {sys.path}")
                 <span className="text-sm">{getStatusText()}</span>
               </div>
             </div>
-
-            {/* Interactive Terminal */}
-            <div className="mt-4 bg-gray-900 rounded-lg font-mono text-xs text-gray-100">
-              {/* Output Area */}
-              <pre 
-                ref={outputRef}
-                className="p-3 whitespace-pre-wrap h-[200px] overflow-y-auto scrollbar scrollbar-w-2 scrollbar-thumb-gray-900 scrollbar-track-gray-800"
-              >
-                {kernelOutput || 'Python Terminal\n'}
-              </pre>
-              
-              {/* Input Area */}
-              <div className="border-t border-gray-700 p-2 flex items-center">
-                <span className="text-green-400 mr-2">{'>>>'}</span>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={currentInput}
-                  onChange={(e) => setCurrentInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className="flex-1 bg-transparent border-none outline-none text-gray-100 placeholder-gray-500"
-                  placeholder={isReady ? "Type command and press Enter..." : "Waiting for kernel..."}
-                  disabled={!isReady || isRestarting}
-                />
-              </div>
-            </div>
           </div>
-          
+
+          {/* Terminal Component */}
+          <div className="h-[300px]">
+            <CustomTerminal
+              ref={terminalRef}
+              commands={terminalCommands}
+              description={terminalDescriptions}
+              msg="Python Terminal - Type 'help' for available commands"
+              promptSymbol=">>>"
+              onCommand={executeCommand}
+            />
+          </div>
+
           {/* Actions Section */}
           <div className="p-3 bg-gray-50 rounded-b-lg">
             <div className="flex gap-2">

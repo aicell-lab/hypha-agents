@@ -1,6 +1,8 @@
 import React, { useRef, useState, KeyboardEvent, useEffect } from 'react';
 import { SendIcon } from './icons/SendIcon';
 import { ThebeStatus } from './ThebeStatus';
+import { ToolSelector } from './ToolSelector';
+import { Tool } from './ToolProvider';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -8,6 +10,7 @@ interface ChatInputProps {
   placeholder?: string;
   isTyping?: boolean;
   isThebeReady?: boolean;
+  onSelectTool?: (tool: Tool) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -15,7 +18,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   disabled = false,
   placeholder = "Type your message...",
   isTyping = false,
-  isThebeReady = false
+  isThebeReady = false,
+  onSelectTool
 }) => {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -73,6 +77,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         style={{ height: '36px' }}
       />
       <div className="flex items-center gap-2">
+        {onSelectTool && <ToolSelector onSelectTool={onSelectTool} className="mx-1" />}
         <ThebeStatus />
         <button
           onClick={handleSend}
@@ -82,6 +87,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               ? 'text-gray-400 cursor-not-allowed'
               : 'text-blue-600 hover:bg-blue-50'
           }`}
+          title="Send message"
+          aria-label="Send message"
         >
           <SendIcon className="w-5 h-5" />
         </button>

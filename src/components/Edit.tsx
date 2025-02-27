@@ -107,7 +107,6 @@ interface AgentConfig {
     // Voice Settings
     voice?: string;
     temperature?: number;
-    max_output_tokens?: number;
 
     // Tools Configuration
     enabled_tools?: string[];
@@ -1773,7 +1772,6 @@ const Edit: React.FC = () => {
           // Voice Settings
           voice: agentConfig.agent_config.voice,
           temperature: agentConfig.agent_config.temperature,
-          max_output_tokens: agentConfig.agent_config.max_output_tokens,
 
           // Tools Configuration
           enabled_tools: agentConfig.agent_config.enabled_tools
@@ -1971,21 +1969,6 @@ const Edit: React.FC = () => {
                 helperText="Controls randomness in responses (0.0 to 1.0)"
               />
 
-              <TextField
-                label="Max Output Tokens"
-                type="number"
-                value={agentConfig.agent_config.max_output_tokens || 1024}
-                onChange={(e) => setAgentConfig(prev => ({
-                  ...prev,
-                  agent_config: {
-                    ...prev.agent_config,
-                    max_output_tokens: parseInt(e.target.value)
-                  }
-                }))}
-                inputProps={{ min: 1, step: 1 }}
-                fullWidth
-                helperText="Maximum length of generated responses"
-              />
             </div>
 
             {/* Tools Configuration */}

@@ -1,17 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { useHyphaStore } from '../../store/hyphaStore';
-
-interface Tool {
-  type: 'function';
-  name: string;
-  description: string;
-  parameters: {
-    type: string;
-    properties: Record<string, any>;
-    required?: string[];
-  };
-  fn: (args: any) => Promise<any>;
-}
+import { Tool } from './ToolProvider';
 
 interface VoiceModeContextType {
   isRecording: boolean;
@@ -21,14 +10,15 @@ interface VoiceModeContextType {
     instructions?: string;
     voice?: string;
     temperature?: number;
+    tools?: Tool[];
   }) => Promise<void>;
   stopRealTimeChat: () => Promise<void>;
   pauseRealTimeChat: () => Promise<void>;
   resumeRealTimeChat: () => Promise<void>;
   error: string | null;
-  registerTools: (tools: Tool[]) => void;
   sendTextMessage: (text: string) => void;
   status: string;
+  connectionState: string;
 }
 
 const VoiceModeContext = createContext<VoiceModeContextType | undefined>(undefined);
@@ -56,6 +46,7 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
   const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
+  const [connectionState, setConnectionState] = useState<string>('disconnected');
   const { server } = useHyphaStore();
   
   // WebRTC related refs
@@ -63,18 +54,22 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const registeredToolsRef = useRef<Record<string, Tool>>({});
   const recordingConfigRef = useRef<{
     onItemCreated?: (item: any) => void;
     instructions?: string;
     voice?: string;
     temperature?: number;
+    tools?: Tool[];
   }>({});
+  // Connection lock to prevent multiple simultaneous connection attempts
+  const connectionLockRef = useRef<boolean>(false);
 
+  // Update session when explicitly called
   const updateSession = useCallback((config?: {
     instructions?: string;
     voice?: string;
     temperature?: number;
+    tools?: Tool[];
   }) => {
     console.log('Updating session:', config);
 
@@ -96,61 +91,14 @@ Remember:
 - Prioritize the most important information first`,
           voice: sessionConfig?.voice || "sage",
           output_audio_format: "pcm16",
-          tools: Object.values(registeredToolsRef.current).map(({ fn, ...tool }) => tool),
+          tools: sessionConfig?.tools?.map(({ fn, ...tool }) => tool) || [],
           tool_choice: "auto",
           temperature: sessionConfig?.temperature || 0.8,
         }
       };
       dataChannelRef.current.send(JSON.stringify(event));
-    }
-  }, []);
-
-  // Function to register tools
-  const registerTools = useCallback((tools: Tool[]) => {
-    const toolsMap = tools.reduce((acc, tool) => {
-      acc[tool.name] = tool;
-      return acc;
-    }, {} as Record<string, Tool>);
-    registeredToolsRef.current = toolsMap;
-    // Update session with new tools if connection is open
-    
-    updateSession();
-  }, [updateSession]);
-
-  // Function to send text messages
-  const sendTextMessage = useCallback((text: string) => {
-    if (dataChannelRef.current?.readyState === 'open') {
-      // First create and send the message
-      const messageCreate = {
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: text
-            }
-          ]
-        }
-      };
-      dataChannelRef.current.send(JSON.stringify(messageCreate));
-
-      // Then create a new response with text-only modality
-      const sessionConfig = recordingConfigRef.current;
-      const responseCreate = {
-        type: 'response.create',
-        response: {
-          modalities: ['text'],
-          tools: Object.values(registeredToolsRef.current).map(({ fn, ...tool }) => tool),
-          tool_choice: "auto",
-          temperature: sessionConfig?.temperature || 0.8,
-        }
-      };
-      dataChannelRef.current.send(JSON.stringify(responseCreate));
-    }
-    else {
-      console.error('Data channel not open, sending text message failed');
+      console.log('======> updated session with config:', sessionConfig);
+      console.log('======> registered tools:', sessionConfig?.tools || []);
     }
   }, []);
 
@@ -203,7 +151,7 @@ Remember:
 
         case 'response.function_call_arguments.done':
           setStatus('Executing function...');
-          const tool = registeredToolsRef.current[msg.name];
+          const tool = recordingConfigRef.current.tools?.find(t => t.name === msg.name);
           if (tool?.fn) {
             console.log(`Calling local function ${msg.name} with ${msg.arguments}`);
             const args = JSON.parse(msg.arguments);
@@ -323,12 +271,44 @@ Remember:
     instructions?: string;
     voice?: string;
     temperature?: number;
+    tools?: Tool[];
   }) => {
+    // Declare and initialize timeout variable at the top of the function
+    let lockTimeout: ReturnType<typeof setTimeout> | null = null;
+    
     try {
+      // Check if a connection attempt is already in progress
+      if (connectionLockRef.current) {
+        console.log('Connection attempt already in progress, ignoring this request');
+        return;
+      }
+      
+      // Set the connection lock
+      connectionLockRef.current = true;
+      
+      // Set a timeout to release the lock if the connection attempt takes too long
+      lockTimeout = setTimeout(() => {
+        if (connectionLockRef.current) {
+          console.log('Connection attempt timed out, releasing lock');
+          connectionLockRef.current = false;
+        }
+      }, 30000); // 30 seconds timeout
+      
+      // Check if there's an existing connection and close it first
+      if (isRecording || peerConnectionRef.current || dataChannelRef.current || mediaStreamRef.current) {
+        console.log('Existing WebRTC connection detected, closing it before starting a new one');
+        await stopRealTimeChat();
+        // Small delay to ensure cleanup is complete
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+
       // Store callbacks in ref for use in message handler
       recordingConfigRef.current = config;
 
       setStatus('Initializing...');
+      console.log('======> Initializing chat with config:', config);
+      console.log('======> Server:', server);
+      console.log('======> available tools:', config.tools || []);
       const schemaAgents = await server?.getService("schema-agents");
       const session: OpenAISession = await schemaAgents?.get_realtime_token();
       const EPHEMERAL_KEY = session.client_secret.value;
@@ -394,7 +374,16 @@ Remember:
       // Log ICE connection state changes
       pc.oniceconnectionstatechange = () => {
         console.log('ICE connection state:', pc.iceConnectionState);
+        setConnectionState(pc.iceConnectionState);
         setStatus(`ICE: ${pc.iceConnectionState}`);
+        
+        // Auto-cleanup on disconnected or failed states
+        if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
+          console.log('Connection state indicates WebRTC disconnection, cleaning up resources');
+          stopRealTimeChat().catch(err => {
+            console.error('Error during auto-cleanup:', err);
+          });
+        }
       };
 
       // Create and set local description
@@ -428,12 +417,25 @@ Remember:
       setIsRecording(true);
       setError(null);
       setStatus('Ready');
+      
+      // Clear the timeout and release the connection lock
+      if (lockTimeout) {
+        clearTimeout(lockTimeout);
+      }
+      connectionLockRef.current = false;
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start recording');
       console.error('Recording error:', err);
       setStatus('Failed to connect');
+      setConnectionState('failed');
       await stopRealTimeChat();
+      
+      // Clear the timeout and release the connection lock
+      if (lockTimeout) {
+        clearTimeout(lockTimeout);
+      }
+      connectionLockRef.current = false;
     }
   }, [server, handleDataChannelMessage, updateSession]);
 
@@ -441,39 +443,78 @@ Remember:
     try {
       setStatus('Stopping...');
       setIsPaused(false);
+      setConnectionState('disconnected');
       // Clear callbacks
       recordingConfigRef.current = {};
       
       // Stop and clean up media stream
       if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        try {
+          mediaStreamRef.current.getTracks().forEach(track => {
+            try {
+              track.stop();
+            } catch (trackErr) {
+              console.warn('Error stopping media track:', trackErr);
+            }
+          });
+        } catch (streamErr) {
+          console.warn('Error stopping media stream:', streamErr);
+        }
         mediaStreamRef.current = null;
       }
 
       // Close data channel
       if (dataChannelRef.current) {
-        dataChannelRef.current.close();
+        try {
+          if (dataChannelRef.current.readyState === 'open') {
+            dataChannelRef.current.close();
+          }
+        } catch (dcErr) {
+          console.warn('Error closing data channel:', dcErr);
+        }
         dataChannelRef.current = null;
       }
 
       // Close peer connection
       if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
+        try {
+          peerConnectionRef.current.close();
+        } catch (pcErr) {
+          console.warn('Error closing peer connection:', pcErr);
+        }
         peerConnectionRef.current = null;
       }
 
       // Clean up audio element
       if (audioElementRef.current) {
-        audioElementRef.current.srcObject = null;
+        try {
+          audioElementRef.current.srcObject = null;
+          audioElementRef.current.remove();
+        } catch (audioErr) {
+          console.warn('Error cleaning up audio element:', audioErr);
+        }
         audioElementRef.current = null;
       }
 
       setIsRecording(false);
       setStatus('Stopped');
+      
+      // Release the connection lock to allow new connections
+      connectionLockRef.current = false;
     } catch (err) {
       console.error('Error stopping recording:', err);
       setError('Failed to stop recording properly');
       setStatus('Error stopping');
+      
+      // Force reset of all references even if errors occurred
+      mediaStreamRef.current = null;
+      dataChannelRef.current = null;
+      peerConnectionRef.current = null;
+      audioElementRef.current = null;
+      setIsRecording(false);
+      
+      // Release the connection lock even on error
+      connectionLockRef.current = false;
     }
   }, []);
 
@@ -503,6 +544,34 @@ Remember:
     }
   }, []);
 
+  // Send text message
+  const sendTextMessage = useCallback((text: string) => {
+    if (dataChannelRef.current?.readyState === 'open') {
+      // First create and send the message
+      const messageCreate = {
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: text
+            }
+          ]
+        }
+      };
+      dataChannelRef.current.send(JSON.stringify(messageCreate));
+      const responseCreate = {
+        type: 'response.create'
+      };
+      dataChannelRef.current.send(JSON.stringify(responseCreate));
+    }
+    else {
+      console.error('Data channel not open, sending text message failed');
+    }
+  }, []);
+
   return (
     <VoiceModeContext.Provider value={{
       isRecording,
@@ -512,9 +581,9 @@ Remember:
       pauseRealTimeChat,
       resumeRealTimeChat,
       error,
-      registerTools,
       sendTextMessage,
-      status
+      status,
+      connectionState
     }}>
       {children}
     </VoiceModeContext.Provider>
