@@ -13,7 +13,7 @@ import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import ModelTester from './ModelTester';
 import ModelValidator from './ModelValidator';
 import Chat from './chat/Chat';
-import { ThebeProvider } from './chat/ThebeProvider';
+import { LazyThebeProvider } from './chat/ThebeProvider';
 import { SITE_NAME } from '../utils/env';
 
 interface FileNode {
@@ -2063,7 +2063,7 @@ const Edit: React.FC = () => {
   const renderChat = () => (
     <div className="flex-1 flex flex-col" style={{ height: 'calc(100vh - 107px)' }}> {/* 104px = 64px (navbar) + 40px (back button bar) */}
       {selectedTab === 'chat' && (
-        <ThebeProvider>
+        <LazyThebeProvider>
           <Chat 
             agentConfig={{
               ...agentConfig.agent_config,
@@ -2074,7 +2074,7 @@ const Edit: React.FC = () => {
             onPublish={() => setShowPublishDialog(true)}
             artifactId={artifactId}
           />
-        </ThebeProvider>
+        </LazyThebeProvider>
       )}
       {selectedTab !== 'chat' && (
         <div className="flex-1 flex items-center justify-center text-gray-500">

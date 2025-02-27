@@ -16,16 +16,15 @@ interface Tool {
 interface VoiceModeContextType {
   isRecording: boolean;
   isPaused: boolean;
-  startRecording: (config: {
+  startRealTimeChat: (config: {
     onItemCreated?: (item: any) => void;
     instructions?: string;
     voice?: string;
     temperature?: number;
-    max_output_tokens?: number;
   }) => Promise<void>;
-  stopRecording: () => Promise<void>;
-  pauseRecording: () => Promise<void>;
-  resumeRecording: () => Promise<void>;
+  stopRealTimeChat: () => Promise<void>;
+  pauseRealTimeChat: () => Promise<void>;
+  resumeRealTimeChat: () => Promise<void>;
   error: string | null;
   registerTools: (tools: Tool[]) => void;
   sendTextMessage: (text: string) => void;
@@ -70,21 +69,24 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
     instructions?: string;
     voice?: string;
     temperature?: number;
-    max_output_tokens?: number;
   }>({});
 
   const updateSession = useCallback((config?: {
     instructions?: string;
     voice?: string;
     temperature?: number;
-    max_output_tokens?: number;
   }) => {
+    console.log('Updating session:', config);
+
     if (dataChannelRef.current?.readyState === 'open') {
+      // Use the passed config or fall back to the stored config
+      const sessionConfig = config || recordingConfigRef.current;
+      
       const event = {
         type: 'session.update',
         session: {
           modalities: ['text', 'audio'],
-          instructions: `${config?.instructions || "You are a helpful assistant."}\n\n
+          instructions: `${sessionConfig?.instructions || "You are a helpful assistant."}\n\n
 Since we are communicating through voice, please keep your responses brief, clear, and concise while maintaining accuracy. Aim for responses that are easy to listen to and understand.
 
 Remember:
@@ -92,11 +94,11 @@ Remember:
 - Use clear and natural language suitable for voice interaction
 - Break complex information into digestible chunks
 - Prioritize the most important information first`,
-          voice: config?.voice || recordingConfigRef.current?.voice || "sage",
+          voice: sessionConfig?.voice || "sage",
           output_audio_format: "pcm16",
           tools: Object.values(registeredToolsRef.current).map(({ fn, ...tool }) => tool),
           tool_choice: "auto",
-          temperature: config?.temperature || recordingConfigRef.current?.temperature || 0.8,
+          temperature: sessionConfig?.temperature || 0.8,
         }
       };
       dataChannelRef.current.send(JSON.stringify(event));
@@ -111,6 +113,7 @@ Remember:
     }, {} as Record<string, Tool>);
     registeredToolsRef.current = toolsMap;
     // Update session with new tools if connection is open
+    
     updateSession();
   }, [updateSession]);
 
@@ -134,14 +137,14 @@ Remember:
       dataChannelRef.current.send(JSON.stringify(messageCreate));
 
       // Then create a new response with text-only modality
+      const sessionConfig = recordingConfigRef.current;
       const responseCreate = {
         type: 'response.create',
         response: {
           modalities: ['text'],
           tools: Object.values(registeredToolsRef.current).map(({ fn, ...tool }) => tool),
           tool_choice: "auto",
-          temperature: 0.8,
-          max_output_tokens: recordingConfigRef.current?.max_output_tokens
+          temperature: sessionConfig?.temperature || 0.8,
         }
       };
       dataChannelRef.current.send(JSON.stringify(responseCreate));
@@ -315,12 +318,11 @@ Remember:
     }
   }, []);
 
-  const startRecording = useCallback(async (config: {
+  const startRealTimeChat = useCallback(async (config: {
     onItemCreated?: (item: any) => void;
     instructions?: string;
     voice?: string;
     temperature?: number;
-    max_output_tokens?: number;
   }) => {
     try {
       // Store callbacks in ref for use in message handler
@@ -370,8 +372,8 @@ Remember:
         console.log('Data channel opened');
         setStatus('Connected');
         
-        // Send session update with registered tools
-        updateSession();
+        // Send session update with the provided configuration
+        updateSession(config);
       };
 
       dc.onclose = () => {
@@ -382,7 +384,7 @@ Remember:
       dc.onerror = async (error) => {
         console.error('Data channel error:', error);
         // Stop recording when data channel error occurs
-        await stopRecording();
+        await stopRealTimeChat();
         setError('Data channel error occurred');
         setStatus('Connection error');
       };
@@ -431,11 +433,11 @@ Remember:
       setError(err instanceof Error ? err.message : 'Failed to start recording');
       console.error('Recording error:', err);
       setStatus('Failed to connect');
-      await stopRecording();
+      await stopRealTimeChat();
     }
   }, [server, handleDataChannelMessage, updateSession]);
 
-  const stopRecording = useCallback(async () => {
+  const stopRealTimeChat = useCallback(async () => {
     try {
       setStatus('Stopping...');
       setIsPaused(false);
@@ -475,7 +477,7 @@ Remember:
     }
   }, []);
 
-  const pauseRecording = useCallback(async () => {
+  const pauseRealTimeChat = useCallback(async () => {
     try {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.enabled = false);
@@ -488,7 +490,7 @@ Remember:
     }
   }, []);
 
-  const resumeRecording = useCallback(async () => {
+  const resumeRealTimeChat = useCallback(async () => {
     try {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.enabled = true);
@@ -505,10 +507,10 @@ Remember:
     <VoiceModeContext.Provider value={{
       isRecording,
       isPaused,
-      startRecording,
-      stopRecording,
-      pauseRecording,
-      resumeRecording,
+      startRealTimeChat,
+      stopRealTimeChat,
+      pauseRealTimeChat,
+      resumeRealTimeChat,
       error,
       registerTools,
       sendTextMessage,

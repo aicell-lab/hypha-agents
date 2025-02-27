@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useHyphaStore } from '../store/hyphaStore';
 import Chat from '../components/chat/Chat';
-import { ThebeProvider } from '../components/chat/ThebeProvider';
+import { LazyThebeProvider } from '../components/chat/ThebeProvider';
 import { SITE_ID } from '../utils/env';
 
 interface AgentConfig {
@@ -117,8 +117,8 @@ const ChatPage: React.FC = () => {
   }
 
   return (
-    <ThebeProvider>
-      <div className="flex flex-col flex-1 min-h-0 bg-[#F3F4F6]">
+    <LazyThebeProvider>
+      <div className="flex flex-col h-full overflow-hidden bg-[#F3F4F6]">
         {/* Header */}
         <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
           {agentConfig && (
@@ -151,14 +151,16 @@ const ChatPage: React.FC = () => {
 
         {/* Chat Component - Only render when we have a complete config */}
         {agentConfig && !loading && !error && (
-          <Chat
-            agentConfig={agentConfig}
-            className="flex-1"
-            artifactId={id}
-          />
+          <div className="flex-1 overflow-hidden">
+            <Chat
+              agentConfig={agentConfig}
+              className="h-full"
+              artifactId={id}
+            />
+          </div>
         )}
       </div>
-    </ThebeProvider>
+    </LazyThebeProvider>
   );
 };
 

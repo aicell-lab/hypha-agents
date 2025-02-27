@@ -3,9 +3,7 @@ import { useHyphaStore } from '../../store/hyphaStore';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useThebe } from './ThebeProvider';
-import { hyphaWebsocketClient } from 'hypha-rpc';
 import { useVoiceMode, VoiceModeProvider } from './VoiceModeProvider';
-import { CodeBlockSelector } from './CodeBlockSelector';
 
 export interface OutputItem {
   type: string;
@@ -64,13 +62,13 @@ const defaultInitialMessages: Message[] = [
     content: [
       {
         type: 'markdown',
-        content: `# Welcome to the Code Execution Demo
+        content: `# Welcome to the BioImage Analysis Demo
 
-Let me show you some examples of what you can do with the code execution feature.
+Let me show you some examples of what you can do with the code execution feature for bioimage analysis.
 
 ## Basic Examples
 
-Here's a simple calculation:
+Here's a simple calculation that might be useful for pixel measurements:
 `
       },
       {
@@ -84,7 +82,7 @@ print(f"{x} + {y} = {x + y}")`,
       },
       {
         type: 'markdown',
-        content: `And here's how to work with lists:`
+        content: `And here's how to work with pixel intensity values in a region of interest:`
       },
       {
         type: 'code_execution',
@@ -98,27 +96,27 @@ print("Squared:", squared)`,
       },
       {
         type: 'markdown',
-        content: `## Data Visualization
+        content: `## Image Visualization
 
-You can create beautiful plots with matplotlib:`
+You can create beautiful plots to visualize image data with matplotlib:`
       },
       {
         type: 'code_execution',
         content: `import matplotlib.pyplot as plt
 import numpy as np
 
-# Create sine wave
+# Create sine wave (similar to intensity profile)
 x = np.linspace(0, 10, 100)
 y = np.sin(x)
-plt.plot(x, y, 'b-', label='sin(x)')
+plt.plot(x, y, 'b-', label='Intensity Profile 1')
 
-# Add cosine wave
+# Add cosine wave (second intensity profile)
 y2 = np.cos(x)
-plt.plot(x, y2, 'r--', label='cos(x)')
+plt.plot(x, y2, 'r--', label='Intensity Profile 2')
 
-plt.title('Trigonometric Functions')
-plt.xlabel('x')
-plt.ylabel('y')
+plt.title('Intensity Profiles Comparison')
+plt.xlabel('Distance (pixels)')
+plt.ylabel('Intensity')
 plt.grid(True)
 plt.legend()
 plt.show()`,
@@ -128,7 +126,7 @@ plt.show()`,
       },
       {
         type: 'markdown',
-        content: `Or use plotly for interactive charts:`
+        content: `Or use plotly for interactive visualization of cell measurements:`
       },
       {
         type: 'code_execution',
@@ -136,11 +134,11 @@ plt.show()`,
 import numpy as np
 import pandas as pd
 
-# Create sample data
+# Create sample data (simulating cell measurements)
 np.random.seed(42)
 data = {
-    'group': ['A']*100 + ['B']*100,
-    'value': np.concatenate([
+    'cell_type': ['Type A']*100 + ['Type B']*100,
+    'fluorescence_intensity': np.concatenate([
         np.random.normal(0, 1, 100),
         np.random.normal(2, 1.5, 100)
     ])
@@ -148,9 +146,9 @@ data = {
 df = pd.DataFrame(data)
 
 # Create interactive histogram
-fig = px.histogram(df, x='value', color='group', 
+fig = px.histogram(df, x='fluorescence_intensity', color='cell_type', 
                   marginal='box', 
-                  title='Distribution by Group')
+                  title='Fluorescence Intensity Distribution by Cell Type')
 fig.show()`,
         attrs: {
           language: 'python'
@@ -158,19 +156,19 @@ fig.show()`,
       },
       {
         type: 'markdown',
-        content: `## Working with Data
+        content: `## Working with Bioimage Data
 
-Here's how to analyze data with pandas:`
+Here's how to analyze experimental results with pandas:`
       },
       {
         type: 'code_execution',
         content: `import pandas as pd
-# Create a sample dataset
+# Create a sample dataset of cell measurements
 data = {
-    'name': ['Alice', 'Bob', 'Charlie', 'David', 'Eve'],
-    'age': [25, 30, 35, 28, 22],
-    'city': ['New York', 'London', 'Paris', 'Tokyo', 'Berlin'],
-    'score': [95, 80, 85, 92, 88]
+    'cell_id': ['Cell_1', 'Cell_2', 'Cell_3', 'Cell_4', 'Cell_5'],
+    'area_μm2': [125, 130, 135, 128, 122],
+    'treatment': ['Control', 'Treatment A', 'Control', 'Treatment B', 'Treatment A'],
+    'intensity': [95, 80, 85, 92, 88]
 }
 df = pd.DataFrame(data)
 
@@ -181,9 +179,9 @@ print("\\nSummary Statistics:")
 print(df.describe())
 
 # Group analysis
-print("\\nAverage score by age group:")
-df['age_group'] = pd.cut(df['age'], bins=[20, 25, 30, 35])
-print(df.groupby('age_group')['score'].mean())`,
+print("\\nAverage intensity by area group:")
+df['area_group'] = pd.cut(df['area_μm2'], bins=[120, 125, 130, 135])
+print(df.groupby('area_group')['intensity'].mean())`,
         attrs: {
           language: 'python'
         }
@@ -192,7 +190,7 @@ print(df.groupby('age_group')['score'].mean())`,
         type: 'markdown',
         content: `## Interactive Widgets
 
-You can even create interactive HTML content:`
+You can create interactive widgets to explore your bioimage data:`
       },
       {
         type: 'code_execution',
@@ -200,11 +198,11 @@ You can even create interactive HTML content:`
 
 html_content = """
 <div style="padding: 20px; background: #f0f0f0; border-radius: 8px;">
-    <h2 style="color: #2c5282;">Interactive Demo</h2>
-    <p style="color: #4a5568;">This is a custom HTML widget!</p>
-    <button onclick="alert('Hello from JavaScript!')" 
+    <h2 style="color: #2c5282;">BioImage Analysis Dashboard</h2>
+    <p style="color: #4a5568;">This is a custom interactive widget for exploring cell data!</p>
+    <button onclick="alert('Cell data loaded successfully!')" 
             style="background: #4299e1; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">
-        Click me!
+        Load Sample Data
     </button>
 </div>
 """
@@ -218,7 +216,7 @@ HTML(html_content)`,
         type: 'markdown',
         content: `Feel free to try these examples by clicking the "Run" button on any code block. You can also collapse/expand the code blocks using the arrow icon.
 
-Each code block is independent and can be executed separately. Try modifying the code to experiment with different values or create your own examples!`
+Each code block is independent and can be executed separately. Try modifying the code to experiment with different bioimage analysis techniques or create your own examples!`
       }
     ]
   }
@@ -240,10 +238,10 @@ const Chat: React.FC<ChatProps> = ({
   const { 
     isRecording, 
     isPaused,
-    startRecording, 
-    stopRecording,
-    pauseRecording,
-    resumeRecording,
+    startRealTimeChat, 
+    stopRealTimeChat,
+    pauseRealTimeChat,
+    resumeRealTimeChat,
     error: voiceError, 
     registerTools, 
     status,
@@ -657,10 +655,10 @@ Note: Output is visible in UI. First comment used as block title.`,
     const isDisabled = !schemaAgents || isTyping;
     const [isConnecting, setIsConnecting] = useState(false);
 
-    const handleStartRecording = async () => {
+    const handleStartRealTimeChat = async () => {
       setIsConnecting(true);
       try {
-        await startRecording({
+        await startRealTimeChat({
           onItemCreated: handleItemCreated,
           instructions: composeInstructions(),
           voice: agentConfig.voice || "sage",
@@ -674,9 +672,9 @@ Note: Output is visible in UI. First comment used as block title.`,
       }
     };
 
-    const handleStopRecording = async () => {
+    const handleStopRealTimeChat = async () => {
       try {
-        await stopRecording();
+        await stopRealTimeChat();
       } finally {
         setIsConnecting(false);
       }
@@ -684,9 +682,9 @@ Note: Output is visible in UI. First comment used as block title.`,
 
     const handlePauseResume = async () => {
       if (isPaused) {
-        await resumeRecording();
+        await resumeRealTimeChat();
       } else {
-        await pauseRecording();
+        await pauseRealTimeChat();
       }
     };
 
@@ -694,7 +692,7 @@ Note: Output is visible in UI. First comment used as block title.`,
       <div className="flex items-center gap-2">
         <div className="relative">
           <button
-            onClick={isRecording ? handlePauseResume : handleStartRecording}
+            onClick={isRecording ? handlePauseResume : handleStartRealTimeChat}
             disabled={isDisabled}
             className={`p-3 rounded-full transition-all duration-300 relative group ${
               isDisabled
@@ -765,7 +763,7 @@ Note: Output is visible in UI. First comment used as block title.`,
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleStopRecording();
+                  handleStopRealTimeChat();
                 }}
                 className="absolute -top-1 -right-1 p-1 rounded-full bg-gray-600 hover:bg-gray-700 transition-all duration-300 transform hover:scale-110 shadow-lg z-10 opacity-0 group-hover:opacity-100 cursor-pointer"
                 title="Stop Recording"
@@ -832,7 +830,7 @@ Note: Output is visible in UI. First comment used as block title.`,
         )}
 
         {/* Chat Messages - Scrollable area */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden pb-2">
           <div className="max-w-4xl mx-auto w-full">
             {/* Chat Messages */}
             {messages.map((message, index) => (

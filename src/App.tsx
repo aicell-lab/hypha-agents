@@ -25,6 +25,7 @@ const AppContent: React.FC = () => {
   const searchParams = new URLSearchParams(location.search);
   const hasResourceId = searchParams.has('id');
   const isChatRoute = location.pathname === '/chat';
+  const isChatDetailRoute = location.pathname.startsWith('/chat/');
 
   // Add state for Snackbar
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
@@ -42,6 +43,20 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location]);
+
+  // For chat routes, we need a different layout to handle scrolling properly
+  if (isChatDetailRoute) {
+    return (
+      <div className="flex flex-col h-screen overflow-hidden">
+        <Navbar className="flex-shrink-0" />
+        <div className="flex-1 overflow-hidden">
+          <Routes>
+            <Route path="/chat/:id" element={<ChatPage />} />
+          </Routes>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen">
@@ -70,7 +85,6 @@ const AppContent: React.FC = () => {
               }} 
             />
           } />
-          <Route path="/chat/:id" element={<ChatPage />} />
           <Route path="/notebook" element={<NotebookPage />} />
         </Routes>
       </main>
