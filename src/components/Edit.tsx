@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import Editor from '@monaco-editor/react';
 import { useHyphaStore } from '../store/hyphaStore';
-import { LinearProgress, Dialog as MuiDialog, TextField, FormControlLabel, Checkbox, FormControl, InputLabel, Select, MenuItem, Chip } from '@mui/material';
+import { LinearProgress, Dialog as MuiDialog, TextField, FormControlLabel, Checkbox, FormControl, InputLabel, Select, MenuItem, Chip, FormHelperText } from '@mui/material';
 import yaml from 'js-yaml';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Comments from './Comments';
@@ -58,6 +58,18 @@ interface ArtifactInfo {
     welcomeMessage: string;
     extensions: string[];
     visibility: 'public' | 'private';
+    agent_config?: {
+      name?: string;
+      profile?: string;
+      goal?: string;
+      model?: string;
+      stream?: boolean;
+      instructions?: string;
+      voice?: string;
+      temperature?: number;
+      enabled_tools?: string[];
+      mode?: 'text' | 'voice';
+    };
   };
 }
 
@@ -110,6 +122,9 @@ interface AgentConfig {
 
     // Tools Configuration
     enabled_tools?: string[];
+    
+    // Mode Selection
+    mode?: 'text' | 'voice';
   };
 }
 
@@ -131,6 +146,12 @@ const VOICE_OPTIONS = [
   'nova',
   'sage',
   'shimmer'
+] as const;
+
+// Add available model options
+const TEXT_MODEL_OPTIONS = [
+  'gpt-4o-mini',
+  'gpt-4o',
 ] as const;
 
 const Edit: React.FC = () => {
@@ -193,7 +214,10 @@ const Edit: React.FC = () => {
       
       // Model Settings
       model: 'gpt-4o-mini',
-      stream: true
+      stream: true,
+      
+      // Mode Selection
+      mode: 'text'
     }
   });
 
@@ -329,7 +353,8 @@ const Edit: React.FC = () => {
           ...artifact.manifest,
           welcomeMessage: artifact.manifest.welcomeMessage || 'Hello, how can I assist you today?',
           extensions: artifact.manifest.extensions || [],
-          visibility: artifact.manifest.visibility || 'private'
+          visibility: artifact.manifest.visibility || 'private',
+          agent_config: artifact.manifest.agent_config
         }
       });
 
@@ -1718,6 +1743,23 @@ const Edit: React.FC = () => {
 
   useEffect(() => {
     if (artifactInfo?.manifest) {
+      // Determine the mode from the manifest or default to 'text'
+      const mode = artifactInfo.manifest.agent_config?.mode || 'text';
+      
+      // Determine the appropriate model based on the mode
+      let modelToUse: string;
+      if (mode === 'voice') {
+        modelToUse = 'gpt-4o-realtime-preview';
+      } else {
+        // For text mode, use the specified model if it's in our options, otherwise default to gpt-4o-mini
+        const specifiedModel = artifactInfo.manifest.agent_config?.model;
+        if (specifiedModel && TEXT_MODEL_OPTIONS.includes(specifiedModel as any)) {
+          modelToUse = specifiedModel;
+        } else {
+          modelToUse = 'gpt-4o-mini';
+        }
+      }
+      
       setAgentConfig({
         // Basic Info
         name: artifactInfo.manifest.name || '',
@@ -1732,9 +1774,19 @@ const Edit: React.FC = () => {
           goal: artifactInfo.manifest.agent_config?.goal || 'I am a helpful AI assistant',
           
           // Model Settings
-          model: artifactInfo.manifest.agent_config?.model || 'gpt-4o-mini',
+          model: modelToUse,
           stream: artifactInfo.manifest.agent_config?.stream ?? true,
-          instructions: artifactInfo.manifest.description || ''
+          instructions: artifactInfo.manifest.description || '',
+          
+          // Voice Settings
+          voice: artifactInfo.manifest.agent_config?.voice || 'sage',
+          temperature: artifactInfo.manifest.agent_config?.temperature || 0.8,
+          
+          // Tools Configuration
+          enabled_tools: artifactInfo.manifest.agent_config?.enabled_tools,
+          
+          // Mode Selection
+          mode: mode
         }
       });
     }
@@ -1749,6 +1801,20 @@ const Edit: React.FC = () => {
         message: 'Saving configuration...',
         severity: 'info'
       });
+
+      // Ensure the model is correctly set based on the mode
+      let modelToUse: string;
+      if (agentConfig.agent_config.mode === 'voice') {
+        modelToUse = 'gpt-4o-realtime-preview';
+      } else {
+        // For text mode, use the specified model if it's in our options, otherwise default to gpt-4o-mini
+        const specifiedModel = agentConfig.agent_config.model;
+        if (specifiedModel && TEXT_MODEL_OPTIONS.includes(specifiedModel as any)) {
+          modelToUse = specifiedModel;
+        } else {
+          modelToUse = 'gpt-4o-mini';
+        }
+      }
 
       const updatedManifest = {
         ...artifactInfo.manifest,
@@ -1765,7 +1831,7 @@ const Edit: React.FC = () => {
           goal: agentConfig.agent_config.goal,
           
           // Model Settings
-          model: agentConfig.agent_config.model,
+          model: modelToUse,
           stream: agentConfig.agent_config.stream,
           instructions: agentConfig.description,
 
@@ -1774,7 +1840,10 @@ const Edit: React.FC = () => {
           temperature: agentConfig.agent_config.temperature,
 
           // Tools Configuration
-          enabled_tools: agentConfig.agent_config.enabled_tools
+          enabled_tools: agentConfig.agent_config.enabled_tools,
+          
+          // Mode Selection
+          mode: agentConfig.agent_config.mode || 'text'
         }
       };
 
@@ -1800,7 +1869,7 @@ const Edit: React.FC = () => {
     }
   };
 
-  // Update renderConfig to merge the two sections
+  // Update renderConfig to include mode selection
   const renderConfig = () => (
     <div className="p-6">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -1897,20 +1966,35 @@ const Edit: React.FC = () => {
             <div className="space-y-4 mb-6">
               <h4 className="text-sm font-medium text-gray-900">Model Settings</h4>
               
-              <TextField
-                label="Model"
-                value={agentConfig.agent_config.model}
-                onChange={(e) => setAgentConfig(prev => ({
-                  ...prev,
-                  agent_config: {
-                    ...prev.agent_config,
-                    model: e.target.value
-                  }
-                }))}
-                fullWidth
-                required
-                helperText="Specify the LLM model to use"
-              />
+              <FormControl fullWidth>
+                <InputLabel>Model</InputLabel>
+                <Select
+                  value={agentConfig.agent_config.mode === 'voice' ? 'gpt-4o-realtime-preview' : (agentConfig.agent_config.model || 'gpt-4o-mini')}
+                  onChange={(e) => setAgentConfig(prev => ({
+                    ...prev,
+                    agent_config: {
+                      ...prev.agent_config,
+                      model: e.target.value
+                    }
+                  }))}
+                  disabled={agentConfig.agent_config.mode === 'voice'}
+                >
+                  {agentConfig.agent_config.mode === 'voice' ? (
+                    <MenuItem value="gpt-4o-realtime-preview">gpt-4o-realtime-preview</MenuItem>
+                  ) : (
+                    TEXT_MODEL_OPTIONS.map((model) => (
+                      <MenuItem key={model} value={model}>
+                        {model}
+                      </MenuItem>
+                    ))
+                  )}
+                </Select>
+                <FormHelperText>
+                  {agentConfig.agent_config.mode === 'voice' 
+                    ? "Voice mode requires gpt-4o-realtime-preview model" 
+                    : "Select the LLM model to use for text interactions"}
+                </FormHelperText>
+              </FormControl>
 
               <FormControlLabel
                 control={
@@ -1929,47 +2013,79 @@ const Edit: React.FC = () => {
               />
             </div>
 
-            {/* Voice Settings */}
+            {/* Mode Selection */}
             <div className="space-y-4 mb-6">
-              <h4 className="text-sm font-medium text-gray-900">Voice Settings</h4>
+              <h4 className="text-sm font-medium text-gray-900">Interaction Mode</h4>
               
               <FormControl fullWidth>
-                <InputLabel>Voice</InputLabel>
+                <InputLabel>Mode</InputLabel>
                 <Select
-                  value={agentConfig.agent_config.voice || "sage"}
+                  value={agentConfig.agent_config.mode || "text"}
+                  onChange={(e) => {
+                    const newMode = e.target.value as 'text' | 'voice';
+                    setAgentConfig(prev => ({
+                      ...prev,
+                      agent_config: {
+                        ...prev.agent_config,
+                        mode: newMode,
+                        // Update model based on mode
+                        model: newMode === 'voice' ? 'gpt-4o-realtime-preview' : 'gpt-4o-mini'
+                      }
+                    }));
+                  }}
+                >
+                  <MenuItem value="text">Text Only</MenuItem>
+                  <MenuItem value="voice">Voice Enabled</MenuItem>
+                </Select>
+                <FormHelperText>
+                  Choose how users will interact with this agent. Voice mode enables both text and voice interactions.
+                  {agentConfig.agent_config.mode === 'voice' && " Voice mode requires gpt-4o-realtime-preview model."}
+                </FormHelperText>
+              </FormControl>
+            </div>
+
+            {/* Voice Settings - Only show if voice mode is selected */}
+            {(agentConfig.agent_config.mode === 'voice') && (
+              <div className="space-y-4 mb-6">
+                <h4 className="text-sm font-medium text-gray-900">Voice Settings</h4>
+                
+                <FormControl fullWidth>
+                  <InputLabel>Voice</InputLabel>
+                  <Select
+                    value={agentConfig.agent_config.voice || "sage"}
+                    onChange={(e) => setAgentConfig(prev => ({
+                      ...prev,
+                      agent_config: {
+                        ...prev.agent_config,
+                        voice: e.target.value
+                      }
+                    }))}
+                  >
+                    {VOICE_OPTIONS.map((voice) => (
+                      <MenuItem key={voice} value={voice}>
+                        {voice.charAt(0).toUpperCase() + voice.slice(1)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <TextField
+                  label="Temperature"
+                  type="number"
+                  value={agentConfig.agent_config.temperature || 0.8}
                   onChange={(e) => setAgentConfig(prev => ({
                     ...prev,
                     agent_config: {
                       ...prev.agent_config,
-                      voice: e.target.value
+                      temperature: parseFloat(e.target.value)
                     }
                   }))}
-                >
-                  {VOICE_OPTIONS.map((voice) => (
-                    <MenuItem key={voice} value={voice}>
-                      {voice.charAt(0).toUpperCase() + voice.slice(1)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <TextField
-                label="Temperature"
-                type="number"
-                value={agentConfig.agent_config.temperature || 0.8}
-                onChange={(e) => setAgentConfig(prev => ({
-                  ...prev,
-                  agent_config: {
-                    ...prev.agent_config,
-                    temperature: parseFloat(e.target.value)
-                  }
-                }))}
-                inputProps={{ min: 0, max: 1, step: 0.1 }}
-                fullWidth
-                helperText="Controls randomness in responses (0.0 to 1.0)"
-              />
-
-            </div>
+                  inputProps={{ min: 0, max: 1, step: 0.1 }}
+                  fullWidth
+                  helperText="Controls randomness in responses (0.0 to 1.0)"
+                />
+              </div>
+            )}
 
             {/* Tools Configuration */}
             <div className="space-y-4">

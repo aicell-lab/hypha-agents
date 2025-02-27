@@ -12,6 +12,7 @@ interface VoiceModeContextType {
     voice?: string;
     temperature?: number;
     tools?: Tool[];
+    model?: string;
   }) => Promise<void>;
   stopChat: () => Promise<void>;
   pauseChat: () => Promise<void>;
@@ -286,6 +287,7 @@ Remember:
     voice?: string;
     temperature?: number;
     tools?: Tool[];
+    model?: string;
   }) => {
     // Declare and initialize timeout variable at the top of the function
     let lockTimeout: ReturnType<typeof setTimeout> | null = null;

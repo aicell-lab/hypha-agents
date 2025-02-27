@@ -138,6 +138,23 @@ async def get_realtime_token():
     except Exception as e:
         raise ValueError(f"Unexpected error getting realtime session: {str(e)}") from e
 
+async def get_openai_token():
+    """Get an OpenAI API key for use with the Chat Completions API."""
+    # Get the API key from environment variable
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable not set")
+
+    try:
+        # Return the API key in the same format as get_realtime_token for consistency
+        return {
+            "client_secret": {
+                "value": api_key
+            }
+        }
+    except Exception as e:
+        raise ValueError(f"Unexpected error getting OpenAI API key: {str(e)}") from e
+
 async def register_agent_service(server):
     """Register a service with the server."""
 
@@ -197,6 +214,7 @@ async def register_agent_service(server):
         "aask": aask,
         "acall": acall,
         "get_realtime_token": get_realtime_token,
+        "get_openai_token": get_openai_token,
     })
     return svc
 

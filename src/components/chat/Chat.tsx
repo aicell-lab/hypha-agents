@@ -4,6 +4,7 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useThebe } from './ThebeProvider';
 import { useVoiceMode, VoiceModeProvider } from './VoiceModeProvider';
+import { useTextMode, TextModeProvider } from './TextModeProvider';
 import { ToolProvider, useTools } from './ToolProvider';
 
 export interface OutputItem {
@@ -40,6 +41,7 @@ interface ChatProps {
     welcomeMessage?: string;
     voice?: string;
     temperature?: number;
+    mode?: 'text' | 'voice';
   };
   className?: string;
   showActions?: boolean;
@@ -415,6 +417,15 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   const messageEndRef = useRef<HTMLDivElement>(null);
   const { server } = useHyphaStore();
   const { executeCode, executeCodeWithDOMOutput, isReady: isThebeReady } = useThebe();
+  
+  // Determine which mode to use based on agent configuration
+  const useVoiceBasedOnConfig = agentConfig.mode === 'voice' && enableVoiceMode;
+  
+  // Use the appropriate mode hook based on configuration
+  const voiceMode = useVoiceMode();
+  const textMode = useTextMode();
+  
+  // Select the appropriate mode based on configuration
   const { 
     isRecording, 
     isPaused,
@@ -422,11 +433,23 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     stopChat,
     pauseChat,
     resumeChat,
-    error: voiceError, 
+    error: modeError, 
     status,
     sendText 
-  } = useVoiceMode();
+  } = useVoiceBasedOnConfig ? voiceMode : textMode;
+  
   const { tools } = useTools();
+  
+  // Compose instructions from agent config
+  const composeInstructions = useCallback(() => {
+    const parts = [
+      `You are ${agentConfig.name}, ${agentConfig.profile || 'an AI assistant'}.`,
+      agentConfig.goal ? `Your goal is: ${agentConfig.goal}` : null,
+      agentConfig.instructions || null,
+      `Additional note: You should always respond with audio if the user ask via audio.`
+    ];
+    return parts.filter(Boolean).join('\n\n');
+  }, [agentConfig.name, agentConfig.profile, agentConfig.goal, agentConfig.instructions]);
   
   // Use useMemo to create initial messages
   const initialMessagesList = React.useMemo(() => {
@@ -447,6 +470,9 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   const [isTyping, setIsTyping] = useState(false);
   const [schemaAgents, setSchemaAgents] = useState<any>(null);
   const [hasIncomingVoice, setHasIncomingVoice] = useState(false);
+  
+  // Create a ref to track if the component is mounted
+  const isMountedRef = useRef(false);
 
   // Update messages when initialMessagesList changes
   useEffect(() => {
@@ -727,60 +753,89 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     }
   `;
 
-  // Add voice button component
-  const VoiceButton = () => {
-    // Compose instructions from agent config
-    const composeInstructions = () => {
-      const parts = [
-        `You are ${agentConfig.name}, ${agentConfig.profile}.`,
-        `Your goal is: ${agentConfig.goal}`,
-        agentConfig.instructions,
-        `Additional note: You should always respond with audio if the user ask via audio.`,
-      ];
-      return parts.filter(Boolean).join('\n\n');
-    };
+  // Voice button handlers
+  const [isConnecting, setIsConnecting] = useState(false);
+  
+  const handleStartVoiceChat = useCallback(async () => {
+    setIsConnecting(true);
+    try {
+      await startChat({
+        onItemCreated: handleItemCreated,
+        instructions: composeInstructions(),
+        voice: agentConfig.voice || "sage",
+        temperature: agentConfig.temperature || (agentConfig.model?.includes("gpt-4") ? 0.7 : 0.8),
+        tools: tools,
+        model: "gpt-4o-realtime-preview"
+      });
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [startChat, handleItemCreated, composeInstructions, agentConfig.voice, agentConfig.temperature, tools]);
 
-    const isDisabled = !schemaAgents || isTyping;
-    const [isConnecting, setIsConnecting] = useState(false);
+  const handleStopVoiceChat = useCallback(async () => {
+    try {
+      await stopChat();
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [stopChat]);
 
-    const handlestartChat = async () => {
-      setIsConnecting(true);
-      try {
-        await startChat({
-          onItemCreated: handleItemCreated,
-          instructions: composeInstructions(),
-          voice: agentConfig.voice || "sage",
-          temperature: agentConfig.temperature || (agentConfig.model?.includes("gpt-4") ? 0.7 : 0.8),
-          tools: tools
+  const handlePauseResumeVoiceChat = useCallback(async () => {
+    if (isPaused) {
+      await resumeChat();
+    } else {
+      await pauseChat();
+    }
+  }, [isPaused, resumeChat, pauseChat]);
+
+  // Auto-start and auto-stop text mode chat
+  useEffect(() => {
+    // Set mounted flag
+    isMountedRef.current = true;
+    
+    // Only auto-start for text mode, not voice mode
+    if (!useVoiceBasedOnConfig && schemaAgents && isThebeReady && isMountedRef.current) {
+      console.log('Auto-starting text mode chat');
+      
+      // Start the chat session
+      startChat({
+        onItemCreated: handleItemCreated,
+        instructions: composeInstructions(),
+        temperature: agentConfig.temperature || 0.7,
+        tools: tools,
+        model: agentConfig.model || 'gpt-4o-mini'
+      }).catch(error => {
+        console.error('Failed to auto-start text chat:', error);
+      });
+    }
+    
+    // Clean up when component unmounts
+    return () => {
+      isMountedRef.current = false;
+      
+      // Only auto-stop for text mode, not voice mode
+      if (!useVoiceBasedOnConfig) {
+        console.log('Auto-stopping text mode chat');
+        stopChat().catch(error => {
+          console.error('Failed to auto-stop text chat:', error);
         });
-      } catch (error) {
-        console.error('Failed to start recording:', error);
-      } finally {
-        setIsConnecting(false);
       }
     };
+  }, [useVoiceBasedOnConfig, schemaAgents, isThebeReady, startChat, stopChat, handleItemCreated, composeInstructions, tools, agentConfig.temperature, agentConfig.model]);
 
-    const handlestopChat = async () => {
-      try {
-        await stopChat();
-      } finally {
-        setIsConnecting(false);
-      }
-    };
-
-    const handlePauseResume = async () => {
-      if (isPaused) {
-        await resumeChat();
-      } else {
-        await pauseChat();
-      }
-    };
-
+  // Render voice button component
+  const renderVoiceButton = useCallback(() => {
+    if (!useVoiceBasedOnConfig) return null;
+    
+    const isDisabled = !schemaAgents || isTyping;
+    
     return (
       <div className="flex items-center gap-2">
         <div className="relative">
           <button
-            onClick={isRecording ? handlePauseResume : handlestartChat}
+            onClick={isRecording ? handlePauseResumeVoiceChat : handleStartVoiceChat}
             disabled={isDisabled}
             className={`p-3 rounded-full transition-all duration-300 relative group ${
               isDisabled
@@ -851,7 +906,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  handlestopChat();
+                  handleStopVoiceChat();
                 }}
                 className="absolute -top-1 -right-1 p-1 rounded-full bg-gray-600 hover:bg-gray-700 transition-all duration-300 transform hover:scale-110 shadow-lg z-10 opacity-0 group-hover:opacity-100 cursor-pointer"
                 title="Stop Recording"
@@ -861,7 +916,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
                   fill="currentColor" 
                   viewBox="0 0 24 24"
                 >
-                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12z"/>
                 </svg>
               </div>
             )}
@@ -878,7 +933,18 @@ const ChatContent: React.FC<ChatProps> = (props) => {
         </div>
       </div>
     );
-  };
+  }, [
+    useVoiceBasedOnConfig, 
+    schemaAgents, 
+    isTyping, 
+    isRecording, 
+    isPaused, 
+    isConnecting, 
+    hasIncomingVoice, 
+    handlePauseResumeVoiceChat, 
+    handleStartVoiceChat, 
+    handleStopVoiceChat
+  ]);
 
   // Handle tool selection
   const handleToolSelect = useCallback((tool: any) => {
@@ -965,9 +1031,9 @@ print("Hello, world!")
           <div className="max-w-4xl mx-auto">
             {/* Status and Error Display - Moved to top */}
             <div className="mb-2 text-xs text-center space-y-1">
-              {voiceError && (
+              {modeError && (
                 <p className="text-red-500">
-                  {voiceError}
+                  {modeError}
                 </p>
               )}
               {(!schemaAgents || !isThebeReady) && (
@@ -982,11 +1048,9 @@ print("Hello, world!")
               )}
             </div>
             <div className="flex items-center gap-2">
-              {enableVoiceMode && (
-                <div className="flex-shrink-0 flex items-center">
-                  <VoiceButton />
-                </div>
-              )}
+              <div className="flex-shrink-0 flex items-center">
+                {renderVoiceButton()}
+              </div>
               <div className="flex-1">
                 <ChatInput 
                   onSend={handleSendMessage} 
@@ -1014,11 +1078,37 @@ print("Hello, world!")
 };
 
 const Chat: React.FC<ChatProps> = (props) => {
+  // Determine which mode provider to use based on agent configuration
+  const useVoiceBasedOnConfig = props.agentConfig.mode === 'voice' && props.enableVoiceMode !== false;
+  
+  // Ensure the correct model is used based on the mode
+  const modifiedProps = {
+    ...props,
+    agentConfig: {
+      ...props.agentConfig,
+      // For voice mode, always use gpt-4o-realtime-preview
+      // For text mode, use the specified model or default to gpt-4o-mini
+      model: useVoiceBasedOnConfig 
+        ? "gpt-4o-realtime-preview" 
+        : (props.agentConfig.model || "gpt-4o-mini")
+    }
+  };
+  
   return (
     <ToolProvider>
-      <VoiceModeProvider>
-        <ChatContent {...props} />
-      </VoiceModeProvider>
+      {useVoiceBasedOnConfig ? (
+        <VoiceModeProvider>
+          <TextModeProvider>
+            <ChatContent {...modifiedProps} />
+          </TextModeProvider>
+        </VoiceModeProvider>
+      ) : (
+        <TextModeProvider>
+          <VoiceModeProvider>
+            <ChatContent {...modifiedProps} />
+          </VoiceModeProvider>
+        </TextModeProvider>
+      )}
     </ToolProvider>
   );
 };
