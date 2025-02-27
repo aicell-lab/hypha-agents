@@ -147,3 +147,6 @@ For backend services, you may rely on:
 - Efficient asset management and caching
 - Real-time monitoring and logging
 
+
+### Additional Notes
+ - After code changes, you don't need to run the pnpm dev or start command, the dev server is already running.
