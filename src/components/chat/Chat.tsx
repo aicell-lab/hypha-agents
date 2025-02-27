@@ -424,7 +424,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     resumeChat,
     error: voiceError, 
     status,
-    sendTextMessage 
+    sendText 
   } = useVoiceMode();
   const { tools } = useTools();
   
@@ -683,8 +683,8 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     setIsTyping(true);
 
     try {
-      // Send message using VoiceModeProvider's sendTextMessage
-      sendTextMessage(message);
+      // Send message using VoiceModeProvider's sendText
+      sendText(message);
     } catch (err) {
       console.error('Error sending message:', err);
       setMessages(prev => [...prev, { 

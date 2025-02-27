@@ -17,7 +17,7 @@ interface VoiceModeContextType {
   pauseChat: () => Promise<void>;
   resumeChat: () => Promise<void>;
   error: string | null;
-  sendTextMessage: (text: string) => void;
+  sendText: (text: string) => void;
   status: string;
   connectionState: string;
 }
@@ -559,7 +559,7 @@ Remember:
   }, []);
 
   // Send text message
-  const sendTextMessage = useCallback((text: string) => {
+  const sendText = useCallback((text: string) => {
     if (dataChannelRef.current?.readyState === 'open') {
       // First create and send the message
       const messageCreate = {
@@ -611,7 +611,7 @@ Remember:
       pauseChat,
       resumeChat,
       error,
-      sendTextMessage,
+      sendText,
       status,
       connectionState
     }}>
