@@ -8,6 +8,7 @@ import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
 import Editor from '@monaco-editor/react';
 import Convert from 'ansi-to-html';
+import { ensurePlotlyLoaded, containsPlotly } from '../../utils/plotly';
 
 // Register languages
 SyntaxHighlighter.registerLanguage('python', python);
@@ -142,23 +143,8 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
 
   // Ensure Plotly is loaded if needed
   useEffect(() => {
-    // Check if code contains Plotly-related imports or functions
-    const hasPlotly = /plotly|px\.|fig\.show\(\)|fig = px\.|import plotly|display\(fig\)/i.test(codeValue);
-    
-    if (hasPlotly && typeof window !== 'undefined' && !window.Plotly) {
-      // Preload Plotly library
-      console.log('Preloading Plotly for code block');
-      const script = document.createElement('script');
-      script.src = 'https://cdn.plot.ly/plotly-3.0.1.min.js';
-      script.async = true;
-      document.head.appendChild(script);
-      
-      return () => {
-        // Clean up if component unmounts before script loads
-        if (document.head.contains(script)) {
-          document.head.removeChild(script);
-        }
-      };
+    if (containsPlotly(codeValue)) {
+      ensurePlotlyLoaded();
     }
   }, [codeValue]);
 
