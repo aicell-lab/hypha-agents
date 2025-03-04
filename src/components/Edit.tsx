@@ -351,7 +351,7 @@ const Edit: React.FC = () => {
           model: artifact.manifest?.model,
           stream: artifact.manifest?.stream,
           disableStreaming: artifact.manifest?.disableStreaming,
-          instructions: artifact.manifest?.instructions || artifact.manifest.description,
+          instructions: artifact.manifest?.instructions,
           voice: artifact.manifest?.voice,
           temperature: artifact.manifest?.temperature,
           enabled_tools: artifact.manifest?.enabled_tools,
@@ -1775,7 +1775,7 @@ const Edit: React.FC = () => {
         model: modelToUse,
         stream: artifactInfo.manifest.stream ?? true,
         disableStreaming: artifactInfo.manifest.disableStreaming,
-        instructions: artifactInfo.manifest.description || '',
+        instructions: artifactInfo.manifest.instructions || '',
         
         // Voice Settings
         voice: artifactInfo.manifest.voice || 'sage',

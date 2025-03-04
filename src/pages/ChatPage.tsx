@@ -62,11 +62,11 @@ const ChatPage: React.FC = () => {
         const config: AgentConfig = {
           name: manifest.name,
           profile: manifest.profile || 'AI Assistant',
-          goal: manifest.goal || manifest.description,
+          goal: manifest.goal || "A helpful AI assistant",
           model: manifest.model || 'gpt-4-mini',
           stream: manifest.stream ?? true,
           disableStreaming: manifest.disableStreaming,
-          instructions: manifest.instructions || manifest.description,
+          instructions: manifest.instructions,
           welcomeMessage: manifest.welcomeMessage,
           voice: manifest.voice || 'sage',
           temperature: manifest.temperature || 0.8,
