@@ -1,3 +1,11 @@
+// Add type declaration for window.define
+declare global {
+  interface Window {
+    define?: any;
+    Plotly?: any;
+  }
+}
+
 // Utility function for loading and initializing Plotly
 export const ensurePlotlyLoaded = async (): Promise<void> => {
   if (typeof window === 'undefined' || window.Plotly) {
@@ -6,10 +14,17 @@ export const ensurePlotlyLoaded = async (): Promise<void> => {
 
   return new Promise((resolve) => {
     console.log('Loading Plotly library...');
+    
+    // Save any existing define function
+    const oldDefine = window.define;
+    window.define = undefined;
+
     const script = document.createElement('script');
     script.src = 'https://cdn.plot.ly/plotly-2.24.1.min.js';
     script.async = true;
     script.onload = () => {
+      // Restore the original define function
+      window.define = oldDefine;
       console.log('Plotly library loaded successfully');
       resolve();
     };

@@ -1937,10 +1937,32 @@ const Edit: React.FC = () => {
                 }))}
                 fullWidth
                 required
-                multiline
-                rows={4}
-                helperText="Define the agent's primary objective and expected behavior in detail"
+                helperText="Define the agent's primary objective in a single line"
               />
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-gray-900">Instructions</h4>
+                <Editor
+                  height="200px"
+                  language="markdown"
+                  theme="vs-light"
+                  value={agentConfig.instructions}
+                  onChange={(value: string | undefined) => setAgentConfig(prev => ({
+                    ...prev,
+                    instructions: value || ''
+                  }))}
+                  options={{
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'on',
+                    wrappingIndent: 'indent',
+                    lineNumbers: 'off'
+                  }}
+                />
+                <FormHelperText>
+                  Detailed instructions for the agent's behavior and capabilities in markdown format
+                </FormHelperText>
+              </div>
             </div>
 
             {/* Model Settings */}

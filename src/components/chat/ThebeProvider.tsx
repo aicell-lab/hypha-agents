@@ -773,7 +773,7 @@ print(f"{sys.version.split()[0]}")
                 });
                 
                 // Check for Plotly divs that need initialization
-                const plotlyDivs = div.querySelectorAll('[id^="plotly-"]');
+                const plotlyDivs = div.querySelectorAll('.plotly-graph-div');
                 if (plotlyDivs.length > 0 && typeof window.Plotly === 'undefined') {
                   // Load Plotly using our utility
                   ensurePlotlyLoaded().then(() => {

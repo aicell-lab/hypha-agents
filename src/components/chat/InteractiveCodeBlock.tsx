@@ -259,33 +259,6 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
       }
     });
     
-    // Process each element that might contain ANSI codes
-    textNodes.forEach(el => {
-      // Skip stream-output elements (we handled them separately)
-      if (el.classList.contains('stream-output')) return;
-      
-      const text = el.textContent || '';
-      
-      // Check if it contains ANSI escape sequences
-      if (text.includes('[0;') || text.includes('[1;') || 
-          text.includes('\u001b[') || text.includes('\\u001b[')) {
-        try {
-          // Process the text
-          const processedHTML = processTextOutput(text);
-          
-          // Create a wrapper to hold the processed content
-          const wrapper = document.createElement('div');
-          wrapper.innerHTML = processedHTML;
-          
-          // Replace the original content with processed content
-          if (wrapper.firstChild) {
-            el.parentNode?.replaceChild(wrapper.firstChild, el);
-          }
-        } catch (error) {
-          console.error('Error processing ANSI codes:', error);
-        }
-      }
-    });
   };
 
   // Function to handle editor mounting
