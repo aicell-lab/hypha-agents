@@ -446,8 +446,8 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   const composeInstructions = useCallback(() => {
     const parts = [
       `You are ${agentConfig.name}, ${agentConfig.profile || 'an AI assistant'}.`,
-      agentConfig.goal ? `Your goal is: ${agentConfig.goal}` : null,
-      agentConfig.instructions || null,
+      agentConfig.goal ? `Your goal is: ${agentConfig.goal}` : "",
+      agentConfig.instructions || "",
       `Additional note: You should always respond with audio if the user ask via audio.`
     ];
     return parts.filter(Boolean).join('\n\n');
