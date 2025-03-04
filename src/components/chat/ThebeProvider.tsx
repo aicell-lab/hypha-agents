@@ -141,7 +141,6 @@ declare global {
       startJupyterLiteServer: (config?: any) => Promise<ServiceManager>;
     };
     setupThebeLite?: Promise<void>;
-    Plotly?: any; // Add Plotly to the global window interface
     globalThebeState?: GlobalThebeState; // Expose for debugging
     jupyterDisplayData?: {
       [key: string]: (data: any) => void;
@@ -571,8 +570,6 @@ print(f"{sys.version.split()[0]}")
         return `[Image stored with key: ${storeOutput(content, type)}]`;
       case 'svg':
         return `[SVG content stored with key: ${storeOutput(content, type)}]`;
-      case 'plotly':
-        return `[Plotly visualization stored with key: ${storeOutput(content, type)}]`;
       default:
         return `${content.substring(0, maxLength)}... [Full content stored with key: ${storeOutput(content, type)}]`;
     }
@@ -640,13 +637,6 @@ print(f"{sys.version.split()[0]}")
                 type: 'svg',
                 content: svgContent,
                 short_content: createShortContent(svgContent, 'svg')
-              });
-            } else if (data['application/vnd.plotly.v1+json']) {
-              const plotlyContent = JSON.stringify(data['application/vnd.plotly.v1+json']);
-              onOutput?.({
-                type: 'plotly',
-                content: plotlyContent,
-                short_content: createShortContent(plotlyContent, 'plotly')
               });
             } else if (data['text/plain']) {
               const plainContent = data['text/plain'];
