@@ -758,9 +758,14 @@ print(f"{sys.version.split()[0]}")
             break;
           case 'display_data':
           case 'execute_result':
-            // The display data will be handled by our custom display hook
-            // But we can still handle basic outputs here as a fallback
+            // Create a container for this output to preserve order
+            const outputContainer = document.createElement('div');
+            outputContainer.className = 'execute-result';
+            
+            // Handle each mime type in order of preference
             const data = msg.content.data;
+            let hasOutput = false;
+
             if (data['text/html']) {
               const div = document.createElement('div');
               div.innerHTML = data['text/html'];
@@ -773,29 +778,41 @@ print(f"{sys.version.split()[0]}")
               
               // Execute any scripts in the HTML
               executeScripts(div);
-              outputElement.appendChild(div);
-            } else if (data['image/png']) {
+              outputContainer.appendChild(div);
+              hasOutput = true;
+            }
+            
+            if (data['image/png']) {
               const img = document.createElement('img');
               const imgContent = `data:image/png;base64,${data['image/png']}`;
               img.src = imgContent;
-              outputElement.appendChild(img);
+              outputContainer.appendChild(img);
               
               onOutput?.({
                 type: 'img',
                 content: imgContent,
                 short_content: createShortContent(imgContent, 'img')
               });
-            } else if (data['text/plain'] && !outputElement.querySelector('.stream-output')) {
+              hasOutput = true;
+            }
+            
+            if (data['text/plain'] && !hasOutput) {
               const plainContent = data['text/plain'];
               const pre = document.createElement('pre');
               pre.textContent = plainContent;
-              outputElement.appendChild(pre);
+              outputContainer.appendChild(pre);
               
               onOutput?.({
                 type: 'stdout',
                 content: plainContent,
                 short_content: createShortContent(plainContent, 'stdout')
               });
+              hasOutput = true;
+            }
+
+            // Only append if we actually have content
+            if (hasOutput) {
+              outputElement.appendChild(outputContainer);
             }
             break;
           case 'error':
