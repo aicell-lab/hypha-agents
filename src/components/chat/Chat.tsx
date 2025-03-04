@@ -42,6 +42,7 @@ interface ChatProps {
     welcomeMessage?: string;
     voice?: string;
     temperature?: number;
+    enabled_tools?: string[];
     mode?: 'text' | 'voice';
   };
   className?: string;

@@ -58,18 +58,17 @@ interface ArtifactInfo {
     welcomeMessage: string;
     extensions: string[];
     visibility: 'public' | 'private';
-    agent_config?: {
-      name?: string;
-      profile?: string;
-      goal?: string;
-      model?: string;
-      stream?: boolean;
-      instructions?: string;
-      voice?: string;
-      temperature?: number;
-      enabled_tools?: string[];
-      mode?: 'text' | 'voice';
-    };
+    // Flattened agent config
+    profile?: string;
+    goal?: string;
+    model?: string;
+    stream?: boolean;
+    disableStreaming?: boolean;
+    instructions?: string;
+    voice?: string;
+    temperature?: number;
+    enabled_tools?: string[];
+    mode?: 'text' | 'voice';
   };
 }
 
@@ -104,29 +103,25 @@ interface AgentConfig {
   description: string;
   welcomeMessage: string;
   
-  // Runtime Configuration
-  agent_config: {
-    // Identity
-    name: string;
-    profile: string;
-    goal: string;
-    
-    // Model Settings
-    model: string;
-    stream?: boolean;
-    disableStreaming?: boolean; // Add this option
-    instructions?: string;
+  // Identity
+  profile: string;
+  goal: string;
+  
+  // Model Settings
+  model: string;
+  stream?: boolean;
+  disableStreaming?: boolean;
+  instructions?: string;
 
-    // Voice Settings
-    voice?: string;
-    temperature?: number;
+  // Voice Settings
+  voice?: string;
+  temperature?: number;
 
-    // Tools Configuration
-    enabled_tools?: string[];
-    
-    // Mode Selection
-    mode?: 'text' | 'voice';
-  };
+  // Tools Configuration
+  enabled_tools?: string[];
+  
+  // Mode Selection
+  mode?: 'text' | 'voice';
 }
 
 // Add new interface for tool options
@@ -206,20 +201,16 @@ const Edit: React.FC = () => {
     description: '',
     welcomeMessage: 'Hello, how can I assist you today?',
     
-    // Runtime Configuration
-    agent_config: {
-      // Identity
-      name: '',
-      profile: 'AI Assistant',
-      goal: 'I am a helpful AI assistant',
-      
-      // Model Settings
-      model: 'gpt-4o-mini',
-      stream: true,
-      
-      // Mode Selection
-      mode: 'text'
-    }
+    // Identity
+    profile: 'AI Assistant',
+    goal: 'I am a helpful AI assistant',
+    
+    // Model Settings
+    model: 'gpt-4o-mini',
+    stream: true,
+    
+    // Mode Selection
+    mode: 'text'
   });
 
   // Add new state for available extensions
@@ -355,7 +346,16 @@ const Edit: React.FC = () => {
           welcomeMessage: artifact.manifest.welcomeMessage || 'Hello, how can I assist you today?',
           extensions: artifact.manifest.extensions || [],
           visibility: artifact.manifest.visibility || 'private',
-          agent_config: artifact.manifest.agent_config
+          profile: artifact.manifest?.profile,
+          goal: artifact.manifest?.goal,
+          model: artifact.manifest?.model,
+          stream: artifact.manifest?.stream,
+          disableStreaming: artifact.manifest?.disableStreaming,
+          instructions: artifact.manifest?.instructions || artifact.manifest.description,
+          voice: artifact.manifest?.voice,
+          temperature: artifact.manifest?.temperature,
+          enabled_tools: artifact.manifest?.enabled_tools,
+          mode: artifact.manifest?.mode
         }
       });
 
@@ -1745,7 +1745,7 @@ const Edit: React.FC = () => {
   useEffect(() => {
     if (artifactInfo?.manifest) {
       // Determine the mode from the manifest or default to 'text'
-      const mode = artifactInfo.manifest.agent_config?.mode || 'text';
+      const mode = artifactInfo.manifest.mode || 'text';
       
       // Determine the appropriate model based on the mode
       let modelToUse: string;
@@ -1753,7 +1753,7 @@ const Edit: React.FC = () => {
         modelToUse = 'gpt-4o-realtime-preview';
       } else {
         // For text mode, use the specified model if it's in our options, otherwise default to gpt-4o-mini
-        const specifiedModel = artifactInfo.manifest.agent_config?.model;
+        const specifiedModel = artifactInfo.manifest.model;
         if (specifiedModel && TEXT_MODEL_OPTIONS.includes(specifiedModel as any)) {
           modelToUse = specifiedModel;
         } else {
@@ -1767,29 +1767,25 @@ const Edit: React.FC = () => {
         description: artifactInfo.manifest.description || '',
         welcomeMessage: artifactInfo.manifest.welcomeMessage || 'Hello, how can I assist you today?',
         
-        // Runtime Configuration
-        agent_config: {
-          // Identity
-          name: artifactInfo.manifest.name || '',
-          profile: artifactInfo.manifest.agent_config?.profile || 'AI Assistant',
-          goal: artifactInfo.manifest.agent_config?.goal || 'I am a helpful AI assistant',
-          
-          // Model Settings
-          model: modelToUse,
-          stream: artifactInfo.manifest.agent_config?.stream ?? true,
-          disableStreaming: artifactInfo.manifest.agent_config?.disableStreaming,
-          instructions: artifactInfo.manifest.description || '',
-          
-          // Voice Settings
-          voice: artifactInfo.manifest.agent_config?.voice || 'sage',
-          temperature: artifactInfo.manifest.agent_config?.temperature || 0.8,
-          
-          // Tools Configuration
-          enabled_tools: artifactInfo.manifest.agent_config?.enabled_tools,
-          
-          // Mode Selection
-          mode: mode
-        }
+        // Identity
+        profile: artifactInfo.manifest.profile || 'AI Assistant',
+        goal: artifactInfo.manifest.goal || 'I am a helpful AI assistant',
+        
+        // Model Settings
+        model: modelToUse,
+        stream: artifactInfo.manifest.stream ?? true,
+        disableStreaming: artifactInfo.manifest.disableStreaming,
+        instructions: artifactInfo.manifest.description || '',
+        
+        // Voice Settings
+        voice: artifactInfo.manifest.voice || 'sage',
+        temperature: artifactInfo.manifest.temperature || 0.8,
+        
+        // Tools Configuration
+        enabled_tools: artifactInfo.manifest.enabled_tools,
+        
+        // Mode Selection
+        mode: mode
       });
     }
   }, [artifactInfo]);
@@ -1806,11 +1802,11 @@ const Edit: React.FC = () => {
 
       // Ensure the model is correctly set based on the mode
       let modelToUse: string;
-      if (agentConfig.agent_config.mode === 'voice') {
+      if (agentConfig.mode === 'voice') {
         modelToUse = 'gpt-4o-realtime-preview';
       } else {
         // For text mode, use the specified model if it's in our options, otherwise default to gpt-4o-mini
-        const specifiedModel = agentConfig.agent_config.model;
+        const specifiedModel = agentConfig.model;
         if (specifiedModel && TEXT_MODEL_OPTIONS.includes(specifiedModel as any)) {
           modelToUse = specifiedModel;
         } else {
@@ -1825,29 +1821,25 @@ const Edit: React.FC = () => {
         description: agentConfig.description,
         welcomeMessage: agentConfig.welcomeMessage,
         
-        // Runtime Configuration
-        agent_config: {
-          // Identity
-          name: agentConfig.name,
-          profile: agentConfig.agent_config.profile,
-          goal: agentConfig.agent_config.goal,
-          
-          // Model Settings
-          model: modelToUse,
-          stream: agentConfig.agent_config.stream,
-          disableStreaming: agentConfig.agent_config.disableStreaming,
-          instructions: agentConfig.description,
-
-          // Voice Settings
-          voice: agentConfig.agent_config.voice,
-          temperature: agentConfig.agent_config.temperature,
-
-          // Tools Configuration
-          enabled_tools: agentConfig.agent_config.enabled_tools,
-          
-          // Mode Selection
-          mode: agentConfig.agent_config.mode || 'text'
-        }
+        // Identity
+        profile: agentConfig.profile,
+        goal: agentConfig.goal,
+        
+        // Model Settings
+        model: modelToUse,
+        stream: agentConfig.stream,
+        disableStreaming: agentConfig.disableStreaming,
+        instructions: agentConfig.instructions,
+        
+        // Voice Settings
+        voice: agentConfig.voice,
+        temperature: agentConfig.temperature,
+        
+        // Tools Configuration
+        enabled_tools: agentConfig.enabled_tools,
+        
+        // Mode Selection
+        mode: agentConfig.mode || 'text'
       };
 
       await artifactManager.edit({
@@ -1888,11 +1880,7 @@ const Edit: React.FC = () => {
               value={agentConfig.name}
               onChange={(e) => setAgentConfig(prev => ({
                 ...prev,
-                name: e.target.value,
-                agent_config: {
-                  ...prev.agent_config,
-                  name: e.target.value
-                }
+                name: e.target.value
               }))}
               fullWidth
               required
@@ -1903,11 +1891,7 @@ const Edit: React.FC = () => {
               value={agentConfig.description}
               onChange={(e) => setAgentConfig(prev => ({
                 ...prev,
-                description: e.target.value,
-                agent_config: {
-                  ...prev.agent_config,
-                  instructions: e.target.value
-                }
+                description: e.target.value
               }))}
               fullWidth
               required
@@ -1934,13 +1918,10 @@ const Edit: React.FC = () => {
             <div className="space-y-4 mb-6">
               <TextField
                 label="Profile"
-                value={agentConfig.agent_config.profile}
+                value={agentConfig.profile}
                 onChange={(e) => setAgentConfig(prev => ({
                   ...prev,
-                  agent_config: {
-                    ...prev.agent_config,
-                    profile: e.target.value
-                  }
+                  profile: e.target.value
                 }))}
                 fullWidth
                 required
@@ -1949,13 +1930,10 @@ const Edit: React.FC = () => {
 
               <TextField
                 label="Goal"
-                value={agentConfig.agent_config.goal}
+                value={agentConfig.goal}
                 onChange={(e) => setAgentConfig(prev => ({
                   ...prev,
-                  agent_config: {
-                    ...prev.agent_config,
-                    goal: e.target.value
-                  }
+                  goal: e.target.value
                 }))}
                 fullWidth
                 required
@@ -1972,17 +1950,14 @@ const Edit: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel>Model</InputLabel>
                 <Select
-                  value={agentConfig.agent_config.mode === 'voice' ? 'gpt-4o-realtime-preview' : (agentConfig.agent_config.model || 'gpt-4o-mini')}
+                  value={agentConfig.mode === 'voice' ? 'gpt-4o-realtime-preview' : (agentConfig.model || 'gpt-4o-mini')}
                   onChange={(e) => setAgentConfig(prev => ({
                     ...prev,
-                    agent_config: {
-                      ...prev.agent_config,
-                      model: e.target.value
-                    }
+                    model: e.target.value
                   }))}
-                  disabled={agentConfig.agent_config.mode === 'voice'}
+                  disabled={agentConfig.mode === 'voice'}
                 >
-                  {agentConfig.agent_config.mode === 'voice' ? (
+                  {agentConfig.mode === 'voice' ? (
                     <MenuItem value="gpt-4o-realtime-preview">gpt-4o-realtime-preview</MenuItem>
                   ) : (
                     TEXT_MODEL_OPTIONS.map((model) => (
@@ -1993,7 +1968,7 @@ const Edit: React.FC = () => {
                   )}
                 </Select>
                 <FormHelperText>
-                  {agentConfig.agent_config.mode === 'voice' 
+                  {agentConfig.mode === 'voice' 
                     ? "Voice mode requires gpt-4o-realtime-preview model" 
                     : "Select the LLM model to use for text interactions"}
                 </FormHelperText>
@@ -2004,15 +1979,12 @@ const Edit: React.FC = () => {
                 <FormControlLabel
                   control={
                     <Checkbox
-                      checked={agentConfig.agent_config.stream !== false}
+                      checked={agentConfig.stream !== false}
                       onChange={(e) => setAgentConfig(prev => ({
                         ...prev,
-                        agent_config: {
-                          ...prev.agent_config,
-                          stream: e.target.checked
-                        }
+                        stream: e.target.checked
                       }))}
-                      disabled={agentConfig.agent_config.disableStreaming}
+                      disabled={agentConfig.disableStreaming}
                     />
                   }
                   label="Enable streaming responses"
@@ -2021,17 +1993,14 @@ const Edit: React.FC = () => {
                 <FormControlLabel
                   control={
                     <Checkbox
-                      checked={!!agentConfig.agent_config.disableStreaming}
+                      checked={!!agentConfig.disableStreaming}
                       onChange={(e) => {
                         const disableStreaming = e.target.checked;
                         setAgentConfig(prev => ({
                           ...prev,
-                          agent_config: {
-                            ...prev.agent_config,
-                            disableStreaming,
-                            // If disabling streaming, also set stream to false
-                            stream: disableStreaming ? false : prev.agent_config.stream
-                          }
+                          disableStreaming,
+                          // If disabling streaming, also set stream to false
+                          stream: disableStreaming ? false : prev.stream
                         }));
                       }}
                     />
@@ -2051,17 +2020,14 @@ const Edit: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel>Mode</InputLabel>
                 <Select
-                  value={agentConfig.agent_config.mode || "text"}
+                  value={agentConfig.mode || "text"}
                   onChange={(e) => {
                     const newMode = e.target.value as 'text' | 'voice';
                     setAgentConfig(prev => ({
                       ...prev,
-                      agent_config: {
-                        ...prev.agent_config,
-                        mode: newMode,
-                        // Update model based on mode
-                        model: newMode === 'voice' ? 'gpt-4o-realtime-preview' : 'gpt-4o-mini'
-                      }
+                      mode: newMode,
+                      // Update model based on mode
+                      model: newMode === 'voice' ? 'gpt-4o-realtime-preview' : 'gpt-4o-mini'
                     }));
                   }}
                 >
@@ -2070,26 +2036,23 @@ const Edit: React.FC = () => {
                 </Select>
                 <FormHelperText>
                   Choose how users will interact with this agent. Voice mode enables both text and voice interactions.
-                  {agentConfig.agent_config.mode === 'voice' && " Voice mode requires gpt-4o-realtime-preview model."}
+                  {agentConfig.mode === 'voice' && " Voice mode requires gpt-4o-realtime-preview model."}
                 </FormHelperText>
               </FormControl>
             </div>
 
             {/* Voice Settings - Only show if voice mode is selected */}
-            {(agentConfig.agent_config.mode === 'voice') && (
+            {(agentConfig.mode === 'voice') && (
               <div className="space-y-4 mb-6">
                 <h4 className="text-sm font-medium text-gray-900">Voice Settings</h4>
                 
                 <FormControl fullWidth>
                   <InputLabel>Voice</InputLabel>
                   <Select
-                    value={agentConfig.agent_config.voice || "sage"}
+                    value={agentConfig.voice || "sage"}
                     onChange={(e) => setAgentConfig(prev => ({
                       ...prev,
-                      agent_config: {
-                        ...prev.agent_config,
-                        voice: e.target.value
-                      }
+                      voice: e.target.value
                     }))}
                   >
                     {VOICE_OPTIONS.map((voice) => (
@@ -2103,13 +2066,10 @@ const Edit: React.FC = () => {
                 <TextField
                   label="Temperature"
                   type="number"
-                  value={agentConfig.agent_config.temperature || 0.8}
+                  value={agentConfig.temperature || 0.8}
                   onChange={(e) => setAgentConfig(prev => ({
                     ...prev,
-                    agent_config: {
-                      ...prev.agent_config,
-                      temperature: parseFloat(e.target.value)
-                    }
+                    temperature: parseFloat(e.target.value)
                   }))}
                   inputProps={{ min: 0, max: 1, step: 0.1 }}
                   fullWidth
@@ -2123,7 +2083,7 @@ const Edit: React.FC = () => {
               <h4 className="text-sm font-medium text-gray-900">Enabled Tools</h4>
               
               <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-[3rem]">
-                {(agentConfig.agent_config.enabled_tools || ['code_interpreter']).map((toolId) => {
+                {(agentConfig.enabled_tools || ['code_interpreter']).map((toolId) => {
                   const tool = availableTools.find(t => t.id === toolId);
                   if (!tool) return null;
                   
@@ -2133,10 +2093,7 @@ const Edit: React.FC = () => {
                       label={tool.name}
                       onDelete={() => setAgentConfig(prev => ({
                         ...prev,
-                        agent_config: {
-                          ...prev.agent_config,
-                          enabled_tools: prev.agent_config.enabled_tools?.filter(id => id !== tool.id)
-                        }
+                        enabled_tools: prev.enabled_tools?.filter(id => id !== tool.id)
                       }))}
                       className="m-1"
                     />
@@ -2152,15 +2109,12 @@ const Edit: React.FC = () => {
                     const toolId = e.target.value;
                     setAgentConfig(prev => ({
                       ...prev,
-                      agent_config: {
-                        ...prev.agent_config,
-                        enabled_tools: [...(prev.agent_config.enabled_tools || []), toolId]
-                      }
+                      enabled_tools: [...(prev.enabled_tools || []), toolId]
                     }));
                   }}
                 >
                   {availableTools
-                    .filter(tool => !(agentConfig.agent_config.enabled_tools || []).includes(tool.id))
+                    .filter(tool => !(agentConfig.enabled_tools || []).includes(tool.id))
                     .map(tool => (
                       <MenuItem key={tool.id} value={tool.id}>
                         <div>
@@ -2196,7 +2150,7 @@ const Edit: React.FC = () => {
         <LazyThebeProvider>
           <Chat 
             agentConfig={{
-              ...agentConfig.agent_config,
+              ...agentConfig,
             }}
             className="flex-1"
             showActions={true}

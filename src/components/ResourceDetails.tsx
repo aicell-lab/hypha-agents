@@ -29,7 +29,7 @@ const ResourceDetails = () => {
   const covers = selectedResource?.manifest.covers || [];
 
   // Add this variable to control button state
-  const shouldDisableChat = !selectedResource?.manifest?.agent_config;
+  const shouldDisableChat = !selectedResource?.manifest?.type?.includes('agent');
 
   useEffect(() => {
     if (id) {

@@ -12,15 +12,30 @@ interface AgentConfig {
   goal?: string;
   model?: string;
   stream?: boolean;
+  disableStreaming?: boolean;
   instructions?: string;
   welcomeMessage?: string;
+  voice?: string;
+  temperature?: number;
+  enabled_tools?: string[];
+  mode?: 'text' | 'voice';
 }
 
 interface ArtifactManifest {
   name: string;
   description: string;
-  agent_config: AgentConfig;
   welcomeMessage?: string;
+  // Flattened agent config fields
+  profile?: string;
+  goal?: string;
+  model?: string;
+  stream?: boolean;
+  disableStreaming?: boolean;
+  instructions?: string;
+  voice?: string;
+  temperature?: number;
+  enabled_tools?: string[];
+  mode?: 'text' | 'voice';
 }
 
 const ChatPage: React.FC = () => {
@@ -43,27 +58,25 @@ const ChatPage: React.FC = () => {
         });
         const manifest = artifact.manifest as ArtifactManifest;
 
-        if (manifest.agent_config) {
-          // Create the complete config object before setting state
-          const config: AgentConfig = {
-            ...manifest.agent_config, // Keep original agent config
-            name: manifest.name,
-            profile: manifest.agent_config.profile || 'AI Assistant',
-            goal: manifest.agent_config.goal || manifest.description,
-            model: manifest.agent_config.model || 'gpt-4-mini',
-            stream: manifest.agent_config.stream ?? true,
-            instructions: manifest.agent_config.instructions || manifest.description,
-            welcomeMessage: manifest.welcomeMessage
-          };
-          
-          // Only set the config once it's complete
-          setAgentConfig(config);
-          setLoading(false);
-        } else {
-          setError('This resource is not configured as an agent');
-          setLoading(false);
-          setTimeout(() => navigate('/'), 3000);
-        }
+        // Create the complete config object before setting state
+        const config: AgentConfig = {
+          name: manifest.name,
+          profile: manifest.profile || 'AI Assistant',
+          goal: manifest.goal || manifest.description,
+          model: manifest.model || 'gpt-4-mini',
+          stream: manifest.stream ?? true,
+          disableStreaming: manifest.disableStreaming,
+          instructions: manifest.instructions || manifest.description,
+          welcomeMessage: manifest.welcomeMessage,
+          voice: manifest.voice || 'sage',
+          temperature: manifest.temperature || 0.8,
+          enabled_tools: manifest.enabled_tools,
+          mode: manifest.mode || 'text'
+        };
+        
+        // Only set the config once it's complete
+        setAgentConfig(config);
+        setLoading(false);
       } catch (err) {
         console.error('Error loading agent config:', err);
         setError('Failed to load agent configuration');
@@ -72,7 +85,7 @@ const ChatPage: React.FC = () => {
     };
 
     loadAgentConfig();
-  }, [artifactManager, id, navigate]); // Only depend on these values
+  }, [artifactManager, id, navigate]);
 
   if (!isLoggedIn) {
     return (
