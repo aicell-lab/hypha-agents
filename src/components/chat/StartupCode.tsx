@@ -17,7 +17,7 @@ window.jupyterDisplayData["{outputId}"] = function(data) {{
   if (data["text/html"]) {{
     targetElement.innerHTML = data["text/html"];
     
-    // For self-contained Plotly HTML, we need to execute any scripts
+    // Execute any scripts in the HTML
     const scripts = targetElement.querySelectorAll('script');
     scripts.forEach(oldScript => {{
       if (!oldScript.parentNode) return;
@@ -33,38 +33,47 @@ window.jupyterDisplayData["{outputId}"] = function(data) {{
     img.src = "data:image/png;base64," + data["image/png"];
     targetElement.appendChild(img);
   }} else if (data["application/vnd.plotly.v1+json"]) {{
-    const plotlyDiv = document.createElement("div");
-    plotlyDiv.className = "plotly-output";
-    plotlyDiv.setAttribute("data-plotly", "true");
-    plotlyDiv.style.width = "100%";
-    plotlyDiv.style.minHeight = "400px";
-    targetElement.appendChild(plotlyDiv);
-    
+    // For Plotly, we convert to self-contained HTML
     const plotlyData = data["application/vnd.plotly.v1+json"];
-    
-    const renderPlotly = () => {{
-      if (typeof window.Plotly !== 'undefined') {{
-        window.Plotly.newPlot(
-          plotlyDiv, 
-          plotlyData.data, 
-          plotlyData.layout || {{responsive: true}},
-          plotlyData.config || {{responsive: true}}
-        ).catch(err => {{
-          console.error('Error rendering Plotly:', err);
-          plotlyDiv.innerHTML = '<div class="error-output">Error rendering Plotly: ' + err.message + '</div>';
-        }});
-      }}
-    }};
-    
-    // Ensure Plotly is loaded before rendering
-    if (!window.Plotly) {{
-      const script = document.createElement("script");
-      script.src = "https://cdn.plot.ly/plotly-2.24.1.min.js";
-      script.onload = renderPlotly;
-      document.head.appendChild(script);
-    }} else {{
-      renderPlotly();
-    }}
+    const plotlyHTML = \`
+      <div class="plotly-figure">
+        <script>
+          (function() {{
+            const container = document.currentScript.parentElement;
+            const plotlyDiv = document.createElement('div');
+            plotlyDiv.style.width = '100%';
+            plotlyDiv.style.minHeight = '400px';
+            container.appendChild(plotlyDiv);
+
+            const renderPlot = () => {{
+              if (window.Plotly) {{
+                window.Plotly.newPlot(
+                  plotlyDiv, 
+                  \${JSON.stringify(plotlyData.data)}, 
+                  \${JSON.stringify(plotlyData.layout || {{responsive: true}})},
+                  {{
+                    responsive: true,
+                    displayModeBar: true,
+                    displaylogo: false,
+                    modeBarButtonsToRemove: ['sendDataToCloud']
+                  }}
+                ).catch(console.error);
+              }}
+            }};
+
+            if (window.Plotly) {{
+              renderPlot();
+            }} else {{
+              const script = document.createElement('script');
+              script.src = 'https://cdn.plot.ly/plotly-2.24.1.min.js';
+              script.onload = renderPlot;
+              document.head.appendChild(script);
+            }}
+          }})();
+        </script>
+      </div>
+    \`;
+    targetElement.innerHTML = plotlyHTML;
   }} else if (data["text/plain"]) {{
     const pre = document.createElement("pre");
     pre.textContent = data["text/plain"];
@@ -109,7 +118,18 @@ try:
         
         def display_plotly_figure(fig):
             """Helper function to display plotly figures"""
-            display(HTML(fig.to_html(include_plotlyjs='cdn', full_html=False)))
+            # Convert figure to self-contained HTML
+            html_str = fig.to_html(
+                include_plotlyjs='cdn',
+                full_html=False,
+                config={{
+                    'responsive': True,
+                    'displayModeBar': True,
+                    'displaylogo': False,
+                    'modeBarButtonsToRemove': ['sendDataToCloud']
+                }}
+            )
+            display(HTML(html_str))
         
         # Patch both px.Figure and go.Figure to use our display function
         px.Figure.show = display_plotly_figure

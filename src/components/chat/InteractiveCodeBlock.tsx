@@ -6,83 +6,33 @@ import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
-import Editor from '@monaco-editor/react';
-import Convert from 'ansi-to-html';
-import { ensurePlotlyLoaded, containsPlotly } from '../../utils/plotly';
+import { Editor } from '@monaco-editor/react';
+import { executeScripts } from '../../utils/script-utils';
+import { processTextOutput, processAnsiInOutputElement, outputAreaStyles } from '../../utils/ansi-utils';
+
+// Type definitions for external modules
+type MonacoEditorProps = {
+  height?: string | number;
+  language?: string;
+  value?: string;
+  onChange?: (value: string | undefined) => void;
+  onMount?: (editor: any) => void;
+  options?: {
+    minimap?: { enabled: boolean };
+    scrollBeyondLastLine?: boolean;
+    wordWrap?: 'on' | 'off';
+    lineNumbers?: 'on' | 'off';
+    renderWhitespace?: 'none' | 'boundary' | 'selection' | 'trailing' | 'all';
+    folding?: boolean;
+    [key: string]: any;
+  };
+};
 
 // Register languages
 SyntaxHighlighter.registerLanguage('python', python);
 SyntaxHighlighter.registerLanguage('typescript', typescript);
 SyntaxHighlighter.registerLanguage('bash', bash);
 SyntaxHighlighter.registerLanguage('json', json);
-
-// Create ANSI converter instance
-const ansiConverter = new Convert({
-  colors: {
-    0: '#000000',
-    1: '#e74c3c', // red
-    2: '#2ecc71', // green
-    3: '#f1c40f', // yellow
-    4: '#3498db', // blue
-    5: '#9b59b6', // magenta
-    6: '#1abc9c', // cyan
-    7: '#ecf0f1', // light gray
-    8: '#95a5a6', // dark gray
-    9: '#e74c3c', // bright red
-    10: '#2ecc71', // bright green
-    11: '#f1c40f', // bright yellow
-    12: '#3498db', // bright blue
-    13: '#9b59b6', // bright magenta
-    14: '#1abc9c', // bright cyan
-    15: '#ecf0f1'  // white
-  },
-  newline: false // We'll handle newlines separately
-});
-
-// Process text content with ANSI color codes
-const processTextOutput = (text: string): string => {
-  // Convert ANSI codes to HTML
-  const htmlWithAnsi = ansiConverter.toHtml(text);
-  
-  // Handle line breaks - keep text in a single line unless there's a newline character
-  // Filter out empty lines
-  const lines = htmlWithAnsi.split('\n').filter(line => line.trim() !== '');
-  
-  // If it's just a single line, return as-is
-  if (lines.length === 1) {
-    return `<pre class="output-line">${lines[0]}</pre>`;
-  }
-  
-  // Otherwise, create a proper multi-line output
-  return `<pre class="output-multiline">${lines.join('<br>')}</pre>`;
-};
-
-// Common output styles as a CSS string (for style tag)
-const outputAreaStyles = `
-  .output-area {
-    overflow-x: auto;
-  }
-  
-  .output-area pre, 
-  .output-area .stream-output,
-  .output-area .error-output,
-  .output-area .output-line,
-  .output-area .output-multiline {
-    font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', Menlo, Monaco, Consolas, monospace;
-    font-size: 13px;
-    line-height: 1.4;
-    padding: 0.5rem;
-    margin: 0;
-    background-color: #f8f9fa;
-    border-radius: 4px;
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-  }
-  
-  .output-area .error-output {
-    color: #e74c3c;
-  }
-`;
 
 interface InteractiveCodeBlockProps {
   code: string;
@@ -134,19 +84,11 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
   }, [initialStatus]);
 
   // Update code value when code prop changes, but only if we're not in edit mode
-  // This prevents overriding user changes when the parent re-renders
   useEffect(() => {
     if (!isEditing) {
       setCodeValue(code);
     }
   }, [code, isEditing]);
-
-  // Ensure Plotly is loaded if needed
-  useEffect(() => {
-    if (containsPlotly(codeValue)) {
-      ensurePlotlyLoaded();
-    }
-  }, [codeValue]);
 
   // Apply DOM content to output area when provided
   useEffect(() => {
@@ -155,34 +97,13 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
       if (domContent.startsWith('<pre>') || domContent.startsWith('<div>')) {
         // HTML content - apply directly
         outputRef.current.innerHTML = domContent;
+        // Execute any scripts in the content
+        executeScripts(outputRef.current);
       } else {
         // Plain text content - process for ANSI codes and line breaks
         const processedContent = processTextOutput(domContent);
         outputRef.current.innerHTML = processedContent;
       }
-      
-      // Execute scripts in the DOM content
-      const scripts = outputRef.current.querySelectorAll('script');
-      scripts.forEach(oldScript => {
-        if (!oldScript.parentNode) return;
-        
-        const newScript = document.createElement('script');
-        // Copy all attributes
-        Array.from(oldScript.attributes).forEach(attr => 
-          newScript.setAttribute(attr.name, attr.value)
-        );
-        
-        // If it has a src, just copy that
-        if (oldScript.src) {
-          newScript.src = oldScript.src;
-        } else {
-          // Otherwise, copy the inline code
-          newScript.textContent = oldScript.textContent;
-        }
-        
-        // Replace the old script with the new one
-        oldScript.parentNode.replaceChild(newScript, oldScript);
-      });
       
       // If we have DOM content and no status, set status to completed
       if (!executionStatus || executionStatus === '') {
@@ -201,66 +122,6 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
     }
   }, [executionStatus, isExecuting]);
   
-  // Function to process all text in the output element for ANSI codes
-  const processAnsiInOutputElement = (container: HTMLElement) => {
-    // Find all text nodes that might contain ANSI codes
-    const textNodes = Array.from(container.querySelectorAll('*'))
-      .filter(el => {
-        // Get elements that likely contain text with ANSI codes
-        const tagName = el.tagName.toLowerCase();
-        return (tagName === 'pre' || tagName === 'code' || tagName === 'div') &&
-          !el.classList.contains('output-line') && 
-          !el.classList.contains('output-multiline');
-      });
-    
-    // Also check direct text children of the container
-    if (container.childNodes.length > 0 && 
-        container.childNodes[0].nodeType === Node.TEXT_NODE) {
-      const text = container.textContent || '';
-      if (text.includes('[0;') || text.includes('[1;')) {
-        const processedContent = processTextOutput(text);
-        container.innerHTML = processedContent;
-        return; // We've replaced the entire container content
-      }
-    }
-    
-    // Process stream-output elements for ANSI codes
-    const streamOutputs = container.querySelectorAll('.stream-output');
-    streamOutputs.forEach(el => {
-      // Process any ANSI codes inside stream outputs
-      const text = el.textContent || '';
-      if (text.trim() === '') {
-        // If it's just empty or whitespace, hide this element
-        (el as HTMLElement).style.display = 'none';
-        return;
-      }
-      
-      if (text.includes('[0;') || text.includes('[1;') || 
-          text.includes('\u001b[') || text.includes('\\u001b[')) {
-        try {
-          // Convert ANSI to HTML
-          const processedHTML = ansiConverter.toHtml(text);
-          
-          // Filter out empty lines
-          const lines = processedHTML.split('\n').filter(line => line.trim() !== '');
-          el.innerHTML = lines.join('<br>');
-        } catch (error) {
-          console.error('Error processing ANSI codes in stream output:', error);
-        }
-      } else {
-        // For regular text without ANSI codes, still handle newlines
-        const lines = text.split('\n').filter(line => line.trim() !== '');
-        if (lines.length > 0) {
-          el.textContent = lines.join('\n');
-        } else {
-          // Hide completely empty outputs
-          (el as HTMLElement).style.display = 'none';
-        }
-      }
-    });
-    
-  };
-
   // Function to handle editor mounting
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
@@ -306,6 +167,11 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
       
       // Process ANSI codes in the output after execution completes
       processAnsiInOutputElement(outputRef.current);
+      
+      // Execute any scripts in the output
+      if (outputRef.current) {
+        executeScripts(outputRef.current);
+      }
     } catch (error) {
       console.error('Error executing code:', error);
       setExecutionStatus('Error');
@@ -406,7 +272,7 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
               height="100%"
               language={language}
               value={codeValue}
-              onChange={(value) => {
+              onChange={(value: string | undefined) => {
                 if (value !== undefined) {
                   setCodeValue(value);
                 }
@@ -419,7 +285,7 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
                 lineNumbers: 'on',
                 renderWhitespace: 'selection',
                 folding: true
-              }}
+              } as MonacoEditorProps['options']}
             />
           </div>
         ) : (

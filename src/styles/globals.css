@@ -23,50 +23,27 @@
   text-align: center;
 }
 
-/* Plotly output styles - general */
-.output-area [data-plotly],
-.output-area .plotly-output,
-.output-area .plotly-figure,
-.output-area .js-plotly-plot,
-.output-area .plotly-container,
-.output-area .plotly-container > div {
+/* Plotly output styles */
+.plotly-figure {
+  width: 100% !important;
+  margin: 1rem 0;
+  position: relative;
+}
+
+.plotly-figure > div {
   width: 100% !important;
   height: auto !important;
   min-height: 400px;
-  margin: 1rem 0;
 }
 
-/* Ensure Plotly graphs are visible */
-.output-area .plotly {
-  overflow: visible !important;
-}
-
-/* Special handling for script-based Plotly outputs */
-.output-area .plotly-container {
-  position: relative;
-  display: block;
-}
-
-.output-area .plotly-container .js-plotly-plot {
-  position: relative !important;
-}
-
-/* Ensure Plotly modebar (controls) is visible */
-.output-area .js-plotly-plot .plotly .modebar {
-  display: block !important;
+/* Ensure Plotly modebar is visible but unobtrusive */
+.js-plotly-plot .plotly .modebar {
   opacity: 0.3;
   transition: opacity 0.3s ease-in-out;
 }
 
-.output-area .js-plotly-plot .plotly .modebar:hover {
+.js-plotly-plot .plotly .modebar:hover {
   opacity: 1;
-}
-
-/* SVG elements in Plotly */
-.output-area .plotly-container svg,
-.output-area .js-plotly-plot svg {
-  overflow: visible !important;
-  max-width: 100% !important;
 }
 
 /* Pandas DataFrame styles */

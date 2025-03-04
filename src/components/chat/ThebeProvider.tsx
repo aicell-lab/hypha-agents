@@ -1,6 +1,7 @@
 import React, { useEffect, useState, createContext, useContext, useRef } from 'react';
 import getSetupCode from './StartupCode';
-import { ensurePlotlyLoaded, containsPlotly } from '../../utils/plotly';
+import { executeScripts } from '../../utils/script-utils';
+import { processTextOutput, processAnsiInOutputElement } from '../../utils/ansi-utils';
 
 // Define types for JupyterLab services
 interface KernelMessage {
@@ -385,9 +386,10 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
       const installFuture = kernel.requestExecute({
         code: `
 import micropip
-await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http'])
+await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http', 'ipywidgets'])
 import pyodide_http
 pyodide_http.patch_all()
+%matplotlib inline
 `
       });
       await installFuture.done;
@@ -702,11 +704,6 @@ print(f"{sys.version.split()[0]}")
       const outputId = `output-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       outputElement.id = outputId;
       
-      // Ensure Plotly is loaded if needed
-      if (containsPlotly(code)) {
-        await ensurePlotlyLoaded();
-      }
-      
       // Execute the setup code first
       const setupCodeStr = getSetupCode(outputId);
       const setupFuture = currentKernel.requestExecute({ code: setupCodeStr });
@@ -749,39 +746,7 @@ print(f"{sys.version.split()[0]}")
               });
               
               // Execute any scripts in the HTML
-              setTimeout(() => {
-                const scripts = div.querySelectorAll('script');
-                scripts.forEach(oldScript => {
-                  if (!oldScript.parentNode) return;
-                  
-                  const newScript = document.createElement('script');
-                  // Copy all attributes
-                  Array.from(oldScript.attributes).forEach(attr => 
-                    newScript.setAttribute(attr.name, attr.value)
-                  );
-                  
-                  // If it has a src, just copy that
-                  if (oldScript.src) {
-                    newScript.src = oldScript.src;
-                  } else {
-                    // Otherwise, copy the inline code
-                    newScript.textContent = oldScript.textContent;
-                  }
-                  
-                  // Replace the old script with the new one
-                  oldScript.parentNode.replaceChild(newScript, oldScript);
-                });
-                
-                // Check for Plotly divs that need initialization
-                const plotlyDivs = div.querySelectorAll('.plotly-graph-div');
-                if (plotlyDivs.length > 0 && typeof window.Plotly === 'undefined') {
-                  // Load Plotly using our utility
-                  ensurePlotlyLoaded().then(() => {
-                    console.log('Plotly loaded for HTML output in JS handler');
-                  });
-                }
-              }, 0);
-              
+              executeScripts(div);
               outputElement.appendChild(div);
             } else if (data['image/png']) {
               const img = document.createElement('img');
@@ -794,64 +759,6 @@ print(f"{sys.version.split()[0]}")
                 content: imgContent,
                 short_content: createShortContent(imgContent, 'img')
               });
-            } else if (data['application/vnd.plotly.v1+json']) {
-              // Handle Plotly data directly
-              const plotlyDiv = document.createElement('div');
-              plotlyDiv.className = 'plotly-output';
-              plotlyDiv.setAttribute('data-plotly', 'true');
-              plotlyDiv.style.width = '100%';
-              plotlyDiv.style.minHeight = '400px';
-              outputElement.appendChild(plotlyDiv);
-              
-              const plotlyData = data['application/vnd.plotly.v1+json'];
-              const plotlyContent = JSON.stringify(plotlyData);
-              
-              onOutput?.({
-                type: 'plotly',
-                content: plotlyContent,
-                short_content: createShortContent(plotlyContent, 'plotly')
-              });
-              
-              // Create a function to render the plot
-              const renderPlot = () => {
-                if (typeof window.Plotly !== 'undefined') {
-                  try {
-                    window.Plotly.newPlot(
-                      plotlyDiv, 
-                      plotlyData.data, 
-                      plotlyData.layout || {responsive: true},
-                      plotlyData.config || {responsive: true}
-                    );
-                  } catch (err) {
-                    console.error('Error rendering Plotly:', err);
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'error-output';
-                    errorDiv.textContent = 'Error rendering Plotly: ' + (err instanceof Error ? err.message : String(err));
-                    plotlyDiv.appendChild(errorDiv);
-                  }
-                } else {
-                  // If Plotly is not loaded yet, load it using our utility
-                  ensurePlotlyLoaded().then(() => {
-                    try {
-                      window.Plotly.newPlot(
-                        plotlyDiv, 
-                        plotlyData.data, 
-                        plotlyData.layout || {responsive: true},
-                        plotlyData.config || {responsive: true}
-                      );
-                    } catch (err) {
-                      console.error('Error rendering Plotly:', err);
-                      const errorDiv = document.createElement('div');
-                      errorDiv.className = 'error-output';
-                      errorDiv.textContent = 'Error rendering Plotly: ' + (err instanceof Error ? err.message : String(err));
-                      plotlyDiv.appendChild(errorDiv);
-                    }
-                  });
-                }
-              };
-              
-              // Render the plot after a small delay to ensure the DOM is ready
-              setTimeout(renderPlot, 100);
             } else if (data['text/plain'] && !outputElement.querySelector('.stream-output')) {
               const plainContent = data['text/plain'];
               const pre = document.createElement('pre');
@@ -870,7 +777,13 @@ print(f"{sys.version.split()[0]}")
             const errorDiv = document.createElement('pre');
             errorDiv.className = 'error-output';
             errorDiv.style.color = 'red';
-            errorDiv.textContent = errorText;
+            // parse the errorText to html
+            const htmlWithAnsi = processTextOutput(errorText);
+            // Handle line breaks - keep text in a single line unless there's a newline character
+            // Filter out empty lines
+            const lines = htmlWithAnsi.split('\n').filter((line: string) => line.trim() !== '');
+            
+            errorDiv.innerHTML = lines.join('<br>');
             outputElement.appendChild(errorDiv);
             
             onOutput?.({
@@ -900,7 +813,12 @@ print(f"{sys.version.split()[0]}")
       }
     } catch (error) {
       console.error('Error executing code:', error);
-      outputElement.innerHTML += `<pre class="error-output" style="color: red;">Error: ${error instanceof Error ? error.message : String(error)}</pre>`;
+      const errorText = error instanceof Error ? error.message : String(error);
+      // parse the errorText to html
+      const processedError = processTextOutput(errorText);
+      
+      // Add the processed error to the output element
+      outputElement.innerHTML += processedError;
       onStatus?.('Error');
       throw error;
     }
