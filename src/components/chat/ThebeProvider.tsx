@@ -2,6 +2,7 @@ import React, { useEffect, useState, createContext, useContext, useRef } from 'r
 import getSetupCode from './StartupCode';
 import { executeScripts } from '../../utils/script-utils';
 import { processTextOutput, processAnsiInOutputElement } from '../../utils/ansi-utils';
+import { useHyphaStore } from '../../store/hyphaStore';
 
 // Define types for JupyterLab services
 interface KernelMessage {
@@ -219,6 +220,7 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
   const [kernelInfo, setKernelInfo] = useState<{ pythonVersion?: string; pyodideVersion?: string }>(globalThebeState.kernelInfo);
   const [outputStore, setOutputStore] = useState<OutputStore>(globalThebeState.outputStore);
   const hasInitialized = useRef(false);
+  const { server: hyphaServer } = useHyphaStore();
 
   // Load required scripts and initialize kernel
   useEffect(() => {
@@ -380,20 +382,30 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
     }
     
     try {
-      console.log('Installing packages...');
-      // First install required packages
-      const installFuture = kernel.requestExecute({
-        code: `
+      // Only install packages if not already installed
+      if (!globalThebeState.kernelInfo.pythonVersion) {
+        console.log('Installing packages...');
+        const hyphaConfig = await getHyphaConfig();
+        // First install required packages
+        const installFuture = kernel.requestExecute({
+          code: `
 import micropip
 await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http', 'ipywidgets'])
 import pyodide_http
 pyodide_http.patch_all()
 %matplotlib inline
+import os
+os.environ['HYPHA_SERVER_URL'] = '${hyphaConfig?.serverUrl}'
+os.environ['HYPHA_WORKSPACE'] = '${hyphaConfig?.workspace}'
+os.environ['HYPHA_TOKEN'] = '${hyphaConfig?.token}'
 `
-      });
-      await installFuture.done;
+        });
+        await installFuture.done;
+      } else {
+        console.log('Packages already installed, skipping installation...');
+      }
 
-      // Then get version info
+      // Get version info
       const future = kernel.requestExecute({
         code: `
 import sys
@@ -572,6 +584,30 @@ print(f"{sys.version.split()[0]}")
         return `[SVG content stored with key: ${storeOutput(content, type)}]`;
       default:
         return `${content.substring(0, maxLength)}... [Full content stored with key: ${storeOutput(content, type)}]`;
+    }
+  };
+
+  // Function to get Hypha configuration
+  const getHyphaConfig = async () => {
+    console.log('Getting Hypha config, server:', hyphaServer);
+    
+    if (!hyphaServer) {
+      console.log('No Hypha server available');
+      return null;
+    }
+
+    try {
+      const token = await hyphaServer.generateToken();
+      const config = {
+        serverUrl: hyphaServer.config.public_base_url,
+        workspace: hyphaServer.config.workspace,
+        token: token
+      };
+      console.log('Generated Hypha config:', config);
+      return config;
+    } catch (error) {
+      console.error('Error generating Hypha config:', error);
+      return null;
     }
   };
 
