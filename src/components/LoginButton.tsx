@@ -3,7 +3,6 @@ import { useHyphaStore } from '../store/hyphaStore';
 import { UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 import { RiLoginBoxLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
-import { useHyphaContext } from '../HyphaContext';
 import { useNavigate } from 'react-router-dom';
 import { Spinner } from './Spinner';
 
@@ -34,7 +33,6 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const { client, user, connect, setUser, server } = useHyphaStore();
-  const { hyphaClient, setHyphaClient } = useHyphaContext();
   const navigate = useNavigate();
 
   // Add click outside handler to close dropdown
@@ -53,11 +51,6 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
   // Add logout handler
   const handleLogout = async () => {
     try {
-      // Disconnect from Hypha server if connected
-      if (hyphaClient) {
-        await hyphaClient.disconnect();
-        setHyphaClient(null);
-      }
 
       // Clear any auth tokens or user data from localStorage
       localStorage.removeItem('token');

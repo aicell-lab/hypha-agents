@@ -69,6 +69,7 @@ interface ArtifactInfo {
     temperature?: number;
     enabled_tools?: string[];
     mode?: 'text' | 'voice';
+    startup_script?: string;
   };
 }
 
@@ -112,6 +113,7 @@ interface AgentConfig {
   stream?: boolean;
   disableStreaming?: boolean;
   instructions?: string;
+  startup_script?: string;
 
   // Voice Settings
   voice?: string;
@@ -352,6 +354,7 @@ const Edit: React.FC = () => {
           stream: artifact.manifest?.stream,
           disableStreaming: artifact.manifest?.disableStreaming,
           instructions: artifact.manifest?.instructions,
+          startup_script: artifact.manifest?.startup_script,
           voice: artifact.manifest?.voice,
           temperature: artifact.manifest?.temperature,
           enabled_tools: artifact.manifest?.enabled_tools,
@@ -754,62 +757,33 @@ const Edit: React.FC = () => {
         {showActionBar && (
           <div className="border-b border-gray-200 bg-white">
             <div className={`p-4 ${uploadStatus?.progress !== undefined ? 'pb-0' : ''}`}>
-              <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                {/* Status section */}
-                <div className="flex-grow min-w-0">
-                  {copyProgress ? (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <span className="text-blue-600">
-                          Copying files ({copyProgress.current}/{copyProgress.total}): {copyProgress.file}
-                        </span>
-                      </div>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(copyProgress.current / copyProgress.total) * 100} 
-                        sx={{ mt: 1, height: 4, borderRadius: 2 }}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      {uploadStatus && (
-                        <div className="flex items-center gap-2">
-                          <span className={`text-base ${
-                            uploadStatus.severity === 'error' ? 'text-red-600' :
-                            uploadStatus.severity === 'success' ? 'text-green-600' :
-                            'text-blue-600'
-                          }`}>
-                            {uploadStatus.message}
-                          </span>
-                        </div>
-                      )}
-                      {uploadStatus?.progress !== undefined && (
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  {uploadStatus && (
+                    <div className="text-sm text-gray-600">
+                      {uploadStatus.message}
+                      {uploadStatus.progress !== undefined && (
                         <LinearProgress 
                           variant="determinate" 
                           value={uploadStatus.progress} 
-                          sx={{ mt: 1, height: 4, borderRadius: 2 }}
+                          className="mt-2"
                         />
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
-
-                {/* Buttons section */}
-                <div className="flex gap-2 flex-shrink-0">
-                  {selectedTab === 'files' ? (
-                    renderActionButtons()
-                  ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleTabChange('review')}
-                        className="px-6 py-2 rounded-md font-medium transition-colors whitespace-nowrap flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Review & Publish
-                      </button>
-                    </div>
+                <div className="flex gap-2">
+                  {selectedTab === 'files' && renderActionButtons()}
+                  {selectedTab === 'config' && (
+                    <button
+                      onClick={handleSaveConfig}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                      </svg>
+                      Save Configuration
+                    </button>
                   )}
                 </div>
               </div>
@@ -820,7 +794,318 @@ const Edit: React.FC = () => {
         {/* Main content */}
         <div className="flex-1 overflow-y-auto">
           {selectedTab === 'config' ? (
-            renderConfig()
+            <div className="p-6">
+              <div className="max-w-3xl mx-auto space-y-6">
+                <h2 className="text-2xl font-bold text-gray-900">Agent Configuration</h2>
+                
+                <div className="space-y-6">
+                  {/* Basic Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+                    
+                    <TextField
+                      label="Agent Name"
+                      value={agentConfig.name}
+                      onChange={(e) => setAgentConfig(prev => ({
+                        ...prev,
+                        name: e.target.value
+                      }))}
+                      fullWidth
+                      required
+                    />
+
+                    <TextField
+                      label="Description"
+                      value={agentConfig.description}
+                      onChange={(e) => setAgentConfig(prev => ({
+                        ...prev,
+                        description: e.target.value
+                      }))}
+                      fullWidth
+                      required
+                      helperText="Describe the agent's purpose and behavior"
+                    />
+
+                    <TextField
+                      label="Welcome Message"
+                      value={agentConfig.welcomeMessage}
+                      onChange={(e) => setAgentConfig(prev => ({
+                        ...prev,
+                        welcomeMessage: e.target.value
+                      }))}
+                      fullWidth
+                      helperText="Message displayed when starting a conversation with the agent"
+                    />
+                  </div>
+
+                  {/* Runtime Configuration */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Runtime Configuration</h3>
+                    
+                    {/* Identity */}
+                    <div className="space-y-4 mb-6">
+                      <TextField
+                        label="Profile"
+                        value={agentConfig.profile}
+                        onChange={(e) => setAgentConfig(prev => ({
+                          ...prev,
+                          profile: e.target.value
+                        }))}
+                        fullWidth
+                        required
+                        helperText="Define the agent's role and expertise"
+                      />
+
+                      <TextField
+                        label="Goal"
+                        value={agentConfig.goal}
+                        onChange={(e) => setAgentConfig(prev => ({
+                          ...prev,
+                          goal: e.target.value
+                        }))}
+                        fullWidth
+                        required
+                        helperText="Define the agent's primary objective in a single line"
+                      />
+
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium text-gray-900">Instructions</h4>
+                        <Editor
+                          height="200px"
+                          language="markdown"
+                          theme="vs-light"
+                          value={agentConfig.instructions || ''}
+                          onChange={(value: string | undefined) => setAgentConfig(prev => ({
+                            ...prev,
+                            instructions: value || ''
+                          }))}
+                          options={{
+                            minimap: { enabled: false },
+                            scrollBeyondLastLine: false,
+                            wordWrap: 'on',
+                            wrappingIndent: 'indent',
+                            lineNumbers: 'off'
+                          }}
+                        />
+                        <FormHelperText>
+                          Detailed instructions for the agent's behavior and capabilities in markdown format
+                        </FormHelperText>
+                      </div>
+
+                      <TextField
+                        label="Startup Script"
+                        value={agentConfig.startup_script || ''}
+                        onChange={(e) => setAgentConfig(prev => ({
+                          ...prev,
+                          startup_script: e.target.value
+                        }))}
+                        multiline
+                        rows={4}
+                        fullWidth
+                        helperText="Python code that will be executed automatically when starting a chat session"
+                        placeholder={`# Example:
+import numpy as np
+import pandas as pd
+
+# Set up custom functions
+def my_helper_function():
+    return "Hello from helper function!"
+
+# Initialize variables
+my_global_var = 42`}
+                      />
+                    </div>
+
+                    {/* Model Settings */}
+                    <div className="space-y-4 mb-6">
+                      <h4 className="text-sm font-medium text-gray-900">Model Settings</h4>
+                      
+                      <FormControl fullWidth>
+                        <InputLabel>Model</InputLabel>
+                        <Select
+                          value={agentConfig.mode === 'voice' ? 'gpt-4o-realtime-preview' : (agentConfig.model || 'gpt-4o-mini')}
+                          onChange={(e) => setAgentConfig(prev => ({
+                            ...prev,
+                            model: e.target.value
+                          }))}
+                          disabled={agentConfig.mode === 'voice'}
+                        >
+                          {agentConfig.mode === 'voice' ? (
+                            <MenuItem value="gpt-4o-realtime-preview">gpt-4o-realtime-preview</MenuItem>
+                          ) : (
+                            TEXT_MODEL_OPTIONS.map((model) => (
+                              <MenuItem key={model} value={model}>
+                                {model}
+                              </MenuItem>
+                            ))
+                          )}
+                        </Select>
+                        <FormHelperText>
+                          {agentConfig.mode === 'voice' 
+                            ? "Voice mode requires gpt-4o-realtime-preview model" 
+                            : "Select the LLM model to use for text interactions"}
+                        </FormHelperText>
+                      </FormControl>
+
+                      {/* Streaming options */}
+                      <div className="space-y-2">
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={agentConfig.stream !== false}
+                              onChange={(e) => setAgentConfig(prev => ({
+                                ...prev,
+                                stream: e.target.checked
+                              }))}
+                              disabled={agentConfig.disableStreaming}
+                            />
+                          }
+                          label="Enable streaming responses"
+                        />
+                        
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={!!agentConfig.disableStreaming}
+                              onChange={(e) => {
+                                const disableStreaming = e.target.checked;
+                                setAgentConfig(prev => ({
+                                  ...prev,
+                                  disableStreaming,
+                                  // If disabling streaming, also set stream to false
+                                  stream: disableStreaming ? false : prev.stream
+                                }));
+                              }}
+                            />
+                          }
+                          label="Disable streaming (for models that don't support it)"
+                        />
+                        <FormHelperText>
+                          Some models don't support streaming. Check this option if you're experiencing issues with streaming responses.
+                        </FormHelperText>
+                      </div>
+                    </div>
+
+                    {/* Mode Selection */}
+                    <div className="space-y-4 mb-6">
+                      <h4 className="text-sm font-medium text-gray-900">Interaction Mode</h4>
+                      
+                      <FormControl fullWidth>
+                        <InputLabel>Mode</InputLabel>
+                        <Select
+                          value={agentConfig.mode || "text"}
+                          onChange={(e) => {
+                            const newMode = e.target.value as 'text' | 'voice';
+                            setAgentConfig(prev => ({
+                              ...prev,
+                              mode: newMode,
+                              // Update model based on mode
+                              model: newMode === 'voice' ? 'gpt-4o-realtime-preview' : 'gpt-4o-mini'
+                            }));
+                          }}
+                        >
+                          <MenuItem value="text">Text Only</MenuItem>
+                          <MenuItem value="voice">Voice Enabled</MenuItem>
+                        </Select>
+                        <FormHelperText>
+                          Choose how users will interact with this agent. Voice mode enables both text and voice interactions.
+                          {agentConfig.mode === 'voice' && " Voice mode requires gpt-4o-realtime-preview model."}
+                        </FormHelperText>
+                      </FormControl>
+                    </div>
+
+                    {/* Voice Settings - Only show if voice mode is selected */}
+                    {(agentConfig.mode === 'voice') && (
+                      <div className="space-y-4 mb-6">
+                        <h4 className="text-sm font-medium text-gray-900">Voice Settings</h4>
+                        
+                        <FormControl fullWidth>
+                          <InputLabel>Voice</InputLabel>
+                          <Select
+                            value={agentConfig.voice || "sage"}
+                            onChange={(e) => setAgentConfig(prev => ({
+                              ...prev,
+                              voice: e.target.value
+                            }))}
+                          >
+                            {VOICE_OPTIONS.map((voice) => (
+                              <MenuItem key={voice} value={voice}>
+                                {voice.charAt(0).toUpperCase() + voice.slice(1)}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+
+                        <TextField
+                          label="Temperature"
+                          type="number"
+                          value={agentConfig.temperature || 0.8}
+                          onChange={(e) => setAgentConfig(prev => ({
+                            ...prev,
+                            temperature: parseFloat(e.target.value)
+                          }))}
+                          inputProps={{ min: 0, max: 1, step: 0.1 }}
+                          fullWidth
+                          helperText="Controls randomness in responses (0.0 to 1.0)"
+                        />
+                      </div>
+                    )}
+
+                    {/* Tools Configuration */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-gray-900">Enabled Tools</h4>
+                      
+                      <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-[3rem]">
+                        {(agentConfig.enabled_tools || ['code_interpreter']).map((toolId) => {
+                          const tool = availableTools.find(t => t.id === toolId);
+                          if (!tool) return null;
+                          
+                          return (
+                            <Chip
+                              key={tool.id}
+                              label={tool.name}
+                              onDelete={() => setAgentConfig(prev => ({
+                                ...prev,
+                                enabled_tools: prev.enabled_tools?.filter(id => id !== tool.id)
+                              }))}
+                              className="m-1"
+                            />
+                          );
+                        })}
+                      </div>
+
+                      <FormControl fullWidth>
+                        <InputLabel>Add Tool</InputLabel>
+                        <Select
+                          value=""
+                          onChange={(e) => {
+                            const toolId = e.target.value;
+                            setAgentConfig(prev => ({
+                              ...prev,
+                              enabled_tools: [...(prev.enabled_tools || []), toolId]
+                            }));
+                          }}
+                        >
+                          {availableTools
+                            .filter(tool => !(agentConfig.enabled_tools || []).includes(tool.id))
+                            .map(tool => (
+                              <MenuItem key={tool.id} value={tool.id}>
+                                <div>
+                                  <div className="font-medium">{tool.name}</div>
+                                  <div className="text-sm text-gray-500">{tool.description}</div>
+                                </div>
+                              </MenuItem>
+                            ))
+                          }
+                        </Select>
+                      </FormControl>
+                    </div>
+                  </div>
+
+                  {/* Remove the save button div since it's now in the action bar */}
+                </div>
+              </div>
+            </div>
           ) : selectedTab === 'review' ? (
             <div className="h-full px-6 py-4">
               {/* Preview Section with integrated admin actions */}
@@ -857,6 +1142,8 @@ const Edit: React.FC = () => {
                       </svg>
                       Delete
                     </button>
+
+                    
                   </div>
                 </div>
                 
@@ -962,24 +1249,7 @@ const Edit: React.FC = () => {
             </svg>
             Start Chat
           </button>
-          {/* Add Review & Publish button only when in staging mode */}
-          {isStaged && (
-            <button
-              onClick={() => handleTabChange('review')}
-              disabled={shouldDisableActions}
-              className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
-                ${shouldDisableActions
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : selectedTab === 'review'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : 'bg-white text-gray-700 border hover:bg-gray-50'}`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Review & Publish
-            </button>
-          )}
+          
         </div>
       </>
     );
@@ -1776,6 +2046,7 @@ const Edit: React.FC = () => {
         stream: artifactInfo.manifest.stream ?? true,
         disableStreaming: artifactInfo.manifest.disableStreaming,
         instructions: artifactInfo.manifest.instructions || '',
+        startup_script: artifactInfo.manifest.startup_script || '',
         
         // Voice Settings
         voice: artifactInfo.manifest.voice || 'sage',
@@ -1830,6 +2101,7 @@ const Edit: React.FC = () => {
         stream: agentConfig.stream,
         disableStreaming: agentConfig.disableStreaming,
         instructions: agentConfig.instructions,
+        startup_script: agentConfig.startup_script,
         
         // Voice Settings
         voice: agentConfig.voice,
@@ -1946,7 +2218,7 @@ const Edit: React.FC = () => {
                   height="200px"
                   language="markdown"
                   theme="vs-light"
-                  value={agentConfig.instructions}
+                  value={agentConfig.instructions || ''}
                   onChange={(value: string | undefined) => setAgentConfig(prev => ({
                     ...prev,
                     instructions: value || ''
@@ -1963,6 +2235,29 @@ const Edit: React.FC = () => {
                   Detailed instructions for the agent's behavior and capabilities in markdown format
                 </FormHelperText>
               </div>
+
+              <TextField
+                label="Startup Script"
+                value={agentConfig.startup_script || ''}
+                onChange={(e) => setAgentConfig(prev => ({
+                  ...prev,
+                  startup_script: e.target.value
+                }))}
+                multiline
+                rows={4}
+                fullWidth
+                helperText="Python code that will be executed automatically when starting a chat session"
+                placeholder={`# Example:
+import numpy as np
+import pandas as pd
+
+# Set up custom functions
+def my_helper_function():
+    return "Hello from helper function!"
+
+# Initialize variables
+my_global_var = 42`}
+              />
             </div>
 
             {/* Model Settings */}
@@ -2151,15 +2446,7 @@ const Edit: React.FC = () => {
             </div>
           </div>
 
-          {/* Save button */}
-          <div className="flex justify-end">
-            <button
-              onClick={handleSaveConfig}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Save Configuration
-            </button>
-          </div>
+          {/* Remove the save button div since it's now in the action bar */}
         </div>
       </div>
     </div>

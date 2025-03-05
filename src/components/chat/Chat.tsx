@@ -39,6 +39,7 @@ interface ChatProps {
     stream?: boolean;
     disableStreaming?: boolean;
     instructions?: string;
+    startup_script?: string;
     welcomeMessage?: string;
     voice?: string;
     temperature?: number;
@@ -472,6 +473,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   const [isTyping, setIsTyping] = useState(false);
   const [schemaAgents, setSchemaAgents] = useState<any>(null);
   const [hasIncomingVoice, setHasIncomingVoice] = useState(false);
+  const [hasExecutedStartup, setHasExecutedStartup] = useState(false);
   
   // Create a ref to track if the component is mounted
   const isMountedRef = useRef(false);
@@ -758,9 +760,47 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   // Voice button handlers
   const [isConnecting, setIsConnecting] = useState(false);
   
+  // Execute startup script if provided
+  const executeStartupScript = async () => {
+    if (!agentConfig.startup_script || hasExecutedStartup) return;
+    
+    console.log('Preparing to execute startup script...');
+    
+    // Wait for Thebe to be ready
+    if (!isThebeReady) {
+      console.log('Waiting for Thebe to be ready...');
+      return; // Will be called again when Thebe is ready via the useEffect
+    }
+
+    console.log('Executing startup script...');
+    try {
+      setHasExecutedStartup(true); // Mark as executed before running to prevent concurrent runs
+      await executeCodeWithDOMOutput(agentConfig.startup_script, document.createElement('div'), {
+        onStatus: (status) => {
+          console.log('Startup script execution status:', status);
+          if (status === 'Error') {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: [{
+                type: 'markdown',
+                content: '⚠️ Error executing startup script. The chat will continue, but some functionality may be limited.'
+              }]
+            }]);
+          }
+        }
+      });
+      console.log('Startup script executed successfully');
+    } catch (error) {
+      console.error('Error executing startup script:', error);
+      setHasExecutedStartup(false); // Reset on error to allow retry
+    }
+  };
+
+
   const handleStartVoiceChat = useCallback(async () => {
     setIsConnecting(true);
     try {
+      // Start the chat session
       await startChat({
         onItemCreated: handleItemCreated,
         instructions: composeInstructions(),
@@ -774,7 +814,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     } finally {
       setIsConnecting(false);
     }
-  }, [startChat, handleItemCreated, composeInstructions, agentConfig.voice, agentConfig.temperature, tools]);
+  }, [startChat, handleItemCreated, composeInstructions, agentConfig.voice, agentConfig.temperature, agentConfig.startup_script, tools, executeCodeWithDOMOutput]);
 
   const handleStopVoiceChat = useCallback(async () => {
     try {
@@ -792,27 +832,38 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     }
   }, [isPaused, resumeChat, pauseChat]);
 
+
   // Auto-start and auto-stop text mode chat
   useEffect(() => {
     // Set mounted flag
     isMountedRef.current = true;
-    
-    // Only auto-start for text mode, not voice mode
-    if (!useVoiceBasedOnConfig && schemaAgents && isThebeReady && isMountedRef.current) {
-      console.log('Auto-starting text mode chat');
-      
-      // Start the chat session
-      startChat({
-        onItemCreated: handleItemCreated,
-        instructions: composeInstructions(),
-        temperature: agentConfig.temperature || 0.7,
-        tools: tools,
-        model: agentConfig.model || 'gpt-4o-mini',
-        disableStreaming: agentConfig.disableStreaming
-      }).catch(error => {
-        console.error('Failed to auto-start text chat:', error);
-      });
-    }
+
+    const initializeChat = async () => {
+      // Execute startup script when Thebe is ready
+      if (isThebeReady && isMountedRef.current && !hasExecutedStartup) {
+        await executeStartupScript();
+      }
+
+      // Only auto-start for text mode, not voice mode
+      if (!useVoiceBasedOnConfig && schemaAgents && isThebeReady && isMountedRef.current) {
+        console.log('Auto-starting text mode chat');
+        // Start the chat session
+        try {
+          await startChat({
+            onItemCreated: handleItemCreated,
+            instructions: composeInstructions(),
+            temperature: agentConfig.temperature || 0.7,
+            tools: tools,
+            model: agentConfig.model || 'gpt-4o-mini',
+            disableStreaming: agentConfig.disableStreaming
+          });
+        } catch (error) {
+          console.error('Failed to auto-start text chat:', error);
+        }
+      }
+    };
+
+    initializeChat();
     
     // Clean up when component unmounts
     return () => {
@@ -826,7 +877,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
         });
       }
     };
-  }, [useVoiceBasedOnConfig, schemaAgents, isThebeReady, startChat, stopChat, handleItemCreated, composeInstructions, tools, agentConfig.temperature, agentConfig.model, agentConfig.disableStreaming]);
+  }, [useVoiceBasedOnConfig, schemaAgents, isThebeReady, startChat, stopChat, handleItemCreated, composeInstructions, tools, agentConfig.temperature, agentConfig.model, agentConfig.disableStreaming, hasExecutedStartup]);
 
   // Render voice button component
   const renderVoiceButton = useCallback(() => {
