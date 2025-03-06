@@ -8,7 +8,7 @@ version = "0.1.0"
 authors = [
     {name = "Wei Ouyang", email = "oeway007@gmail.com"},
 ]
-description = "Elia Platform Backend Engine for LLM Services and Tool Runtime"
+description = "Hypha Platform Backend Engine for LLM Services and Tool Runtime"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [

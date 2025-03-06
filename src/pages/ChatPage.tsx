@@ -14,6 +14,7 @@ interface AgentConfig {
   stream?: boolean;
   disableStreaming?: boolean;
   instructions?: string;
+  startup_script?: string;
   welcomeMessage?: string;
   voice?: string;
   temperature?: number;
@@ -32,6 +33,7 @@ interface ArtifactManifest {
   stream?: boolean;
   disableStreaming?: boolean;
   instructions?: string;
+  startup_script?: string;
   voice?: string;
   temperature?: number;
   enabled_tools?: string[];
@@ -67,6 +69,7 @@ const ChatPage: React.FC = () => {
           stream: manifest.stream ?? true,
           disableStreaming: manifest.disableStreaming,
           instructions: manifest.instructions,
+          startup_script: manifest.startup_script,
           welcomeMessage: manifest.welcomeMessage,
           voice: manifest.voice || 'sage',
           temperature: manifest.temperature || 0.8,

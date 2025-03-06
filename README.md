@@ -1,10 +1,10 @@
-# Elia Platform
+# Hypha Platform
 
 An enterprise-grade platform for building and deploying customizable AI agents specializing in telecom applications.
 
 ## 🎯 Overview
 
-Elia Platform is a comprehensive solution for creating, managing, and deploying AI agents with deep telecom domain expertise. The platform provides:
+Hypha Platform is a comprehensive solution for creating, managing, and deploying AI agents with deep telecom domain expertise. The platform provides:
 
 - 🤖 **Customizable AI Agents**: Build specialized agents with telecom domain knowledge
 - 📚 **Knowledge Integration**: Upload and manage domain-specific knowledge bases
@@ -121,12 +121,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-Made with ❤️ by the Elia Platform Team
+Made with ❤️ by the Hypha Platform Team
 </div>
 
 # Elia Engine
 
-Backend services for LLM and tool execution runtime for the Elia Platform.
+Backend services for LLM and tool execution runtime for the Hypha Platform.
 
 ## Configuration
 
@@ -216,5 +216,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-Made with ❤️ by the Elia Platform Team
+Made with ❤️ by the Hypha Platform Team
 </div>

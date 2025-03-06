@@ -61,162 +61,24 @@ const defaultInitialMessages: Message[] = [
     content: [
       {
         type: 'markdown',
-        content: `# Welcome to the BioImage Analysis Demo
+        content: `# Welcome to REEF Imaging Farm Live Demo 🌟
 
-Let me show you some examples of what you can do with the code execution feature for bioimage analysis.
+I'm your AI assistant, ready to demonstrate the power of Autonomous AI Agents in bioimage analysis and data management.
 
-## Basic Examples
-
-Here's a simple calculation that might be useful for pixel measurements:
-`
-      },
-      {
-        type: 'code_execution',
-        content: `x = 10
-y = 20
-print(f"{x} + {y} = {x + y}")`,
-        attrs: {
-          language: 'python'
-        }
-      },
-      {
-        type: 'markdown',
-        content: `And here's how to work with pixel intensity values in a region of interest:`
-      },
-      {
-        type: 'code_execution',
-        content: `numbers = [1, 2, 3, 4, 5]
-squared = [n**2 for n in numbers]
-print("Original:", numbers)
-print("Squared:", squared)`,
-        attrs: {
-          language: 'python'
-        }
-      },
-      {
-        type: 'markdown',
-        content: `## Image Visualization
-
-You can create beautiful plots to visualize image data with matplotlib:`
-      },
-      {
-        type: 'code_execution',
-        content: `import matplotlib.pyplot as plt
-import numpy as np
-
-# Create sine wave (similar to intensity profile)
-x = np.linspace(0, 10, 100)
-y = np.sin(x)
-plt.plot(x, y, 'b-', label='Intensity Profile 1')
-
-# Add cosine wave (second intensity profile)
-y2 = np.cos(x)
-plt.plot(x, y2, 'r--', label='Intensity Profile 2')
-
-plt.title('Intensity Profiles Comparison')
-plt.xlabel('Distance (pixels)')
-plt.ylabel('Intensity')
-plt.grid(True)
-plt.legend()
-plt.show()`,
-        attrs: {
-          language: 'python'
-        }
-      },
-      {
-        type: 'markdown',
-        content: `Or use plotly for interactive visualization of cell measurements:`
-      },
-      {
-        type: 'code_execution',
-        content: `import plotly.express as px
-import numpy as np
-import pandas as pd
-
-# Create sample data (simulating cell measurements)
-np.random.seed(42)
-data = {
-    'cell_type': ['Type A']*100 + ['Type B']*100,
-    'fluorescence_intensity': np.concatenate([
-        np.random.normal(0, 1, 100),
-        np.random.normal(2, 1.5, 100)
-    ])
-}
-df = pd.DataFrame(data)
-
-# Create interactive histogram
-fig = px.histogram(df, x='fluorescence_intensity', color='cell_type', 
-                  marginal='box', 
-                  title='Fluorescence Intensity Distribution by Cell Type')
-fig.show()`,
-        attrs: {
-          language: 'python'
-        }
-      },
-      {
-        type: 'markdown',
-        content: `## Working with Bioimage Data
-
-Here's how to analyze experimental results with pandas:`
-      },
-      {
-        type: 'code_execution',
-        content: `import pandas as pd
-# Create a sample dataset of cell measurements
-data = {
-    'cell_id': ['Cell_1', 'Cell_2', 'Cell_3', 'Cell_4', 'Cell_5'],
-    'area_μm2': [125, 130, 135, 128, 122],
-    'treatment': ['Control', 'Treatment A', 'Control', 'Treatment B', 'Treatment A'],
-    'intensity': [95, 80, 85, 92, 88]
-}
-df = pd.DataFrame(data)
-
-# Basic statistics
-print("Dataset Overview:")
-print(df)
-print("\\nSummary Statistics:")
-print(df.describe())
-
-# Group analysis
-print("\\nAverage intensity by area group:")
-df['area_group'] = pd.cut(df['area_μm2'], bins=[120, 125, 130, 135])
-print(df.groupby('area_group')['intensity'].mean())`,
-        attrs: {
-          language: 'python'
-        }
-      },
-      {
-        type: 'markdown',
-        content: `## Interactive Widgets
-
-You can create interactive widgets to explore your bioimage data:`
+## Live View of REEF Farm 📸
+Let me show you the real-time view of our REEF farm setup:`
       },
       {
         type: 'code_execution',
         content: `from IPython.display import HTML
 
-html_content = """
-<div style="padding: 20px; background: #f0f0f0; border-radius: 8px;">
-    <h2 style="color: #2c5282;">BioImage Analysis Dashboard</h2>
-    <p style="color: #4a5568;">This is a custom interactive widget for exploring cell data!</p>
-    <button onclick="alert('Cell data loaded successfully!')" 
-            style="background: #4299e1; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">
-        Load Sample Data
-    </button>
-</div>
-"""
-
-HTML(html_content)`,
+# Display live webcam feed
+HTML('<img src="http://reef.aicell.io:8002/video_feed" width="50%" style="border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">')`,
         attrs: {
           language: 'python'
         }
       },
-      {
-        type: 'markdown',
-        content: `Feel free to try these examples by clicking the "Run" button on any code block. You can also collapse/expand the code blocks using the arrow icon.
-
-Each code block is independent and can be executed separately. Try modifying the code to experiment with different bioimage analysis techniques or create your own examples!`
-      }
+      
     ]
   }
 ];
@@ -344,11 +206,11 @@ Note: Output is visible in UI. First comment used as block title.`,
             if (hasDOMOutput) {
               console.log('DOM output is included in the results');
             }
-            
+            console.log('====> execution complete', shortOutput);
             // Return the short output for the LLM
             return shortOutput;
           } catch (error) {
-            console.error('Error in runCodeTool:', error);
+            console.error('Error in code execution:', error);
             return `Error executing code: ${error instanceof Error ? error.message : String(error)}`;
           }
         }
@@ -398,7 +260,7 @@ This will stop the voice recording and close the connection.`,
       };
 
       // Register both tools
-      registerTools([runCodeTool, shutdownTool]);
+      registerTools([runCodeTool]); // shutdownTool
     }
   }, [isThebeReady, schemaAgents, executeCode, executeCodeWithDOMOutput, registerTools, stopChat, updateLastAssistantMessage, setMessages]);
 };
@@ -438,7 +300,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     error: modeError, 
     status,
     sendText,
-    streamingText // Get streamingText from the mode provider
+    streamingText
   } = useVoiceBasedOnConfig ? voiceMode : textMode;
   
   const { tools } = useTools();
@@ -474,6 +336,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   const [schemaAgents, setSchemaAgents] = useState<any>(null);
   const [hasIncomingVoice, setHasIncomingVoice] = useState(false);
   const [hasExecutedStartup, setHasExecutedStartup] = useState(false);
+  const [startupError, setStartupError] = useState<string | null>(null);
   
   // Create a ref to track if the component is mounted
   const isMountedRef = useRef(false);
@@ -761,24 +624,30 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   const [isConnecting, setIsConnecting] = useState(false);
   
   // Execute startup script if provided
-  const executeStartupScript = async () => {
-    if (!agentConfig.startup_script || hasExecutedStartup) return;
+  const executeStartupScript = useCallback(async () => {
+    if (!agentConfig.startup_script) {
+      console.log('No startup script provided');
+      return;
+    }
     
-    console.log('Preparing to execute startup script...');
-    
-    // Wait for Thebe to be ready
     if (!isThebeReady) {
-      console.log('Waiting for Thebe to be ready...');
-      return; // Will be called again when Thebe is ready via the useEffect
+      console.log('Thebe not ready yet, cannot execute startup script');
+      return;
     }
 
+    if (hasExecutedStartup) {
+      console.log('Startup script already executed');
+      return;
+    }
+    
     console.log('Executing startup script...');
     try {
-      setHasExecutedStartup(true); // Mark as executed before running to prevent concurrent runs
-      await executeCodeWithDOMOutput(agentConfig.startup_script, document.createElement('div'), {
+      const outputElement = document.createElement('div');
+      await executeCodeWithDOMOutput(agentConfig.startup_script, outputElement, {
         onStatus: (status) => {
           console.log('Startup script execution status:', status);
           if (status === 'Error') {
+            setStartupError('Error executing startup script. The chat will continue, but some functionality may be limited.');
             setMessages(prev => [...prev, {
               role: 'assistant',
               content: [{
@@ -786,16 +655,22 @@ const ChatContent: React.FC<ChatProps> = (props) => {
                 content: '⚠️ Error executing startup script. The chat will continue, but some functionality may be limited.'
               }]
             }]);
+            // Don't set hasExecutedStartup on error to allow retry
+            return;
+          }
+          if (status === 'Completed') {
+            setHasExecutedStartup(true); // Only mark as executed after successful completion
+            setStartupError(null);
+            console.log('Startup script executed successfully');
           }
         }
       });
-      console.log('Startup script executed successfully');
     } catch (error) {
       console.error('Error executing startup script:', error);
-      setHasExecutedStartup(false); // Reset on error to allow retry
+      setStartupError(error instanceof Error ? error.message : 'Unknown error executing startup script');
+      // Don't set hasExecutedStartup on error to allow retry
     }
-  };
-
+  }, [agentConfig.startup_script, hasExecutedStartup, isThebeReady, executeCodeWithDOMOutput]);
 
   const handleStartVoiceChat = useCallback(async () => {
     setIsConnecting(true);
@@ -814,7 +689,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     } finally {
       setIsConnecting(false);
     }
-  }, [startChat, handleItemCreated, composeInstructions, agentConfig.voice, agentConfig.temperature, agentConfig.startup_script, tools, executeCodeWithDOMOutput]);
+  }, [startChat, handleItemCreated, composeInstructions, agentConfig.voice, agentConfig.temperature, agentConfig.model, tools]);
 
   const handleStopVoiceChat = useCallback(async () => {
     try {
@@ -832,20 +707,33 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     }
   }, [isPaused, resumeChat, pauseChat]);
 
-
   // Auto-start and auto-stop text mode chat
   useEffect(() => {
     // Set mounted flag
     isMountedRef.current = true;
 
     const initializeChat = async () => {
+      // Wait for Thebe to be ready before proceeding
+      if (!isThebeReady || !isMountedRef.current) {
+        console.log('Waiting for Thebe to be ready...');
+        return;
+      }
+
+      console.log('Initializing chat with Thebe ready state:', {
+        isThebeReady,
+        hasExecutedStartup,
+        hasStartupScript: !!agentConfig.startup_script,
+        startupError
+      });
+
       // Execute startup script when Thebe is ready
-      if (isThebeReady && isMountedRef.current && !hasExecutedStartup) {
+      if (agentConfig.startup_script && !hasExecutedStartup && !startupError) {
+        console.log('Attempting to execute startup script...');
         await executeStartupScript();
       }
 
       // Only auto-start for text mode, not voice mode
-      if (!useVoiceBasedOnConfig && schemaAgents && isThebeReady && isMountedRef.current) {
+      if (!useVoiceBasedOnConfig && schemaAgents && isMountedRef.current) {
         console.log('Auto-starting text mode chat');
         // Start the chat session
         try {
@@ -877,7 +765,23 @@ const ChatContent: React.FC<ChatProps> = (props) => {
         });
       }
     };
-  }, [useVoiceBasedOnConfig, schemaAgents, isThebeReady, startChat, stopChat, handleItemCreated, composeInstructions, tools, agentConfig.temperature, agentConfig.model, agentConfig.disableStreaming, hasExecutedStartup]);
+  }, [
+    useVoiceBasedOnConfig,
+    schemaAgents,
+    isThebeReady,
+    startChat,
+    stopChat,
+    handleItemCreated,
+    composeInstructions,
+    tools,
+    agentConfig.temperature,
+    agentConfig.model,
+    agentConfig.disableStreaming,
+    agentConfig.startup_script,
+    hasExecutedStartup,
+    executeStartupScript,
+    startupError
+  ]);
 
   // Render voice button component
   const renderVoiceButton = useCallback(() => {

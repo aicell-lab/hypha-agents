@@ -566,16 +566,21 @@ print(f"{sys.version.split()[0]}")
     const output = outputStore[key];
     return output ? { content: output.content, type: output.type } : null;
   };
-
+  // Strip ANSI escape sequences from shortOutput
+  const stripAnsi = (str: string) => {
+    // This regex matches ANSI escape sequences
+    return str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
+  };
   // Function to create a short representation of output
   const createShortContent = (content: string, type: string): string => {
-    const maxLength = 200; // Adjust this value as needed
+    // content = stripAnsi(content);
+    const maxLength = 4096; // Adjust this value as needed
     if (content.length <= maxLength) return content;
     
     switch (type) {
       case 'stdout':
       case 'stderr':
-        return `${content.substring(0, maxLength)}... [Full output stored with key: ${storeOutput(content, type)}]`;
+        return `${stripAnsi(content.substring(0, maxLength))}... [Full output stored with key: ${storeOutput(content, type)}]`;
       case 'html':
         return `[HTML content stored with key: ${storeOutput(content, type)}]`;
       case 'img':

@@ -9,7 +9,7 @@
  * Site configuration
  */
 export const SITE_ID = process.env.REACT_APP_SITE_ID || 'elia-platform';
-export const SITE_NAME = process.env.REACT_APP_SITE_NAME || 'Elia Platform';
+export const SITE_NAME = process.env.REACT_APP_SITE_NAME || 'Hypha Platform';
 
 /**
  * Server configuration

@@ -11,7 +11,7 @@ interface AdminResourceCardProps {
   description: string;
   tags: string[];
   image?: string;
-  downloadUrl?: string;
+  artifactId?: string;
   onEdit?: () => void;
   onDelete?: () => void;
   isStaged?: boolean;
@@ -27,7 +27,7 @@ const AdminResourceCard: React.FC<AdminResourceCardProps> = ({
   description,
   tags,
   image,
-  downloadUrl,
+  artifactId,
   onEdit,
   onDelete,
   isStaged,
@@ -119,16 +119,19 @@ const AdminResourceCard: React.FC<AdminResourceCardProps> = ({
             )}
           </div>
           
-          {downloadUrl && (
-            <a
-              href={downloadUrl}
-              onClick={(e) => e.stopPropagation()}
-              className="text-sm text-blue-600 hover:text-blue-800"
-              target="_blank"
-              rel="noopener noreferrer"
+          {artifactId && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(`#/chat/${artifactId.split('/').pop()}`, '_blank');
+              }}
+              className="flex items-center px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
             >
-              Download
-            </a>
+              <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              Open in Chat
+            </button>
           )}
         </div>
       </div>

@@ -391,8 +391,24 @@ Remember:
       // Set up audio element for remote audio from the model
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
+      audioEl.style.display = 'none'; // Hide the element but keep it in DOM
+      document.body.appendChild(audioEl); // Attach to document
+      
+      // Configure audio element
+      audioEl.addEventListener('error', (e) => {
+        console.error('Audio playback error:', e);
+        setError('Audio playback error occurred');
+      });
+      
+      // Handle audio track
       pc.ontrack = (e) => {
+        console.log('Received audio track:', e.streams[0]);
         audioEl.srcObject = e.streams[0];
+        // Ensure audio starts playing
+        audioEl.play().catch(err => {
+          console.error('Failed to play audio:', err);
+          setError('Failed to play audio response');
+        });
       };
       audioElementRef.current = audioEl;
 
@@ -405,7 +421,10 @@ Remember:
         } 
       });
       mediaStreamRef.current = stream;
-      pc.addTrack(stream.getTracks()[0]);
+      stream.getTracks().forEach(track => {
+        console.log('Adding local track to peer connection:', track);
+        pc.addTrack(track, stream);
+      });
 
       setStatus('Setting up data channel...');
       // Set up data channel for events
@@ -558,8 +577,19 @@ Remember:
       // Clean up audio element
       if (audioElementRef.current) {
         try {
-          audioElementRef.current.srcObject = null;
-          audioElementRef.current.remove();
+          const audioEl = audioElementRef.current;
+          // Stop any ongoing playback
+          audioEl.pause();
+          // Clear the source
+          if (audioEl.srcObject) {
+            const tracks = (audioEl.srcObject as MediaStream).getTracks();
+            tracks.forEach(track => track.stop());
+            audioEl.srcObject = null;
+          }
+          // Remove from DOM
+          if (audioEl.parentNode) {
+            audioEl.parentNode.removeChild(audioEl);
+          }
         } catch (audioErr) {
           console.warn('Error cleaning up audio element:', audioErr);
         }
