@@ -125,6 +125,15 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
   // Function to handle editor mounting
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
+    // Set initial value to ensure sync
+    editor.setValue(codeValue);
+  };
+
+  // Function to handle editor changes
+  const handleEditorChange = (value: string | undefined) => {
+    if (value !== undefined) {
+      setCodeValue(value);
+    }
   };
 
   // Get first line of code for preview
@@ -136,11 +145,13 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
   const handleRunCode = async () => {
     if (!outputRef.current || isExecuting) return;
     
-    // Get the latest code directly from the editor if we're in edit mode
-    let codeToExecute = codeValue;
-    if (isEditing && editorRef.current) {
-      codeToExecute = editorRef.current.getValue();
-      // Also update our state to keep it in sync
+    // Always get the latest code - either from editor or state
+    let codeToExecute = isEditing && editorRef.current 
+      ? editorRef.current.getValue() 
+      : codeValue;
+    
+    // Ensure state is in sync
+    if (codeToExecute !== codeValue) {
       setCodeValue(codeToExecute);
     }
     
@@ -272,11 +283,7 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
               height="100%"
               language={language}
               value={codeValue}
-              onChange={(value: string | undefined) => {
-                if (value !== undefined) {
-                  setCodeValue(value);
-                }
-              }}
+              onChange={handleEditorChange}
               onMount={handleEditorDidMount}
               options={{
                 minimap: { enabled: false },

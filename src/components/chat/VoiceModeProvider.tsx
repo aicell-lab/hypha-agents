@@ -210,7 +210,7 @@ Remember:
               };
               console.log('Sending function output event:', outputEvent);
               dataChannelRef.current?.send(JSON.stringify(outputEvent));
-              dataChannelRef.current?.send(JSON.stringify({type: 'response.create'}));
+              dataChannelRef.current?.send(JSON.stringify({type: 'response.create', response: {modalities: ['text', 'audio']}}));
               break;
             }
             
@@ -226,7 +226,7 @@ Remember:
             console.log('Sending function output event:', outputEvent);
             dataChannelRef.current?.send(JSON.stringify(outputEvent));
             // Continue the conversation
-            dataChannelRef.current?.send(JSON.stringify({type: 'response.create'}));
+            dataChannelRef.current?.send(JSON.stringify({type: 'response.create', response: {modalities: ['text', 'audio']}}));
           }
           break;
 
@@ -681,7 +681,8 @@ Remember:
       };
       dataChannelRef.current.send(JSON.stringify(messageCreate));
       const responseCreate = {
-        type: 'response.create'
+        type: 'response.create',
+        response: {modalities: ['text', 'audio']}
       };
       dataChannelRef.current.send(JSON.stringify(responseCreate));
     }

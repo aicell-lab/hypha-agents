@@ -73,7 +73,7 @@ Let me show you the real-time view of our REEF farm setup:`
         content: `from IPython.display import HTML
 
 # Display live webcam feed
-HTML('<img src="http://reef.aicell.io:8002/video_feed" width="50%" style="border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">')`,
+HTML('<img src="http://reef.aicell.io:8001/video_feed" width="50%" style="border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">')`,
         attrs: {
           language: 'python'
         }
@@ -351,16 +351,18 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     setMessages(prev => {
       const lastMessage = prev[prev.length - 1];
       if (lastMessage?.role === 'assistant') {
-        const lastIndex = lastMessage.content.length - 1;
-        const isExistingCodeBlock = lastMessage.content[lastIndex]?.type === 'code_execution';
+        // Find if there's a matching code block with the same code
+        const existingCodeBlockIndex = lastMessage.content.findIndex(item => 
+          item.type === 'code_execution' && item.content === code
+        );
         
-        if (isExistingCodeBlock) {
-          // Update existing code block
+        if (existingCodeBlockIndex !== -1) {
+          // Update existing code block with same code
           const updatedContent = [...lastMessage.content];
-          updatedContent[lastIndex] = {
-            ...updatedContent[lastIndex],
+          updatedContent[existingCodeBlockIndex] = {
+            ...updatedContent[existingCodeBlockIndex],
             attrs: {
-              ...updatedContent[lastIndex].attrs,
+              ...updatedContent[existingCodeBlockIndex].attrs,
               status,
               output: outputs
             }
@@ -507,6 +509,9 @@ const ChatContent: React.FC<ChatProps> = (props) => {
               content: content
             }];
           }
+
+          // Find the corresponding code block by call_id if available
+          const callId = c.attrs?.call_id;
           
           return {
             type: 'code_execution',
@@ -515,7 +520,8 @@ const ChatContent: React.FC<ChatProps> = (props) => {
               ...c.attrs,
               language: 'python',
               output: outputItems,
-              status: c.attrs?.success ? 'success' : 'error'
+              status: c.attrs?.success ? 'success' : 'error',
+              call_id: callId
             }
           };
         }
@@ -537,29 +543,47 @@ const ChatContent: React.FC<ChatProps> = (props) => {
         
         // For assistant messages, check if we should append or create new
         if (item.role === 'assistant') {
-          // If the last message is from assistant and was created recently (within 2 seconds)
-          // append to it instead of creating a new message
           if (lastMessage?.role === 'assistant') {
-            // Check if the content is not already included (deduplication)
-            const newContentTexts = convertedContent.map((c: ContentItem) => c.content);
-            const existingContentTexts = lastMessage.content.map((c: ContentItem) => c.content);
+            // For each converted content item
+            const updatedContent = [...lastMessage.content];
             
-            const hasNewContent = newContentTexts.some((text: string) => 
-              !existingContentTexts.includes(text)
-            );
+            convertedContent.forEach((newItem: ContentItem) => {
+              if (newItem.type === 'code_execution') {
+                // If it's a tool_call_output, find and update the matching code block
+                if (newItem.attrs?.output && newItem.attrs.output.length > 0) {
+                  const matchingIndex = updatedContent.findIndex(existingItem => 
+                    existingItem.type === 'code_execution' && 
+                    ((newItem.attrs?.call_id && existingItem.attrs?.call_id === newItem.attrs.call_id) ||
+                     (existingItem.content === newItem.content))
+                  );
+                  
+                  if (matchingIndex !== -1) {
+                    // Update existing code block
+                    updatedContent[matchingIndex] = {
+                      ...updatedContent[matchingIndex],
+                      attrs: {
+                        ...updatedContent[matchingIndex].attrs,
+                        ...newItem.attrs
+                      }
+                    };
+                    return;
+                  }
+                }
+              }
+              
+              // If no matching code block found or it's not a code block, append
+              if (!updatedContent.some(existing => 
+                existing.content === newItem.content && 
+                existing.type === newItem.type
+              )) {
+                updatedContent.push(newItem);
+              }
+            });
 
-            if (hasNewContent) {
-              console.log('Appending new content to last assistant message');
-              const updatedMessage = {
-                ...lastMessage,
-                content: [...lastMessage.content, ...convertedContent]
-              };
-              return [...prev.slice(0, -1), updatedMessage];
-            }
-            
-            // If content already exists, return previous state unchanged
-            console.log('Content already exists, skipping update');
-            return prev;
+            return [...prev.slice(0, -1), {
+              ...lastMessage,
+              content: updatedContent
+            }];
           }
         }
         
