@@ -1,5 +1,5 @@
 """
-Main entry point for the Elia Engine
+Main entry point for the Hypha Engine
 """
 
 import asyncio
@@ -16,15 +16,15 @@ logging.basicConfig(
 
 @click.group()
 def cli():
-    """Elia Engine - Backend service for AI agent runtime."""
+    """Hypha Engine - Backend service for AI agent runtime."""
     pass
 
 @cli.command()
 @click.option('--server-url', default="https://hypha.aicell.io", help="Hypha server URL")
 def serve(server_url: str):
-    """Start the Elia service."""
+    """Start the Hypha service."""
     try:
-        click.echo(f"Starting Elia service on {server_url}")
+        click.echo(f"Starting Hypha service on {server_url}")
         asyncio.run(start_service(server_url=server_url))
     except KeyboardInterrupt:
         click.echo("\nShutting down...")

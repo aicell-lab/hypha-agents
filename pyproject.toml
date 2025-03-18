@@ -3,12 +3,12 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [project]
-name = "elia-engine"
+name = "hypha-agent-engine"
 version = "0.1.0"
 authors = [
     {name = "Wei Ouyang", email = "oeway007@gmail.com"},
 ]
-description = "Hypha Platform Backend Engine for LLM Services and Tool Runtime"
+description = "Hypha Agent Platform Backend Engine for LLM Services and Tool Runtime"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -18,7 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "python-dotenv",
-    "schema-agents==0.2.0rc3",
+    "schema-agents==0.2.0rc2",
     "hypha-rpc>=0.20.48",
     "requests",
     "pypdf",
@@ -43,17 +43,17 @@ dependencies = [
 ]
 
 [tool.poetry]
-name = "elia-engine"
+name = "hypha-agent-engine"
 version = "0.1.0"
 description = "Backend service for AI agent runtime"
 authors = ["Your Name <your.email@example.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = ">=3.10"
 hypha-rpc = "*"
 schema-agents = "*"
 click = "*"
 pydantic = "*"
 
 [tool.poetry.scripts]
-elia-engine = "elia_engine.__main__:cli"
+hypha-agent-engine = "hypha_agent_engine.__main__:cli"

@@ -1,10 +1,10 @@
-# Hypha Platform
+# Hypha Agent Platform
 
 An enterprise-grade platform for building and deploying customizable AI agents specializing in telecom applications.
 
 ## 🎯 Overview
 
-Hypha Platform is a comprehensive solution for creating, managing, and deploying AI agents with deep telecom domain expertise. The platform provides:
+Hypha Agent Platform is a comprehensive solution for creating, managing, and deploying AI agents with deep telecom domain expertise. The platform provides:
 
 - 🤖 **Customizable AI Agents**: Build specialized agents with telecom domain knowledge
 - 📚 **Knowledge Integration**: Upload and manage domain-specific knowledge bases
@@ -24,12 +24,12 @@ Hypha Platform is a comprehensive solution for creating, managing, and deploying
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/elia-platform.git
-cd elia-platform
+git clone https://github.com/your-org/hypha-agent-platform.git
+cd hypha-agent-platform
 
 # Create and activate conda environment
-conda create -n elia-platform python=3.11
-conda activate elia-platform
+conda create -n hypha-agent-platform python=3.11
+conda activate hypha-agent-platform
 
 # Install Python dependencies
 pip install -e .
@@ -38,8 +38,8 @@ pip install -r requirements_test.txt
 # Install frontend dependencies
 pnpm install
 
-# Start the elia engine
-python -m elia_engine serve
+# Start the hypha engine
+python -m hypha_agent_engine serve
 
 # In another terminal, start the frontend
 pnpm start
@@ -62,11 +62,11 @@ pnpm start
 ## 🏗️ Project Structure
 
 ```
-elia-platform/
+hypha-agent-platform/
 ├── src/                  # React frontend source
 │   ├── components/      # React components
 │   └── types/          # TypeScript definitions
-├── elia_engine/         # Core engine implementation
+├── hypha_agent_engine/         # Core engine implementation
 │   ├── services/       # Hypha services
 │   ├── models/        # Pydantic models
 │   └── utils/         # Shared utilities
@@ -121,12 +121,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-Made with ❤️ by the Hypha Platform Team
+Made with ❤️ by the Hypha Agent Platform Team
 </div>
 
-# Elia Engine
+# Hypha Engine
 
-Backend services for LLM and tool execution runtime for the Hypha Platform.
+Backend services for LLM and tool execution runtime for the Hypha Agent Platform.
 
 ## Configuration
 
@@ -146,10 +146,10 @@ OPENAI_API_KEY=your_api_key_here
 To start the engine:
 ```bash
 # Using the CLI command
-elia-engine serve
+hypha-agent-engine serve
 
 # Or using Python module
-python -m elia_engine serve
+python -m hypha_agent_engine serve
 ```
 
 ## 🛠️ Tech Stack
@@ -169,7 +169,7 @@ python -m elia_engine serve
 ## 🏗️ Project Structure
 
 ```
-elia-platform/
+hypha-agent-platform/
 ├── frontend/                # React + TypeScript frontend
 │   ├── src/
 │   │   ├── components/     # React components
@@ -216,5 +216,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-Made with ❤️ by the Hypha Platform Team
+Made with ❤️ by the Hypha Agent Platform Team
 </div>

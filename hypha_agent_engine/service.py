@@ -1,6 +1,6 @@
 from hypha_rpc import connect_to_server, login
-from elia_engine.hypha_service import register_agent_service
-# from elia_engine.services.plotting import register_plotting_service
+from hypha_agent_engine.hypha_service import register_agent_service
+# from hypha_agent_engine.services.plotting import register_plotting_service
 import logging
 from dotenv import load_dotenv
 
@@ -17,7 +17,7 @@ handler.setFormatter(logging.Formatter(
 logger.addHandler(handler)
 
 async def start_service(server_url: str = "https://hypha.aicell.io") -> None:
-    """Start the Elia service and manage its lifecycle.
+    """Start the Hypha service and manage its lifecycle.
     
     Args:
         server_url: URL of the Hypha server to connect to
@@ -30,7 +30,7 @@ async def start_service(server_url: str = "https://hypha.aicell.io") -> None:
         
         # Register agent service
         agent_svc = await register_agent_service(server)
-        logger.info(f"Elia service started successfully. Agent service ID: {agent_svc.id}")
+        logger.info(f"Hypha service started successfully. Agent service ID: {agent_svc.id}")
         
         # Register plotting service
         # plotting_svc = await register_plotting_service(server)
@@ -47,4 +47,4 @@ async def start_service(server_url: str = "https://hypha.aicell.io") -> None:
     finally:
         if server:
             await server.close()
-            logger.info("Elia service stopped") 
+            logger.info("Hypha service stopped") 

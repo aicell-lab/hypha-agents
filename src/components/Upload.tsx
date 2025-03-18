@@ -558,7 +558,7 @@ const Upload: React.FC<UploadProps> = ({ artifactId, onBack }) => {
           <div className="w-80 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
             <div className="p-4 border-b border-gray-200 flex flex-col gap-2">
             <h2 className="text-lg font-semibold text-gray-900">
-                  Contributing to Elia
+                  Contributing to Hypha
                 </h2>
               <div className="flex items-center justify-between">
                

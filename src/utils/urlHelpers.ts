@@ -14,7 +14,7 @@ export const resolveHyphaUrl = (path: string, resourceId: string): string => {
     return path;
   }
 
-  // Extract the ID from the full resource ID (removing any prefix like 'elia/')
+  // Extract the ID from the full resource ID (removing any prefix like 'hypha/')
   const id = resourceId.split('/').pop();
   
   // Construct the full URL

@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Platform")
+SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Agent Platform")
 
 example_code = """
 

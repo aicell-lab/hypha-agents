@@ -1,3 +1,3 @@
 """
-Test suite for elia-engine
+Test suite for hypha-agent-engine
 """ 

@@ -35,7 +35,7 @@ const ModelValidator: React.FC<ModelValidatorProps> = ({
     setIsMenuOpen(false);
     
     try {
-      const runner = await server.getService(`${SITE_ID}/elia-model-runner`, {mode: "last"});
+      const runner = await server.getService(`${SITE_ID}/hypha-model-runner`, {mode: "last"});
       const rdfDict = yaml.load(rdfContent);
       const result = await runner.validate(rdfDict);
       

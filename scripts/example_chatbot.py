@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Platform")
+SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Agent Platform")
 
 async def main(server_url):
     # server = await connect_to_server({

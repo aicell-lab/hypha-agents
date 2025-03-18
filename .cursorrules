@@ -46,7 +46,7 @@ For backend services, you may rely on:
 ```
 ├── src/                    # Frontend React + TypeScript + Tailwind
 │   ├── ...
-├── elia_engine/           # Backend Python package
+├── hypha_agent_engine/           # Backend Python package
 │   ├── ...
 │
 ├── resources/             # Documentation and resources

@@ -73,7 +73,7 @@ const ModelTester: React.FC<ModelTesterProps> = ({ artifactId, version, isDisabl
     setIsOpen(false);
     
     try {
-      const runner = await server.getService(`${SITE_ID}/elia-model-runner`, {mode: "last"});
+      const runner = await server.getService(`${SITE_ID}/hypha-model-runner`, {mode: "last"});
       const modelId = artifactId.split('/').pop();
       const zipUrl = `${SERVER_URL}/${SITE_ID}/artifacts/${modelId}/create-zip-file${version ? `?version=${version}` : ''}`;
       const result = await runner.test_model(modelId, zipUrl);
