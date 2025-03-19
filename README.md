@@ -1,12 +1,12 @@
 # Hypha Agent Platform
 
-An enterprise-grade platform for building and deploying customizable AI agents specializing in telecom applications.
+An enterprise-grade platform for building and deploying customizable AI agents.
 
 ## 🎯 Overview
 
-Hypha Agent Platform is a comprehensive solution for creating, managing, and deploying AI agents with deep telecom domain expertise. The platform provides:
+Hypha Agent Platform is a comprehensive solution for creating, managing, and deploying AI agents. The platform provides:
 
-- 🤖 **Customizable AI Agents**: Build specialized agents with telecom domain knowledge
+- 🤖 **Customizable AI Agents**: Build specialized agents with domain knowledge
 - 📚 **Knowledge Integration**: Upload and manage domain-specific knowledge bases
 - 🛠️ **Extensible Tools**: Create and share Python-based tools and workflows
 - 🔄 **Real-time Communication**: Seamless WebSocket-based agent interactions
