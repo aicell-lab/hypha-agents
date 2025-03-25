@@ -1,0 +1,51 @@
+/* ANSI Colors */
+.ansi-black-fg { color: #3E424D; }
+.ansi-red-fg { color: #E75C58; }
+.ansi-green-fg { color: #00A250; }
+.ansi-yellow-fg { color: #DDB62B; }
+.ansi-blue-fg { color: #208FFB; }
+.ansi-magenta-fg { color: #D160C4; }
+.ansi-cyan-fg { color: #60C6C8; }
+.ansi-white-fg { color: #C5C8C6; }
+.ansi-bright-black-fg { color: #282C36; }
+.ansi-bright-red-fg { color: #B22B31; }
+.ansi-bright-green-fg { color: #007427; }
+.ansi-bright-yellow-fg { color: #B27D12; }
+.ansi-bright-blue-fg { color: #0065CA; }
+.ansi-bright-magenta-fg { color: #A03196; }
+.ansi-bright-cyan-fg { color: #258F8F; }
+.ansi-bright-white-fg { color: #A1A6B2; }
+
+/* Background colors */
+.ansi-black-bg { background-color: #3E424D; }
+.ansi-red-bg { background-color: #E75C58; }
+.ansi-green-bg { background-color: #00A250; }
+.ansi-yellow-bg { background-color: #DDB62B; }
+.ansi-blue-bg { background-color: #208FFB; }
+.ansi-magenta-bg { background-color: #D160C4; }
+.ansi-cyan-bg { background-color: #60C6C8; }
+.ansi-white-bg { background-color: #C5C8C6; }
+.ansi-bright-black-bg { background-color: #282C36; }
+.ansi-bright-red-bg { background-color: #B22B31; }
+.ansi-bright-green-bg { background-color: #007427; }
+.ansi-bright-yellow-bg { background-color: #B27D12; }
+.ansi-bright-blue-bg { background-color: #0065CA; }
+.ansi-bright-magenta-bg { background-color: #A03196; }
+.ansi-bright-cyan-bg { background-color: #258F8F; }
+.ansi-bright-white-bg { background-color: #A1A6B2; }
+
+/* Font styles */
+.ansi-bold { font-weight: bold; }
+.ansi-italic { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
+
+/* Output container */
+.jupyter-output pre {
+  margin: 0;
+  padding: 0.5rem;
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+} 

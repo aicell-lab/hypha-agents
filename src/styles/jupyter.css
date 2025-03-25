@@ -1,0 +1,75 @@
+/* Jupyter-like styling */
+.jupyter-editor {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+  border: 2px solid rgb(229 231 235); /* Tailwind gray-200 */
+  border-radius: 4px;
+  transition: border-color 0.2s ease;
+}
+
+.jupyter-editor.editor-active {
+  border-color: rgb(59 130 246); /* Tailwind blue-500 */
+}
+
+.jupyter-editor .monaco-editor {
+  padding-left: 8px;
+}
+
+.jupyter-editor .monaco-editor .margin {
+  background: transparent !important;
+}
+
+.jupyter-editor .monaco-editor .line-numbers {
+  color: #999 !important;
+  font-size: 11px !important;
+}
+
+/* Hide scrollbars but keep functionality */
+.jupyter-editor .monaco-scrollable-element {
+  scrollbar-width: none !important;
+}
+
+.jupyter-editor .monaco-scrollable-element::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* Cell styling */
+.notebook-cell {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.notebook-cell:focus-within {
+  box-shadow: inset 5px 0 0 0 rgb(59 130 246);
+}
+
+.notebook-cell.active {
+  box-shadow: inset 5px 0 0 0 rgb(59 130 246);
+}
+
+/* Output styling */
+.jupyter-output {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 0;
+}
+
+.jupyter-output pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Execution count styling */
+.execution-count {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: #687076;
+  width: 64px;
+  text-align: right;
+  padding-right: 16px;
+  -webkit-user-select: none;
+  user-select: none;
+} 
