@@ -6,7 +6,7 @@ import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
-import { Editor } from '@monaco-editor/react';
+import { Editor, useMonaco } from '@monaco-editor/react';
 import { executeScripts } from '../../utils/script-utils';
 import { processTextOutput, processAnsiInOutputElement, outputAreaStyles } from '../../utils/ansi-utils';
 import Convert from 'ansi-to-html';
@@ -81,6 +81,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const lineHeightPx = 19; // Approximate line height in pixels
   const minLines = 3; // Minimum number of lines to show
   const paddingHeight = 16; // 8px padding top + 8px padding bottom
+  const monaco = useMonaco();
 
   // Expose getCurrentCode method through ref
   React.useImperativeHandle(blockRef, () => ({
@@ -208,17 +209,40 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       // Shift + Enter to execute
       if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
+        e.stopPropagation(); // Stop event from bubbling to other handlers
         handleExecute();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [handleExecute]);
 
+  // Function to handle editor mounting
+  const handleEditorDidMount = (editor: any) => {
+    editorRef.current = editor;
+    updateEditorHeight();
+    editor.onDidContentSizeChange(() => {
+      updateEditorHeight();
+    });
+    editor.updateOptions({
+      padding: { top: 8, bottom: 8 }
+    });
+
+    // Add keyboard shortcut handler for Shift+Enter
+    if (monaco) {
+      editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+        handleExecute();
+      });
+    }
+  };
+
   return (
-    <div className={`relative ${isActive ? 'editor-active' : ''}`}>
-      <div className="relative" ref={editorDivRef}>
+    <div 
+      ref={editorDivRef}
+      className={`relative ${isActive ? 'notebook-cell-active' : ''}`}
+    >
+      <div className="overflow-x-auto pr-4">
         <Editor
           height={editorHeight}
           language={language}
@@ -227,16 +251,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
             setCodeValue(value || '');
             setTimeout(updateEditorHeight, 0);
           }}
-          onMount={(editor) => {
-            editorRef.current = editor;
-            updateEditorHeight();
-            editor.onDidContentSizeChange(() => {
-              updateEditorHeight();
-            });
-            editor.updateOptions({
-              padding: { top: 8, bottom: 8 }
-            });
-          }}
+          onMount={handleEditorDidMount}
           options={{
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
@@ -255,25 +270,21 @@ export const CodeCell: React.FC<CodeCellProps> = ({
             overviewRulerBorder: false,
             scrollbar: {
               vertical: 'hidden',
-              horizontal: 'hidden'
+              horizontal: 'auto'
             },
             overviewRulerLanes: 0,
             hideCursorInOverviewRuler: true,
             contextmenu: false
           }}
-          className={`jupyter-editor ${isActive ? 'editor-active' : ''}`}
+          className="jupyter-editor"
         />
-        
-        {/* Execution status indicator */}
-        {isExecuting && (
-          <div className="absolute top-2 right-2 flex items-center gap-2">
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-            <span className="text-sm text-blue-500">Running...</span>
-          </div>
-        )}
       </div>
-
-    
+      
+      {isExecuting && (
+        <div className="absolute right-3 top-3 flex items-center">
+          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-blue-500"></div>
+        </div>
+      )}
     </div>
   );
-}; 
+};

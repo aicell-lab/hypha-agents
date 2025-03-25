@@ -47,6 +47,11 @@ interface OutputStore {
   }
 }
 
+interface KernelError {
+  type?: string;
+  message?: string;
+}
+
 interface ThebeContextType {
   serviceManager: ServiceManager | null;
   session: SessionConnection | null;
@@ -220,6 +225,7 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
   const [kernelInfo, setKernelInfo] = useState<{ pythonVersion?: string; pyodideVersion?: string }>(globalThebeState.kernelInfo);
   const [outputStore, setOutputStore] = useState<OutputStore>(globalThebeState.outputStore);
   const hasInitialized = useRef(false);
+  const cleanupTimeoutRef = useRef<NodeJS.Timeout>();
   const { server: hyphaServer } = useHyphaStore();
 
   // Load required scripts and initialize kernel
@@ -227,6 +233,8 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
     // Increment reference count when component mounts
     globalThebeState.referenceCount++;
     console.log(`ThebeProvider mounted. Reference count: ${globalThebeState.referenceCount}`);
+
+    let isMounted = true; // Track if component is mounted
 
     const initializeKernel = async () => {
       // If already initialized or initializing, don't do it again
@@ -237,14 +245,21 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
         if (globalThebeState.isInitializing && globalThebeState.initPromise) {
           try {
             await globalThebeState.initPromise;
-            // Update local state with global state
-            setServiceManager(globalThebeState.serviceManager);
-            setSession(globalThebeState.session);
-            setKernel(globalThebeState.kernel);
-            setStatus(globalThebeState.status);
-            setIsReady(globalThebeState.isReady);
-            setKernelInfo(globalThebeState.kernelInfo);
+            // Only update state if component is still mounted
+            if (isMounted) {
+              setServiceManager(globalThebeState.serviceManager);
+              setSession(globalThebeState.session);
+              setKernel(globalThebeState.kernel);
+              setStatus(globalThebeState.status);
+              setIsReady(globalThebeState.isReady);
+              setKernelInfo(globalThebeState.kernelInfo);
+            }
           } catch (error) {
+            const kernelError = error as KernelError;
+            if (kernelError?.type === 'cancelation') {
+              console.log('Kernel initialization was canceled');
+              return;
+            }
             console.error('Error waiting for kernel initialization:', error);
           }
         }
@@ -253,12 +268,14 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
         if (globalThebeState.isInitialized && globalThebeState.isReady && globalThebeState.kernel) {
           console.log('Resetting kernel state for reused kernel instance...');
           try {
-            // We need to update local state first to ensure resetKernelState has access to the kernel
-            setServiceManager(globalThebeState.serviceManager);
-            setSession(globalThebeState.session);
-            setKernel(globalThebeState.kernel);
-            setStatus(globalThebeState.status);
-            setIsReady(globalThebeState.isReady);
+            // Only update state if component is still mounted
+            if (isMounted) {
+              setServiceManager(globalThebeState.serviceManager);
+              setSession(globalThebeState.session);
+              setKernel(globalThebeState.kernel);
+              setStatus(globalThebeState.status);
+              setIsReady(globalThebeState.isReady);
+            }
             
             // Wait a small delay to ensure state is updated
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -267,6 +284,11 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
             await resetKernelState();
             console.log('Kernel state reset completed for reused instance');
           } catch (error) {
+            const kernelError = error as KernelError;
+            if (kernelError?.type === 'cancelation') {
+              console.log('Kernel reset was canceled');
+              return;
+            }
             console.error('Error resetting kernel state during initialization:', error);
           }
         }
@@ -278,8 +300,10 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
       globalThebeState.isInitializing = true;
       
       try {
-        setIsScriptLoading(true);
-        setStatus('starting');
+        if (isMounted) {
+          setIsScriptLoading(true);
+          setStatus('starting');
+        }
         
         // Load thebe-lite script
         await loadScript('/thebe/thebe-lite.min.js');
@@ -289,7 +313,9 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
           await window.setupThebeLite;
         }
         
-        setIsScriptLoading(false);
+        if (isMounted) {
+          setIsScriptLoading(false);
+        }
         
         // Connect to kernel and store the promise
         const connectPromise = connect();
@@ -298,15 +324,25 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
         // Wait for connection
         await connectPromise;
         
-        // Mark as initialized
-        globalThebeState.isInitialized = true;
-        globalThebeState.isInitializing = false;
-        globalThebeState.initPromise = null;
-        
-        console.log('Kernel initialized successfully');
+        // Only update state if component is still mounted
+        if (isMounted) {
+          // Mark as initialized
+          globalThebeState.isInitialized = true;
+          globalThebeState.isInitializing = false;
+          globalThebeState.initPromise = null;
+          
+          console.log('Kernel initialized successfully');
+        }
       } catch (error) {
+        const kernelError = error as KernelError;
+        if (kernelError?.type === 'cancelation') {
+          console.log('Kernel initialization was canceled');
+          return;
+        }
         console.error('Failed to initialize kernel:', error);
-        setStatus('error');
+        if (isMounted) {
+          setStatus('error');
+        }
         globalThebeState.isInitializing = false;
         globalThebeState.initPromise = null;
       }
@@ -320,6 +356,8 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
 
     // Cleanup function
     return () => {
+      isMounted = false; // Mark component as unmounted
+      
       // Decrement reference count when component unmounts
       globalThebeState.referenceCount--;
       console.log(`ThebeProvider unmounted. Reference count: ${globalThebeState.referenceCount}`);
@@ -327,7 +365,13 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
       // If this is the last instance, clean up the kernel after a delay
       // The delay prevents cleanup if the component is quickly remounted
       if (globalThebeState.referenceCount === 0) {
-        const cleanupTimeout = setTimeout(() => {
+        // Clear any existing timeout
+        if (cleanupTimeoutRef.current) {
+          clearTimeout(cleanupTimeoutRef.current);
+        }
+
+        // Set new timeout
+        cleanupTimeoutRef.current = setTimeout(() => {
           // Double-check reference count in case component was remounted during timeout
           if (globalThebeState.referenceCount === 0 && globalThebeState.kernel) {
             console.log('Cleaning up kernel resources...');
@@ -349,9 +393,6 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
             console.log('Kernel resources cleaned up');
           }
         }, 5000); // 5 second delay before cleanup
-        
-        // Fix the linter error by returning void instead of a function
-        return;
       }
     };
   }, []);

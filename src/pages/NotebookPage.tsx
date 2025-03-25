@@ -33,6 +33,7 @@ interface NotebookCell {
     collapsed?: boolean;
     scrolled?: boolean;
     trusted?: boolean;
+    isNew?: boolean;
   };
 }
 
@@ -129,7 +130,8 @@ const NotebookPage: React.FC = () => {
       executionState: 'idle',
       metadata: {
         collapsed: false,
-        trusted: true
+        trusted: true,
+        isNew: true
       }
     };
     
@@ -166,8 +168,23 @@ const NotebookPage: React.FC = () => {
       return;
     }
 
-    // Otherwise, add as a markdown cell
-    addCell('markdown', message);
+    // Otherwise, add as a rendered markdown cell
+    const newCell: NotebookCell = {
+      id: generateId(),
+      type: 'markdown',
+      content: message,
+      executionState: 'idle',
+      metadata: {
+        collapsed: false,
+        trusted: true,
+        isNew: false // Mark as not a new cell, so it renders immediately
+      }
+    };
+    
+    // Create a ref for the new cell
+    cellRefs.current[newCell.id] = React.createRef();
+    
+    setCells(prev => [...prev, newCell]);
   };
 
   // Handle special commands
@@ -177,7 +194,20 @@ const NotebookPage: React.FC = () => {
     if (normalizedCommand === '/code' || normalizedCommand === '#code') {
       addCell('code');
     } else if (normalizedCommand === '/markdown' || normalizedCommand === '#markdown') {
-      addCell('markdown');
+      const newCell: NotebookCell = {
+        id: generateId(),
+        type: 'markdown',
+        content: 'Enter your markdown here',
+        executionState: 'idle',
+        metadata: {
+          collapsed: false,
+          trusted: true,
+          isNew: true // Keep new markdown cells from commands in edit mode
+        }
+      };
+      
+      cellRefs.current[newCell.id] = React.createRef();
+      setCells(prev => [...prev, newCell]);
     } else if (normalizedCommand === '/clear') {
       setCells([]);
       addCell('code'); // Always have at least one cell
@@ -185,8 +215,21 @@ const NotebookPage: React.FC = () => {
       // This would be handled by the CodeCell component
       // But we could also implement a "run all" feature later
     } else {
-      // If no command is recognized, just add as markdown
-      addCell('markdown', command);
+      // If no command is recognized, just add as rendered markdown
+      const newCell: NotebookCell = {
+        id: generateId(),
+        type: 'markdown',
+        content: command,
+        executionState: 'idle',
+        metadata: {
+          collapsed: false,
+          trusted: true,
+          isNew: false // Mark as not a new cell, so it renders immediately
+        }
+      };
+      
+      cellRefs.current[newCell.id] = React.createRef();
+      setCells(prev => [...prev, newCell]);
     }
   };
 
@@ -457,7 +500,11 @@ const NotebookPage: React.FC = () => {
           ...cell,
           id: generateId(), // Generate new IDs for loaded cells
           executionState: 'idle',
-          output: undefined // Clear outputs on load
+          output: undefined, // Clear outputs on load
+          metadata: {
+            ...cell.metadata,
+            isNew: false // Mark as not a new cell
+          }
         })));
         
         setExecutionCounter(1); // Reset execution counter
@@ -588,14 +635,14 @@ const NotebookPage: React.FC = () => {
 
       {/* Notebook Content Area */}
       <div className="flex-1 overflow-y-auto py-2">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-5xl mx-auto px-4">
           {cells.map((cell, index) => (
             <div 
               key={cell.id}
               data-cell-id={cell.id}
               className={`group relative ${
                 cell.executionState === 'error' ? 'border-red-200' : ''
-              } mb-1 bg-white`}
+              } mb-1 bg-white overflow-hidden`}
               onFocus={() => handleCellFocus(cell.id)}
               tabIndex={0}
             >
@@ -604,7 +651,7 @@ const NotebookPage: React.FC = () => {
                 {renderExecutionIndicator(cell)}
                 <div className="flex-1 min-w-0">
                   {cell.type === 'code' ? (
-                    <div className="pl-0 pr-4 py-2">
+                    <div className="pl-0 py-2">
                       <CodeCell 
                         code={cell.content} 
                         language="python"
@@ -617,33 +664,34 @@ const NotebookPage: React.FC = () => {
                       />
                     </div>
                   ) : (
-                    <div className="px-4 py-2">
+                  
                       <MarkdownCell
                         content={cell.content}
                         onChange={(content) => updateCellContent(cell.id, content)}
+                        initialEditMode={cell.metadata?.isNew === true}
                       />
-                    </div>
+              
                   )}
                   
                   {/* Output Area */}
                   {cell.type === 'code' && cell.output && cell.output.length > 0 && (
-                    <div className="pl-4 pr-4 py-2">
+                    <div className="pl-4 pr-4 py-2 overflow-x-auto">
                       {cell.output.map((output, i) => (
                         <div key={i} className="output-item">
                           {output.type === 'stdout' && (
                             <pre 
-                              className="text-gray-700 whitespace-pre-wrap text-sm py-1 font-mono"
+                              className="text-gray-700 whitespace-pre-wrap text-sm py-1 font-mono break-words"
                               dangerouslySetInnerHTML={{ __html: convert.toHtml(output.content) }}
                             />
                           )}
                           {output.type === 'stderr' && (
                             <pre 
-                              className="text-red-600 whitespace-pre-wrap text-sm py-1 font-mono"
+                              className="text-red-600 whitespace-pre-wrap text-sm py-1 font-mono break-words"
                               dangerouslySetInnerHTML={{ __html: convert.toHtml(output.content) }}
                             />
                           )}
                           {output.type === 'html' && (
-                            <div className="py-1" dangerouslySetInnerHTML={{ __html: output.content }} />
+                            <div className="py-1 overflow-auto" dangerouslySetInnerHTML={{ __html: output.content }} />
                           )}
                           {output.type === 'img' && (
                             <div className="py-2">
