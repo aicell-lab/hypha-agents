@@ -7,8 +7,8 @@ import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typesc
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
 import { Editor } from '@monaco-editor/react';
-import { executeScripts } from '../../utils/script-utils';
 import { processTextOutput, processAnsiInOutputElement, outputAreaStyles } from '../../utils/ansi-utils';
+import { JupyterOutput, OutputItem } from '../jupyter/JupyterOutput';
 
 // Type definitions for external modules
 type MonacoEditorProps = {
@@ -40,6 +40,7 @@ interface InteractiveCodeBlockProps {
   defaultCollapsed?: boolean;
   initialStatus?: string;
   domContent?: string;
+  initialOutputs?: Array<{ type: string; content: string; attrs?: any }>;
 }
 
 export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({ 
@@ -47,7 +48,8 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
   language = 'python',
   defaultCollapsed = true,
   initialStatus = '',
-  domContent = ''
+  domContent = '',
+  initialOutputs = []
 }) => {
   const { executeCodeWithDOMOutput, status, isReady, connect } = useThebe();
   const [isExecuting, setIsExecuting] = useState(false);
@@ -56,9 +58,13 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [codeValue, setCodeValue] = useState(code);
   const outputRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<any>(null); // Reference to store the editor instance
+  const editorRef = useRef<any>(null); // External reference for parent components
+  const monacoEditorInstance = useRef<any>(null); // Actual Monaco editor instance
   const [isKernelConnecting, setIsKernelConnecting] = useState(false);
   const styleRef = useRef<HTMLStyleElement | null>(null);
+  const [outputs, setOutputs] = useState<OutputItem[]>(initialOutputs);
+  // Track if we're using DOM output mode to prevent duplicates
+  const hasFinalDomOutput = useRef<boolean>(false);
 
   // Create and add style tag on component mount
   useEffect(() => {
@@ -92,28 +98,42 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
 
   // Apply DOM content to output area when provided
   useEffect(() => {
-    if (outputRef.current && domContent && !isExecuting) {
+    if (domContent && !isExecuting) {
       // Process text content for proper line breaks and ANSI codes
       if (domContent.startsWith('<pre>') || domContent.startsWith('<div>')) {
-        // HTML content - apply directly
-        outputRef.current.innerHTML = domContent;
-        // Execute any scripts in the content
-        executeScripts(outputRef.current);
+        // HTML content
+        setOutputs([{
+          type: 'html',
+          content: domContent,
+          attrs: {
+            className: 'output-area'
+          }
+        }]);
       } else {
         // Plain text content - process for ANSI codes and line breaks
         const processedContent = processTextOutput(domContent);
-        outputRef.current.innerHTML = processedContent;
+        setOutputs([{
+          type: 'html',
+          content: processedContent,
+          attrs: {
+            className: 'output-area'
+          }
+        }]);
       }
       
       // If we have DOM content and no status, set status to completed
       if (!executionStatus || executionStatus === '') {
         setExecutionStatus('Completed');
       }
-      
-      // Process any text that might contain ANSI codes
-      processAnsiInOutputElement(outputRef.current);
     }
   }, [domContent, isExecuting, executionStatus]);
+
+  // Initialize outputs from initialOutputs if provided
+  useEffect(() => {
+    if (initialOutputs.length > 0 && outputs.length === 0) {
+      setOutputs(initialOutputs);
+    }
+  }, [initialOutputs, outputs.length]);
 
   // Process any plain text outputs to format them correctly
   useEffect(() => {
@@ -124,7 +144,7 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
   
   // Function to handle editor mounting
   const handleEditorDidMount = (editor: any) => {
-    editorRef.current = editor;
+    monacoEditorInstance.current = editor; // Store the Monaco editor instance
     // Set initial value to ensure sync
     editor.setValue(codeValue);
   };
@@ -142,13 +162,24 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
     firstLine.substring(2) : // Remove '# ' from comment
     'Executable Code Block';
 
+  // Get the current code from the editor or state
+  const getCurrentCode = () => {
+    if (isEditing && monacoEditorInstance.current) {
+      try {
+        return monacoEditorInstance.current.getValue();
+      } catch (e) {
+        console.error('Error getting code from editor:', e);
+        return codeValue;
+      }
+    }
+    return codeValue;
+  };
+
   const handleRunCode = async () => {
-    if (!outputRef.current || isExecuting) return;
+    if (isExecuting) return;
     
-    // Always get the latest code - either from editor or state
-    let codeToExecute = isEditing && editorRef.current 
-      ? editorRef.current.getValue() 
-      : codeValue;
+    // Always get the latest code using the getCurrentCode helper
+    let codeToExecute = getCurrentCode();
     
     // Ensure state is in sync
     if (codeToExecute !== codeValue) {
@@ -157,7 +188,13 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
     
     setIsExecuting(true);
     setExecutionStatus('Running...');
-    outputRef.current.innerHTML = ''; // Clear previous output
+    setOutputs([]); // Clear previous outputs
+    
+    // Reset DOM output flag
+    hasFinalDomOutput.current = false;
+    
+    // Track if we received any outputs incrementally
+    let hasIncrementalOutputs = false;
     
     try {
       // If not ready, try to connect first
@@ -171,25 +208,51 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
         }
       }
       
+      // Temporary container to capture output
+      const tempContainer = document.createElement('div');
+      
       // Now execute the code
-      await executeCodeWithDOMOutput(codeToExecute, outputRef.current, {
-        onStatus: setExecutionStatus
+      await executeCodeWithDOMOutput(codeToExecute, tempContainer, {
+        onStatus: setExecutionStatus,
+        onOutput: (output: OutputItem) => {
+          // Mark that we've received incremental outputs
+          hasIncrementalOutputs = true;
+          // Add all incremental outputs - we won't replace them later
+          setOutputs(prev => [...prev, output]);
+        }
       });
       
-      // Process ANSI codes in the output after execution completes
-      processAnsiInOutputElement(outputRef.current);
-      
-      // Execute any scripts in the output
-      if (outputRef.current) {
-        executeScripts(outputRef.current);
+      // If we received HTML from the container and it's not empty
+      // AND we didn't receive any incremental outputs, use the container content
+      if (tempContainer.innerHTML && tempContainer.innerHTML.trim() !== '' && !hasIncrementalOutputs) {
+        // Check if the HTML contains non-text content (like widgets, plots, etc.)
+        const hasRichContent = 
+          tempContainer.querySelector('img, svg, canvas, iframe') !== null ||
+          tempContainer.innerHTML.includes('<div class="') || 
+          tempContainer.innerHTML.includes('<table');
+        
+        if (hasRichContent) {
+          // Add the final HTML content as an additional output
+          setOutputs(prev => [...prev, {
+            type: 'html',
+            content: tempContainer.innerHTML,
+            attrs: {
+              // Mark this as special but don't set isRenderedDOM to true
+              // so it doesn't replace all other outputs
+              isFinalOutput: true
+            }
+          }]);
+        }
       }
     } catch (error) {
       console.error('Error executing code:', error);
       setExecutionStatus('Error');
-      if (outputRef.current) {
-        const errorMessage = error instanceof Error ? error.message : 'Error executing code. Please try again.';
-        outputRef.current.innerHTML += `<pre class="error-output">Error: ${errorMessage}</pre>`;
-      }
+      
+      // Add error output
+      setOutputs(prev => [...prev, {
+        type: 'stderr',
+        content: error instanceof Error ? error.message : 'Error executing code. Please try again.'
+      }]);
     } finally {
       setIsExecuting(false);
     }
@@ -199,10 +262,8 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
     if (isEditing) {
       // Switching from edit to view mode
       // Make sure to get the latest value from the editor
-      if (editorRef.current) {
-        const latestCode = editorRef.current.getValue();
-        setCodeValue(latestCode);
-      }
+      const latestCode = getCurrentCode();
+      setCodeValue(latestCode);
       setIsEditing(false);
     } else {
       // Switching from view to edit mode
@@ -220,6 +281,15 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
                        isKernelConnecting ? 'Connecting to kernel...' :
                        !isReady ? 'Kernel is not ready yet' : 
                        'Run this code';
+
+  // Add a method to get the current code that can be called by parent components
+  React.useImperativeHandle(
+    editorRef,
+    () => ({
+      getCurrentCode
+    }),
+    [isEditing, codeValue]
+  );
 
   return (
     <div className="border border-gray-200 rounded-md overflow-hidden bg-white shadow-sm">
@@ -278,7 +348,7 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
       <div className={`transition-all duration-300 ${isCollapsed && !isEditing ? 'max-h-0 overflow-hidden' : 'max-h-[500px] overflow-auto'}`}>
         {isEditing ? (
           // Monaco Editor for editing
-          <div className="h-[300px]">
+          <div className="h-[300px] w-full overflow-hidden">
             <Editor
               height="100%"
               language={language}
@@ -291,8 +361,13 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
                 wordWrap: 'on',
                 lineNumbers: 'on',
                 renderWhitespace: 'selection',
-                folding: true
+                folding: true,
+                fontSize: 13,
+                fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+                lineHeight: 1.5,
+                padding: { top: 8, bottom: 8 }
               } as MonacoEditorProps['options']}
+              className="w-full"
             />
           </div>
         ) : (
@@ -308,11 +383,14 @@ export const InteractiveCodeBlock: React.FC<InteractiveCodeBlockProps> = ({
         )}
       </div>
       
-      {/* Output area with style for proper text rendering */}
-      <div 
-        ref={outputRef} 
-        className="output-area border-t border-gray-200 p-4 min-h-[2rem] overflow-x-auto"
-      ></div>
+      {/* Output area - now using JupyterOutput component */}
+      <div className="border-t border-gray-200">
+        {outputs.length > 0 ? (
+          <JupyterOutput outputs={outputs} className="p-2" />
+        ) : (
+          <div ref={outputRef} className="output-area p-4 overflow-x-auto"></div>
+        )}
+      </div>
     </div>
   );
 }; 

@@ -1069,6 +1069,7 @@ print("Hello, world!")
                           : "Type your message..."
                   }
                   onSelectTool={handleToolSelect}
+                  agentInstructions={agentConfig.instructions}
                 />
               </div>
             </div>

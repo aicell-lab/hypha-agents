@@ -23,17 +23,32 @@ export const CodeBlockSelector: React.FC<CodeBlockSelectorProps> = ({
     output.type === 'html' && output.attrs?.isRenderedDOM
   );
   
+  // Apply output-area class to all outputs for consistent styling
+  const processedOutputs = initialOutputs.map(output => {
+    // Add output-area class to attrs if it doesn't have it
+    return {
+      ...output,
+      attrs: {
+        ...output.attrs,
+        className: `output-area ${output.attrs?.className || ''}`
+      }
+    };
+  });
+  
   // Extract DOM content if available
   const domContent = domOutput?.content || '';
   
   // Use InteractiveCodeBlock for all code blocks, passing DOM content when available
   return (
-    <InteractiveCodeBlock
-      code={code}
-      language={language}
-      defaultCollapsed={defaultCollapsed}
-      initialStatus={initialStatus}
-      domContent={domContent}
-    />
+    <div className="code-block-container">
+      <InteractiveCodeBlock
+        code={code}
+        language={language}
+        defaultCollapsed={defaultCollapsed}
+        initialStatus={initialStatus}
+        domContent={domContent}
+        initialOutputs={processedOutputs}
+      />
+    </div>
   );
 }; 

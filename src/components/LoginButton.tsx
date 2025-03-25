@@ -78,6 +78,9 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
     };
 
     try {
+      if (!client) {
+        throw new Error('Hypha client is not initialized');
+      }
       const token = await client.login(config);
       localStorage.setItem("token", token);
       localStorage.setItem("tokenExpiry", new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
@@ -111,14 +114,38 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
     } finally {
       setIsLoggingIn(false);
     }
-  }, [setUser, server]);
+  }, [connect]);
+
+  // Auto-login on component mount if token exists
+  useEffect(() => {
+    const autoLogin = async () => {
+      const token = getSavedToken();
+      if (token && !user) {
+        setIsLoggingIn(true);
+        try {
+          await connect({
+            server_url: serverUrl,
+            token: token,
+          });
+        } catch (error) {
+          console.error("Auto-login failed:", error);
+          localStorage.removeItem("token");
+          localStorage.removeItem("tokenExpiry");
+        } finally {
+          setIsLoggingIn(false);
+        }
+      }
+    };
+    
+    autoLogin();
+  }, [connect, user]);
 
   useEffect(() => {
     if (server) {
       setUser(server.config.user);
       console.log("Logged in as:", server.config.user);
     }
-  }, [server]);
+  }, [server, setUser]);
 
   return (
     <div className={className}>
@@ -127,6 +154,7 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="text-gray-700 hover:text-gray-900 focus:outline-none"
+            aria-label="User profile menu"
           >
             <UserCircleIcon className="h-6 w-6" />
           </button>

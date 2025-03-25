@@ -97,13 +97,13 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
   }, [isEditing, handleRun]);
 
   return (
-    <div className="relative">
-      <div className="relative flex" ref={editorDivRef}>
+    <div className={`relative markdown-cell ${isEditing ? 'editing' : ''}`}>
+      <div className="jupyter-cell-flex-container" ref={editorDivRef}>
         {/* Add a placeholder for the execution count to match code cell alignment */}
-        <div className="flex-shrink-0 w-16 text-right pr-4 font-mono text-gray-500 select-none opacity-0">
-          <span className="text-sm">[1]</span>
+        <div className="execution-count flex-shrink-0">
+          {/* Empty placeholder for consistent alignment */}
         </div>
-        <div className="flex-1 min-w-0 pr-4">
+        <div className="editor-container w-full overflow-hidden">
           {isEditing ? (
             <Editor
               height={editorHeight}
@@ -115,7 +115,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 wordWrap: 'on',
-                lineNumbers: 'on',
+                lineNumbers: 'off', // Turn off line numbers to match code cells
                 renderWhitespace: 'selection',
                 folding: true,
                 fontSize: 13,
@@ -128,18 +128,26 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
                 renderLineHighlight: 'none',
                 overviewRulerBorder: false,
                 scrollbar: {
-                  vertical: 'hidden',
-                  horizontal: 'auto'
+                  vertical: 'auto',
+                  horizontalSliderSize: 4,
+                  verticalSliderSize: 4,
+                  horizontal: 'auto',
+                  useShadows: false,
+                  verticalHasArrows: false,
+                  horizontalHasArrows: false,
+                  alwaysConsumeMouseWheel: false
                 },
                 overviewRulerLanes: 0,
                 hideCursorInOverviewRuler: true,
-                contextmenu: false
+                contextmenu: false,
+                fixedOverflowWidgets: true,
+                automaticLayout: true
               }}
-              className="jupyter-editor"
+              className="jupyter-editor w-full"
             />
           ) : (
             <div 
-              className="markdown-preview group relative overflow-x-auto"
+              className="markdown-preview group relative overflow-x-auto w-full"
               onDoubleClick={() => setIsEditing(true)}
             >
               {/* Edit button - show on hover */}

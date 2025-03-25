@@ -107,13 +107,23 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isLoading, is
                 );
               }
               if (item.type === 'code_execution') {
+                // Process outputs to ensure consistent styling
+                const outputs = item.attrs?.output || [];
+                const processedOutputs = outputs.map((output: any) => ({
+                  ...output,
+                  attrs: {
+                    ...output.attrs,
+                    className: `output-area ${output.attrs?.className || ''}`
+                  }
+                }));
+                
                 return (
-                  <div key={index} className="overflow-x-auto">
+                  <div key={index} className="overflow-x-auto code-execution-wrapper">
                     <CodeBlockSelector
                       code={item.content}
                       language={item.attrs?.language || 'python'}
                       defaultCollapsed={true}
-                      initialOutputs={item.attrs?.output || []}
+                      initialOutputs={processedOutputs}
                       initialStatus={item.attrs?.status || ''}
                     />
                   </div>

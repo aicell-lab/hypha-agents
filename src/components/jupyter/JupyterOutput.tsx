@@ -1,0 +1,188 @@
+import React, { useEffect, useRef } from 'react';
+import { OutputItem as ChatOutputItem } from '../chat/Chat';
+import { executeScripts } from '../../utils/script-utils';
+import { processAnsiInOutputElement } from '../../utils/ansi-utils';
+
+// Export this type for other components to use
+export type OutputItem = ChatOutputItem;
+
+type OutputTypes = 'stdout' | 'stderr' | 'img' | 'display_data' | 'execute_result' | 'error' | 'html' | 'text';
+
+interface JupyterOutputProps {
+  outputs: OutputItem[];
+  className?: string;
+  wrapLongLines?: boolean;
+}
+
+export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className = '', wrapLongLines = false }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const wrapClass = wrapLongLines ? 'whitespace-pre-wrap break-words' : 'whitespace-pre';
+  
+  // Process outputs after rendering - handle scripts and ANSI codes
+  useEffect(() => {
+    if (containerRef.current) {
+      // Execute any scripts and process ANSI codes
+      executeScripts(containerRef.current);
+      // Only process ANSI codes for elements that haven't been pre-processed
+      const nonProcessedElements = containerRef.current.querySelectorAll('.output-item:not(.ansi-processed)');
+      nonProcessedElements.forEach(el => {
+        processAnsiInOutputElement(el as HTMLElement);
+      });
+    }
+  }, [outputs]);
+  
+  // Skip rendering if no outputs
+  if (!outputs || outputs.length === 0) {
+    return null;
+  }
+  
+  // Group outputs by type for better organization
+  const textOutputs = outputs.filter(o => 
+    o.type === 'stdout' || o.type === 'stderr' || o.type === 'text' || o.type === 'error'
+  );
+  
+  const htmlOutputs = outputs.filter(o => 
+    o.type === 'html' && !o.attrs?.isRenderedDOM
+  );
+  
+  const imageOutputs = outputs.filter(o => 
+    o.type === 'img'
+  );
+  
+  // Check for any special DOM outputs that need to be rendered on their own
+  const specialDomOutput = outputs.find(o => 
+    o.type === 'html' && o.attrs?.isRenderedDOM
+  );
+  
+  return (
+    <div ref={containerRef} className={`jupyter-output-container output-area ${className} bg-gray-50 rounded-b-md`}>
+      {/* Render text outputs first */}
+      {textOutputs.length > 0 && (
+        <div className="output-text-group">
+          {textOutputs.map((output, index) => {
+            // Check if this is ANSI pre-processed content
+            const hasAnsi = output.content.includes('<span style="color:') || 
+                          output.attrs?.isProcessedAnsi === true;
+            return (
+              <div 
+                key={`text-${index}`} 
+                className={`output-item ${hasAnsi ? 'ansi-processed' : ''}`}
+              >
+                {hasAnsi ? (
+                  <div dangerouslySetInnerHTML={{ __html: output.content }} 
+                       className={`text-${output.type === 'stderr' || output.type === 'error' ? 'red-600' : 'gray-700'} ${wrapClass} text-sm py-1 font-mono ${output.type === 'stderr' || output.type === 'error' ? 'error-output' : ''} output-area`} />
+                ) : (
+                  renderOutput(output, wrapLongLines)
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      
+      {/* Render HTML outputs next */}
+      {htmlOutputs.length > 0 && (
+        <div className="output-html-group">
+          {htmlOutputs.map((output, index) => (
+            <div key={`html-${index}`} className="output-item">
+              {renderOutput(output, wrapLongLines)}
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Render image outputs */}
+      {imageOutputs.length > 0 && (
+        <div className="output-image-group">
+          {imageOutputs.map((output, index) => (
+            <div key={`img-${index}`} className="output-item">
+              {renderOutput(output, wrapLongLines)}
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* If we have a special DOM output that needs special handling, render it last */}
+      {specialDomOutput && (
+        <div 
+          className="output-item output-rendered-dom output-area"
+          dangerouslySetInnerHTML={{ __html: specialDomOutput.content }}
+        />
+      )}
+    </div>
+  );
+};
+
+// Function to render different output types
+const renderOutput = (output: OutputItem, wrapLongLines = false) => {
+  const wrapClass = wrapLongLines ? 'whitespace-pre-wrap break-words' : 'whitespace-pre';
+  
+  // Skip rendering if output is just a newline character
+  if (output.content === '\n') {
+    return null;
+  }
+  
+  // Check if this output has already been processed for ANSI codes
+  const isPreProcessed = output.attrs?.isProcessedAnsi === true;
+  
+  switch (output.type) {
+    case 'stdout':
+      return <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>;
+    
+    case 'stderr':
+      return isPreProcessed ? (
+        <pre 
+          className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`}
+          dangerouslySetInnerHTML={{ __html: output.content }}
+        />
+      ) : (
+        <pre className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}>{output.content}</pre>
+      );
+    
+    case 'error':
+      return isPreProcessed ? (
+        <pre 
+          className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`}
+          dangerouslySetInnerHTML={{ __html: output.content }}
+        />
+      ) : (
+        <pre className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}>{output.content}</pre>
+      );
+    
+    case 'img':
+      return <img src={output.content} alt="Output" className="max-w-full my-2 rounded output-area" />;
+    
+    case 'html':
+      return (
+        <div 
+          className={`py-1 overflow-auto output-area ${output.attrs?.isFinalOutput ? 'final-output' : ''}`}
+          dangerouslySetInnerHTML={{ __html: output.content }} 
+        />
+      );
+    
+    case 'text':
+      return isPreProcessed ? (
+        <pre 
+          className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`}
+          dangerouslySetInnerHTML={{ __html: output.content }}
+        />
+      ) : (
+        <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
+      );
+    
+    // Additional output types can be handled here
+    
+    default:
+      if (typeof output.content === 'string') {
+        return isPreProcessed ? (
+          <pre 
+            className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`}
+            dangerouslySetInnerHTML={{ __html: output.content }}
+          />
+        ) : (
+          <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
+        );
+      }
+      return <div className="text-gray-500 text-sm output-area">Unsupported output format</div>;
+  }
+};

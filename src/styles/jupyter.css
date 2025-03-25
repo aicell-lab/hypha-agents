@@ -3,17 +3,59 @@
   font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace !important;
   font-size: 13px !important;
   line-height: 1.5 !important;
+  transition: border-color 0.2s ease;
+  overflow: visible !important;
+  max-width: 100%;
+}
+
+/* Flex container with execution count */
+.jupyter-cell-flex-container {
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Editor container styling */
+.editor-container {
+  padding-bottom: 3px;
+  flex-grow: 1;
+  min-width: 0;
+  max-width: calc(100% - 64px); /* Account for execution count width */
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Apply border only to code editors and markdown editors in edit mode */
+.code-cell .editor-container,
+.markdown-cell.editing .editor-container {
   border: 2px solid rgb(229 231 235); /* Tailwind gray-200 */
   border-radius: 4px;
-  transition: border-color 0.2s ease;
 }
 
+/* Editor container active state - Only for code cells and markdown cells in edit mode */
+.code-cell .editor-container-active,
+.markdown-cell.editing .editor-container-active {
+  border-color: rgb(59 130 246) !important; /* Tailwind blue-500 */
+  border-left-width: 4px !important;
+  box-shadow: 0 2px 4px -1px rgba(59, 130, 246, 0.1);
+  z-index: 2;
+}
+
+/* Editor active state - primary styling for active cells */
 .jupyter-editor.editor-active {
-  border-color: rgb(59 130 246); /* Tailwind blue-500 */
+  z-index: 2;
 }
 
+/* Minimal styling for the cell container when active */
+.notebook-cell-active {
+  position: relative;
+}
+
+/* Keep the Monaco editor styling */
 .jupyter-editor .monaco-editor {
   padding-left: 8px;
+  padding-right: 8px;
+  overflow: visible !important;
 }
 
 .jupyter-editor .monaco-editor .margin {
@@ -22,7 +64,9 @@
 
 .jupyter-editor .monaco-editor .line-numbers {
   color: #999 !important;
-  font-size: 11px !important;
+  font-size: 12px !important;
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace !important;
+  margin-right: 8px !important;
 }
 
 /* Hide scrollbars but keep functionality */
@@ -38,14 +82,6 @@
 .notebook-cell {
   position: relative;
   transition: all 0.2s ease;
-}
-
-.notebook-cell:focus-within {
-  box-shadow: inset 5px 0 0 0 rgb(59 130 246);
-}
-
-.notebook-cell.active {
-  box-shadow: inset 5px 0 0 0 rgb(59 130 246);
 }
 
 /* Output styling */
@@ -65,11 +101,84 @@
 /* Execution count styling */
 .execution-count {
   font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  color: #687076;
+  font-size: 13px;
+  color: #878788;  /* Darker blue color for the execution count */
   width: 64px;
+  min-width: 64px; /* Ensure consistent width */
   text-align: right;
-  padding-right: 16px;
+  padding-right: 8px;
+  padding-top: 9px; /* Match top padding of editor */
   -webkit-user-select: none;
   user-select: none;
+  font-weight: bold;
+}
+
+/* Style for output area */
+.output-area {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-x: auto;
+  padding: 4px 0;
+  max-width: 100%;
+}
+
+/* Output container */
+.jupyter-output-container {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Output area styling */
+.jupyter-output-container,
+.output-area,
+.bg-gray-50 {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Markdown rendered styling */
+.markdown-cell:not(.editing) .editor-container {
+  border: none;
+  box-shadow: none;
+}
+
+/* Remove the left bar in favor of the editor border */
+.notebook-cell-active::before {
+  display: none;
+}
+
+/* Clean up redundant cell active styling */
+.notebook-cell-container-active {
+  position: relative;
+}
+
+/* Hide default cell focus outlines */
+.notebook-cell:focus-within {
+  outline: none !important;
+}
+
+/* Notebook container with active cell - no special styling needed */
+.notebook-cells-container.has-active-cell {
+  /* No additional styling needed */
+}
+
+/* Ensure proper scrolling for the page */
+.monaco-editor .overflow-guard {
+  overflow: visible !important;
+}
+
+/* Make scrollbars less intrusive */
+.monaco-scrollable-element > .scrollbar > .slider {
+  background: rgba(100, 100, 100, 0.4) !important;
+}
+
+/* Prevent editor from stealing focus when scrolling */
+.monaco-editor-background {
+  pointer-events: auto !important;
+}
+
+/* Allow scrolling to propagate to the page when at editor boundaries */
+.monaco-editor .scroll-decoration {
+  box-shadow: none !important;
 } 
