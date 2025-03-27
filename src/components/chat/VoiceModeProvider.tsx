@@ -13,6 +13,7 @@ interface VoiceModeContextType {
     temperature?: number;
     tools?: Tool[];
     model?: string;
+    chatHistory?: Array<{role: string; content: string;}>;
   }) => Promise<void>;
   stopChat: () => Promise<void>;
   pauseChat: () => Promise<void>;
@@ -337,6 +338,7 @@ Remember:
     temperature?: number;
     tools?: Tool[];
     model?: string;
+    chatHistory?: Array<{role: string; content: string;}>;
   }) => {
     // Declare and initialize timeout variable at the top of the function
     let lockTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -438,6 +440,26 @@ Remember:
         
         // Send session update with the provided configuration
         updateSession(config);
+
+        // Add chat history if provided
+        if (config.chatHistory && config.chatHistory.length > 0) {
+          for (const msg of config.chatHistory) {
+            const messageCreate = {
+              type: 'conversation.item.create',
+              item: {
+                type: 'message',
+                role: msg.role,
+                content: [
+                  {
+                    type: 'text',
+                    text: msg.content
+                  }
+                ]
+              }
+            };
+            dc.send(JSON.stringify(messageCreate));
+          }
+        }
       };
 
       dc.onclose = () => {

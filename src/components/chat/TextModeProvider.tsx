@@ -15,6 +15,7 @@ interface TextModeContextType {
     tools?: Tool[];
     model?: string;
     disableStreaming?: boolean;
+    chatHistory?: Array<{role: string; content: string;}>;
   }) => Promise<void>;
   stopChat: () => Promise<void>;
   pauseChat: () => Promise<void>;
@@ -269,7 +270,21 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
           // Update tool calls
           if (choice.delta.tool_calls) {
             for (const toolCall of choice.delta.tool_calls) {
-              const existingToolCall = fullMessage.tool_calls.find((tc: any) => tc.index === toolCall.index);
+              // Ensure fullMessage and tool_calls array exists
+              if (!fullMessage) {
+                fullMessage = {
+                  role: 'assistant',
+                  content: '',
+                  tool_calls: []
+                };
+              }
+              if (!fullMessage.tool_calls) {
+                fullMessage.tool_calls = [];
+              }
+              
+              const existingToolCall = toolCall.index !== undefined ? 
+                fullMessage.tool_calls.find((tc: any) => tc.index === toolCall.index) : 
+                undefined;
               
               if (existingToolCall) {
                 // Update existing tool call
@@ -411,6 +426,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
     tools?: Tool[];
     model?: string;
     disableStreaming?: boolean;
+    chatHistory?: Array<{role: string; content: string;}>;
   }) => {
     // Declare and initialize timeout variable at the top of the function
     let lockTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -473,6 +489,26 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
         role: 'system',
         content: config.instructions || 'You are a helpful assistant.'
       });
+
+      // Add chat history if provided
+      if (config.chatHistory && config.chatHistory.length > 0) {
+        chatConfigRef.current.messages.push(...config.chatHistory);
+        
+        // Create UI items for chat history
+        for (const msg of config.chatHistory) {
+          const messageItem = {
+            type: 'message',
+            role: msg.role,
+            content: [
+              {
+                type: 'text',
+                text: msg.content
+              }
+            ]
+          };
+          config.onItemCreated?.(messageItem);
+        }
+      }
 
       setIsRecording(true);
       setError(null);

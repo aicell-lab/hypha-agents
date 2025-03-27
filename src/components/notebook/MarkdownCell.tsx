@@ -5,14 +5,17 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Editor } from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
+import { RoleSelector, CellRole } from './RoleSelector';
 
 interface MarkdownCellProps {
   content: string;
   onChange: (content: string) => void;
   initialEditMode?: boolean;
+  role?: CellRole;
+  onRoleChange?: (role: CellRole) => void;
 }
 
-const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialEditMode = false }) => {
+const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialEditMode = false, role, onRoleChange }) => {
   const [isEditing, setIsEditing] = useState(initialEditMode);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
@@ -105,8 +108,14 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
     <div className={`relative markdown-cell ${isEditing ? 'editing' : ''}`}>
       <div className="jupyter-cell-flex-container" ref={editorDivRef}>
         {/* Add a placeholder for the execution count to match code cell alignment */}
-        <div className="execution-count flex-shrink-0">
+        <div className="execution-count flex-shrink-0 flex flex-col items-end gap-1">
           {/* Empty placeholder for consistent alignment */}
+          <div></div>
+          {role !== undefined && onRoleChange && (
+            <div className="pr-2">
+              <RoleSelector role={role} onChange={onRoleChange} />
+            </div>
+          )}
         </div>
         <div className="editor-container w-full overflow-hidden">
           {isEditing ? (

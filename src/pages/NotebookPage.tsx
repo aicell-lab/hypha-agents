@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ThebeProvider, useThebe } from '../components/chat/ThebeProvider';
-import { CodeCell } from '../components/chat/CodeCell';
+import { CodeCell } from '../components/notebook/CodeCell';
 import { ChatInput } from '../components/chat/ChatInput';
 import { OutputItem } from '../components/chat/Chat';
-import MarkdownCell from '../components/chat/MarkdownCell';
+import MarkdownCell from '../components/notebook/MarkdownCell';
 import { Dialog } from '@headlessui/react';
 import Convert from 'ansi-to-html';
 import '../styles/ansi.css';
@@ -12,7 +12,7 @@ import '../styles/jupyter.css';
 import { useHyphaStore } from '../store/hyphaStore';
 import { TextModeProvider, useTextMode } from '../components/chat/TextModeProvider';
 import { ToolProvider, useTools } from '../components/chat/ToolProvider';
-import { JupyterOutput } from '../components/jupyter/JupyterOutput';
+import { JupyterOutput } from '../components/JupyterOutput';
 // Import icons
 import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
@@ -30,6 +30,7 @@ const convert = new Convert({
 // Define different types of cells in our notebook
 type CellType = 'markdown' | 'code';
 type ExecutionState = 'idle' | 'running' | 'success' | 'error';
+type CellRole = 'user' | 'assistant' | 'system';
 
 interface NotebookCell {
   id: string;
@@ -38,12 +39,13 @@ interface NotebookCell {
   executionCount?: number;
   executionState: ExecutionState;
   output?: OutputItem[];
-  role?: 'user' | 'assistant'; // Added role to distinguish between user and assistant cells
+  role?: CellRole;
   metadata?: {
     collapsed?: boolean;
     scrolled?: boolean;
     trusted?: boolean;
     isNew?: boolean;
+    role?: CellRole;
   };
 }
 
@@ -190,6 +192,84 @@ Note: The results will be displayed in the notebook interface.`,
   return { tools, isToolRegistered };
 };
 
+// Function to create a short version of output content
+const createShortContent = (content: string, type: string): string => {
+  const maxLength = 4096;
+  const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
+  
+  if (content.length <= maxLength) return content;
+  
+  switch (type) {
+    case 'stdout':
+    case 'stderr':
+      return `${stripAnsi(content.substring(0, maxLength))}...`;
+    case 'html':
+      return `[HTML content truncated...]`;
+    case 'img':
+      return `[Image content truncated...]`;
+    case 'svg':
+      return `[SVG content truncated...]`;
+    default:
+      return `${content.substring(0, maxLength)}...`;
+  }
+};
+
+// Function to convert notebook cells to chat history
+const convertCellsToHistory = (cells: NotebookCell[]): Array<{role: string; content: string;}> => {
+  const history: Array<{role: string; content: string;}> = [];
+  
+  for (const cell of cells) {
+    // Skip cells without a role (they're not part of the conversation)
+    if (!cell.role) continue;
+    
+    if (cell.type === 'markdown') {
+      history.push({
+        role: cell.role,
+        content: cell.content
+      });
+    } else if (cell.type === 'code') {
+      // Start with the code content
+      let content = `\`\`\`python\n${cell.content}\n\`\`\`\n`;
+      
+      // Add outputs if they exist
+      if (cell.output && cell.output.length > 0) {
+        content += '\nOutput:\n';
+        for (const output of cell.output) {
+          switch (output.type) {
+            case 'stdout':
+            case 'stderr':
+              // Use createShortContent for long outputs
+              const shortContent = createShortContent(output.content, output.type);
+              content += `${output.type === 'stderr' ? 'Error: ' : ''}${shortContent}\n`;
+              break;
+            case 'html':
+              content += '[HTML Output]\n';
+              break;
+            case 'img':
+              content += '[Image Output]\n';
+              break;
+            case 'svg':
+              content += '[SVG Output]\n';
+              break;
+            default:
+              if (output.content) {
+                const shortContent = createShortContent(output.content, 'text');
+                content += `${shortContent}\n`;
+              }
+          }
+        }
+      }
+      
+      history.push({
+        role: cell.role,
+        content: content.trim()
+      });
+    }
+  }
+  
+  return history;
+};
+
 const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
   const [cells, setCells] = useState<NotebookCell[]>([]);
@@ -198,6 +278,7 @@ const NotebookPage: React.FC = () => {
   const { isReady, executeCode } = useThebe();
   const [isShortcutsDialogOpen, setIsShortcutsDialogOpen] = useState(false);
   const cellRefs = useRef<{ [key: string]: React.RefObject<{ getCurrentCode: () => string }> }>({});
+  const hasInitialized = useRef(false);
   const [notebookMetadata, setNotebookMetadata] = useState<NotebookMetadata>({
     kernelspec: {
       name: 'python',
@@ -226,7 +307,7 @@ const NotebookPage: React.FC = () => {
   } = useTextMode();
 
   // Create a stable addCell function with useCallback
-  const addCell = useCallback((type: CellType, content: string = '', role?: 'user' | 'assistant') => {
+  const addCell = useCallback((type: CellType, content: string = '', role?: CellRole) => {
     const newCell: NotebookCell = {
       id: generateId(),
       type,
@@ -236,7 +317,8 @@ const NotebookPage: React.FC = () => {
       metadata: {
         collapsed: false,
         trusted: true,
-        isNew: type === 'markdown' && !role // Only editable for new markdown cells without role
+        isNew: type === 'markdown' && !role, // Only editable for new markdown cells without role
+        role: role
       }
     };
     
@@ -271,7 +353,10 @@ const NotebookPage: React.FC = () => {
             updates.executionCount = executionCounter;
             setExecutionCounter(prev => prev + 1);
           }
-          if (output) {
+          // Always set output to undefined if no output is provided or empty array
+          if (!output || output.length === 0) {
+            updates.output = undefined;
+          } else {
             // Process output items to ensure consistent styling
             const processedOutput = output.map(item => {
               // Special processing for stderr and error types to handle ANSI codes
@@ -496,6 +581,7 @@ const NotebookPage: React.FC = () => {
                     ...cell, 
                     executionState: 'success' as ExecutionState,
                     executionCount: executionCounter,
+                    // Only set output if we have actual outputs
                     output: outputs.length > 0 ? [...outputs] : undefined
                   } : cell
                 )
@@ -511,6 +597,7 @@ const NotebookPage: React.FC = () => {
                   cell.id === cellId ? {
                     ...cell, 
                     executionState: 'error' as ExecutionState,
+                    // Only set output if we have actual outputs
                     output: outputs.length > 0 ? [...outputs] : undefined
                   } : cell
                 )
@@ -571,7 +658,7 @@ const NotebookPage: React.FC = () => {
             if (contentItem.type === 'text' || contentItem.type === 'markdown') {
               console.log('[DEBUG] Adding markdown cell from text/markdown content');
               // Add as markdown cell with assistant role
-              lastAddedCellId = addCell('markdown', `🤖 ${contentItem.text || contentItem.content}`, 'assistant');
+              lastAddedCellId = addCell('markdown', contentItem.text || contentItem.content, 'assistant');
             } else if (contentItem.type === 'tool_call' && contentItem.content) {
               // This will be handled by the tool registration system
               // The code will be added and executed through the handleExecuteCode function
@@ -739,12 +826,17 @@ const NotebookPage: React.FC = () => {
           setInitializationError(null);
         }
         
+        // Convert existing cells to chat history
+        const chatHistory = convertCellsToHistory(cells);
+        console.log('Generated chat history from cells:', chatHistory);
+        
         await startChat({
           onItemCreated: handleAgentResponse,
           instructions: defaultAgentConfig.instructions,
           temperature: defaultAgentConfig.temperature,
           tools: tools,
-          model: defaultAgentConfig.model
+          model: defaultAgentConfig.model,
+          // chatHistory: chatHistory
         });
         
         console.log('Chat initialization completed successfully');
@@ -786,10 +878,11 @@ const NotebookPage: React.FC = () => {
 
   // Ensure we have at least one code cell to start with
   useEffect(() => {
-    if (cells.length === 0) {
+    if (cells.length === 0 && !hasInitialized.current) {
+      hasInitialized.current = true;
       // Add welcome cell
       addCell('markdown', `# 🚀 Welcome to the Interactive Notebook\n\nThis notebook combines the power of Jupyter notebooks with AI assistance.\n\n* Type your question or request in the chat input below\n* Add code cells with \`/code\` command\n* Add markdown cells with \`/markdown\` command\n* Run cells with the run button or Ctrl+Enter`, 'assistant');
-      addCell('code');
+      addCell('code', '', 'assistant');
     }
   }, [cells.length, addCell]);
 
@@ -808,7 +901,7 @@ const NotebookPage: React.FC = () => {
     }
 
     // Add as a rendered markdown cell with user role
-    const cellId = addCell('markdown', `👤 ${message}`, 'user');
+    const cellId = addCell('markdown', message, 'user');
     
     // Scroll to the user message
     setTimeout(() => {
@@ -825,21 +918,6 @@ const NotebookPage: React.FC = () => {
       } catch (error) {
         console.error('Error sending message to AI:', error);
         setInitializationError("Error communicating with AI assistant. Please try again or refresh the page.");
-        
-        // After error, try to recover the chat session
-        setTimeout(() => {
-          if (schemaAgents && isReady && !isRecording) {
-            startChat({
-              onItemCreated: handleAgentResponse,
-              instructions: defaultAgentConfig.instructions,
-              temperature: defaultAgentConfig.temperature,
-              tools: tools,
-              model: defaultAgentConfig.model
-            }).catch(err => {
-              console.error("Failed to restart chat after error:", err);
-            });
-          }
-        }, 5000);
       }
     }
   };
@@ -860,7 +938,8 @@ const NotebookPage: React.FC = () => {
         metadata: {
           collapsed: false,
           trusted: true,
-          isNew: true // Keep new markdown cells from commands in edit mode
+          isNew: true, // Keep new markdown cells from commands in edit mode
+          role: 'user'
         }
       };
       
@@ -883,7 +962,8 @@ const NotebookPage: React.FC = () => {
         metadata: {
           collapsed: false,
           trusted: true,
-          isNew: false // Mark as not a new cell, so it renders immediately
+          isNew: false, // Mark as not a new cell, so it renders immediately
+          role: 'user'
         }
       };
       
@@ -957,7 +1037,7 @@ const NotebookPage: React.FC = () => {
                 type: 'code',
                 content: '',
                 executionState: 'idle',
-                metadata: { collapsed: false, trusted: true }
+                metadata: { collapsed: false, trusted: true, role: 'user' }
               });
               setCells(newCells);
             }
@@ -1008,7 +1088,14 @@ const NotebookPage: React.FC = () => {
         ...notebookMetadata,
         modified: new Date().toISOString()
       },
-      cells
+      cells: cells.map(cell => ({
+        ...cell,
+        role: cell.role, // Explicitly include the role property
+        metadata: {
+          ...cell.metadata,
+          role: cell.role // Also store in metadata for better compatibility
+        }
+      }))
     };
 
     const blob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
@@ -1039,6 +1126,7 @@ const NotebookPage: React.FC = () => {
           id: generateId(), // Generate new IDs for loaded cells
           executionState: 'idle',
           output: undefined, // Clear outputs on load
+          role: cell.role || cell.metadata?.role, // Restore role from either location
           metadata: {
             ...cell.metadata,
             isNew: false // Mark as not a new cell
@@ -1066,6 +1154,15 @@ const NotebookPage: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cells, notebookMetadata]);
+
+  // Update cell role
+  const updateCellRole = (id: string, role: CellRole) => {
+    setCells(prev => 
+      prev.map(cell => 
+        cell.id === id ? { ...cell, role, metadata: { ...cell.metadata, role } } : cell
+      )
+    );
+  };
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -1194,16 +1291,18 @@ const NotebookPage: React.FC = () => {
                         executionCount={cell.executionCount}
                         blockRef={cellRefs.current[cell.id]}
                         isActive={activeCellId === cell.id}
+                        role={cell.role}
+                        onRoleChange={(role) => updateCellRole(cell.id, role)}
                       />
                     </div>
                   ) : (
-                  
-                      <MarkdownCell
-                        content={cell.content}
-                        onChange={(content) => updateCellContent(cell.id, content)}
-                        initialEditMode={cell.metadata?.isNew === true}
-                      />
-              
+                    <MarkdownCell
+                      content={cell.content}
+                      onChange={(content) => updateCellContent(cell.id, content)}
+                      initialEditMode={cell.metadata?.isNew === true}
+                      role={cell.role}
+                      onRoleChange={(role) => updateCellRole(cell.id, role)}
+                    />
                   )}
                   
                   {/* Output Area */}
@@ -1361,6 +1460,7 @@ const NotebookPage: React.FC = () => {
               isProcessingAgentResponse ? "AI is thinking..." :
               "Enter text or command (e.g., /code, /markdown, /clear)"
             }
+            agentInstructions={defaultAgentConfig.instructions}
           />
         </div>
       </div>

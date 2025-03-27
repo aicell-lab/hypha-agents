@@ -51,11 +51,26 @@
   position: relative;
 }
 
+/* Fix for Monaco editor blue border */
+.monaco-editor .margin,
+.monaco-editor .monaco-editor-background,
+.monaco-editor .inputarea.ime-input {
+  border: none !important;
+  outline: none !important;
+}
+
+.monaco-editor {
+  border: none !important;
+  outline: none !important;
+}
+
 /* Keep the Monaco editor styling */
 .jupyter-editor .monaco-editor {
   padding-left: 8px;
   padding-right: 8px;
   overflow: visible !important;
+  border: none !important;
+  outline: none !important;
 }
 
 .jupyter-editor .monaco-editor .margin {

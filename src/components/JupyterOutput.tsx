@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { OutputItem as ChatOutputItem } from '../chat/Chat';
-import { executeScripts } from '../../utils/script-utils';
-import { processAnsiInOutputElement } from '../../utils/ansi-utils';
+import { OutputItem as ChatOutputItem } from './chat/Chat';
+import { executeScripts } from '../utils/script-utils';
+import { processAnsiInOutputElement } from '../utils/ansi-utils';
 
 // Export this type for other components to use
 export type OutputItem = ChatOutputItem;
