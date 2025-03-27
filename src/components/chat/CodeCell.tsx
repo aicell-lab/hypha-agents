@@ -6,7 +6,7 @@ import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
-import { Editor, useMonaco } from '@monaco-editor/react';
+import { Editor } from '@monaco-editor/react';
 import { executeScripts } from '../../utils/script-utils';
 import { processTextOutput, processAnsiInOutputElement, outputAreaStyles } from '../../utils/ansi-utils';
 import Convert from 'ansi-to-html';
@@ -81,7 +81,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const lineHeightPx = 19; // Approximate line height in pixels
   const minLines = 3; // Minimum number of lines to show
   const paddingHeight = 16; // 8px padding top + 8px padding bottom
-  const monaco = useMonaco();
+  const monacoRef = useRef<any>(null);
   const hasFinalDomOutput = useRef<boolean>(false);
 
   // Expose getCurrentCode method through ref
@@ -289,11 +289,16 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     });
 
     // Add keyboard shortcut handler for Shift+Enter
-    if (monaco) {
-      editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+    if (monacoRef.current) {
+      editor.addCommand(monacoRef.current.KeyMod.Shift | monacoRef.current.KeyCode.Enter, () => {
         handleExecute();
       });
     }
+  };
+
+  // Handle Monaco instance before mounting the editor
+  const handleBeforeMount = (monaco: any) => {
+    monacoRef.current = monaco;
   };
 
   // Handle click on the editor container
@@ -333,6 +338,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               setTimeout(updateEditorHeight, 10);
             }}
             onMount={handleEditorDidMount}
+            beforeMount={handleBeforeMount}
             options={{
               minimap: { enabled: false },
               scrollBeyondLastLine: false,

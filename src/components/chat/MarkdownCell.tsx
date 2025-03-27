@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Editor, useMonaco } from '@monaco-editor/react';
+import { Editor } from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
 
 interface MarkdownCellProps {
@@ -20,7 +20,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
   const lineHeightPx = 19;
   const minLines = 3;
   const paddingHeight = 16;
-  const monaco = useMonaco();
+  const monacoRef = useRef<any>(null);
 
   // Update editor height when content changes
   const updateEditorHeight = useCallback(() => {
@@ -61,11 +61,16 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
     });
 
     // Add keyboard shortcut handler for Shift+Enter
-    if (monaco) {
-      editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+    if (monacoRef.current) {
+      editor.addCommand(monacoRef.current.KeyMod.Shift | monacoRef.current.KeyCode.Enter, () => {
         handleRun();
       });
     }
+  };
+
+  // Handle Monaco instance before mounting the editor
+  const handleBeforeMount = (monaco: any) => {
+    monacoRef.current = monaco;
   };
 
   // Function to handle editor changes
@@ -111,6 +116,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
               value={content}
               onChange={handleEditorChange}
               onMount={handleEditorDidMount}
+              beforeMount={handleBeforeMount}
               options={{
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
