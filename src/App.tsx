@@ -16,6 +16,7 @@ import Create from './components/Create';
 import Chat from './components/chat/Chat';
 import ChatPage from './pages/ChatPage';
 import NotebookPage from './pages/NotebookPage';
+import CollabTest from './pages/CollabTest';
 
 // Create a wrapper component that uses Router hooks
 const AppContent: React.FC = () => {
@@ -84,6 +85,7 @@ const AppContent: React.FC = () => {
             />
           } />
           <Route path="/notebook" element={<NotebookPage />} />
+          <Route path="/collab-test" element={<CollabTest />} />
         </Routes>
       </main>
     </div>
