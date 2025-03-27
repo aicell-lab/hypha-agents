@@ -7,28 +7,55 @@ import { Editor } from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
 import { RoleSelector, CellRole } from './RoleSelector';
 
+interface MonacoEditor {
+  getValue: () => string;
+  getModel: () => any;
+  getVisibleRanges: () => any;
+  hasTextFocus: () => boolean;
+  focus: () => void;
+  getContainerDomNode: () => HTMLElement | null;
+  onDidContentSizeChange: (callback: () => void) => void;
+  updateOptions: (options: any) => void;
+  addCommand: (keybinding: number, handler: () => void) => void;
+  setValue: (value: string) => void;
+}
+
 interface MarkdownCellProps {
   content: string;
   onChange: (content: string) => void;
   initialEditMode?: boolean;
   role?: CellRole;
   onRoleChange?: (role: CellRole) => void;
+  isEditing?: boolean;
+  onEditingChange?: (isEditing: boolean) => void;
+  editorRef?: React.RefObject<any>;
+  isActive?: boolean;
 }
 
-const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialEditMode = false, role, onRoleChange }) => {
-  const [isEditing, setIsEditing] = useState(initialEditMode);
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+const MarkdownCell: React.FC<MarkdownCellProps> = ({ 
+  content, 
+  onChange, 
+  initialEditMode = false, 
+  role, 
+  onRoleChange,
+  isEditing = false,
+  onEditingChange,
+  editorRef,
+  isActive = false
+}) => {
+  const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = useState<number>(0);
   const lineHeightPx = 19;
   const minLines = 3;
   const paddingHeight = 16;
   const monacoRef = useRef<any>(null);
+  const [isFocused, setIsFocused] = useState(false);
 
   // Update editor height when content changes
   const updateEditorHeight = useCallback(() => {
-    if (editorRef.current) {
-      const model = editorRef.current.getModel();
+    if (internalEditorRef.current) {
+      const model = internalEditorRef.current.getModel();
       if (model) {
         const lineCount = model.getLineCount();
         const newHeight = Math.max(lineCount * lineHeightPx + paddingHeight, minLines * lineHeightPx + paddingHeight);
@@ -44,16 +71,44 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
 
   // Function to handle running/rendering markdown
   const handleRun = useCallback(() => {
-    if (isEditing && editorRef.current) {
-      const latestContent = editorRef.current.getValue();
+    if (isEditing && internalEditorRef.current) {
+      const latestContent = internalEditorRef.current.getValue();
       onChange(latestContent);
     }
-    setIsEditing(false);
-  }, [isEditing, onChange]);
+    onEditingChange?.(false);
+  }, [isEditing, onChange, onEditingChange]);
+
+  // Expose methods through ref
+  React.useImperativeHandle(editorRef, () => ({
+    getValue: () => internalEditorRef.current?.getValue() || content,
+    focus: () => {
+      if (internalEditorRef.current) {
+        if (typeof internalEditorRef.current.focus === 'function') {
+          internalEditorRef.current.focus();
+        } else if (internalEditorRef.current.getContainerDomNode) {
+          internalEditorRef.current.getContainerDomNode()?.focus();
+        }
+      }
+    },
+    getContainerDomNode: () => internalEditorRef.current?.getContainerDomNode()
+  }), [content]);
 
   // Function to handle editor mounting
   const handleEditorDidMount: OnMount = (editor) => {
-    editorRef.current = editor;
+    internalEditorRef.current = editor as unknown as MonacoEditor;
+    if (editorRef) {
+      (editorRef as any).current = {
+        getValue: () => editor.getValue(),
+        focus: () => {
+          if (typeof editor.focus === 'function') {
+            editor.focus();
+          } else if (editor.getContainerDomNode) {
+            editor.getContainerDomNode()?.focus();
+          }
+        },
+        getContainerDomNode: () => editor.getContainerDomNode()
+      };
+    }
     editor.setValue(content);
     updateEditorHeight();
     editor.onDidContentSizeChange(() => {
@@ -68,6 +123,17 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
       editor.addCommand(monacoRef.current.KeyMod.Shift | monacoRef.current.KeyCode.Enter, () => {
         handleRun();
       });
+    }
+
+    // Focus the editor if this is a new cell or is active
+    if (initialEditMode || isActive) {
+      setTimeout(() => {
+        if (typeof editor.focus === 'function') {
+          editor.focus();
+        } else if (editor.getContainerDomNode) {
+          editor.getContainerDomNode()?.focus();
+        }
+      }, 100);
     }
   };
 
@@ -88,7 +154,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle keyboard shortcuts if the editor has focus
-      const isEditorFocused = editorRef.current?.hasTextFocus?.() || 
+      const isEditorFocused = internalEditorRef.current?.hasTextFocus?.() || 
                              editorDivRef.current?.contains(document.activeElement);
 
       if (!isEditorFocused) return;
@@ -104,9 +170,45 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [isEditing, handleRun]);
 
+  // Handle focus and blur events
+  useEffect(() => {
+    const handleFocusOut = (e: FocusEvent) => {
+      // Check if the focus is still within our cell
+      const isInternalFocus = editorDivRef.current?.contains(e.relatedTarget as Node);
+      if (!isInternalFocus && isEditing) {
+        // Save content before exiting edit mode
+        if (internalEditorRef.current) {
+          const latestContent = internalEditorRef.current.getValue();
+          onChange(latestContent);
+        }
+        // Exit edit mode
+        onEditingChange?.(false);
+        setIsFocused(false);
+      }
+    };
+
+    const currentEditorDiv = editorDivRef.current;
+    if (currentEditorDiv) {
+      currentEditorDiv.addEventListener('focusout', handleFocusOut);
+    }
+
+    return () => {
+      if (currentEditorDiv) {
+        currentEditorDiv.removeEventListener('focusout', handleFocusOut);
+      }
+    };
+  }, [isEditing, onChange, onEditingChange]);
+
   return (
-    <div className={`relative markdown-cell ${isEditing ? 'editing' : ''}`}>
-      <div className="jupyter-cell-flex-container" ref={editorDivRef}>
+    <div 
+      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''}`}
+      tabIndex={-1} // Make the container focusable
+    >
+      <div 
+        className="jupyter-cell-flex-container" 
+        ref={editorDivRef}
+        tabIndex={-1} // Make the inner container focusable
+      >
         {/* Add a placeholder for the execution count to match code cell alignment */}
         <div className="execution-count flex-shrink-0 flex flex-col items-end gap-1">
           {/* Empty placeholder for consistent alignment */}
@@ -130,7 +232,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 wordWrap: 'on',
-                lineNumbers: 'off', // Turn off line numbers to match code cells
+                lineNumbers: 'off',
                 renderWhitespace: 'selection',
                 folding: true,
                 fontSize: 13,
@@ -163,20 +265,8 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({ content, onChange, initialE
           ) : (
             <div 
               className="markdown-preview group relative overflow-x-auto w-full"
-              onDoubleClick={() => setIsEditing(true)}
+              onDoubleClick={() => onEditingChange?.(true)}
             >
-              {/* Edit button - show on hover */}
-              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="p-1 hover:bg-gray-100 rounded text-gray-600"
-                  title="Edit markdown"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                  </svg>
-                </button>
-              </div>
               <div className="markdown-body py-2 overflow-auto break-words">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}

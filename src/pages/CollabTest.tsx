@@ -84,7 +84,11 @@ const CollabTest: React.FC = () => {
     editorRef.current = editor;
 
     if (!providerRef.current || !docRef.current || !yTextRef.current) {
-      console.error('[CollabTest] Provider, doc, or yText not initialized');
+      console.error('[CollabTest] Provider, doc, or yText not initialized', {
+        hasProvider: !!providerRef.current,
+        hasDoc: !!docRef.current,
+        hasYText: !!yTextRef.current
+      });
       return;
     }
 

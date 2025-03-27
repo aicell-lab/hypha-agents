@@ -11,6 +11,7 @@ import { executeScripts } from '../../utils/script-utils';
 import { processTextOutput, processAnsiInOutputElement, outputAreaStyles } from '../../utils/ansi-utils';
 import Convert from 'ansi-to-html';
 import { RoleSelector, CellRole } from './RoleSelector';
+import type { OnMount } from '@monaco-editor/react';
 
 const convert = new Convert({
   fg: '#000',
@@ -44,6 +45,19 @@ SyntaxHighlighter.registerLanguage('typescript', typescript);
 SyntaxHighlighter.registerLanguage('bash', bash);
 SyntaxHighlighter.registerLanguage('json', json);
 
+interface MonacoEditor {
+  getValue: () => string;
+  getModel: () => any;
+  getVisibleRanges: () => any;
+  hasTextFocus: () => boolean;
+  focus: () => void;
+  getContainerDomNode: () => HTMLElement | null;
+  onDidContentSizeChange: (callback: () => void) => void;
+  updateOptions: (options: any) => void;
+  addCommand: (keybinding: number, handler: () => void) => void;
+  setValue: (value: string) => void;
+}
+
 interface CodeCellProps {
   code: string;
   language?: string;
@@ -53,7 +67,7 @@ interface CodeCellProps {
   onExecute?: () => void;
   isExecuting?: boolean;
   executionCount?: number;
-  blockRef?: React.RefObject<{ getCurrentCode: () => string }>;
+  blockRef?: React.RefObject<any>;
   isActive?: boolean;
   role?: CellRole;
   onRoleChange?: (role: CellRole) => void;
@@ -62,7 +76,7 @@ interface CodeCellProps {
 export const CodeCell: React.FC<CodeCellProps> = ({ 
   code, 
   language = 'python',
-  defaultCollapsed = true,
+  defaultCollapsed = false,
   initialStatus = '',
   domContent = '',
   onExecute,
@@ -79,8 +93,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const [codeValue, setCodeValue] = useState(code);
   const [output, setOutput] = useState<string>('');
   const outputRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<any>(null);
-  const styleRef = useRef<HTMLStyleElement | null>(null);
+  const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = useState<number>(0);
   const lineHeightPx = 19; // Approximate line height in pixels
@@ -88,24 +101,35 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const paddingHeight = 16; // 8px padding top + 8px padding bottom
   const monacoRef = useRef<any>(null);
   const hasFinalDomOutput = useRef<boolean>(false);
+  const styleTagRef = useRef<HTMLStyleElement | null>(null);
 
-  // Expose getCurrentCode method through ref
+  // Expose methods through ref
   React.useImperativeHandle(blockRef, () => ({
-    getCurrentCode: () => editorRef.current?.getValue() || codeValue
+    getCurrentCode: () => internalEditorRef.current?.getValue() || codeValue,
+    focus: () => {
+      if (internalEditorRef.current) {
+        if (typeof internalEditorRef.current.focus === 'function') {
+          internalEditorRef.current.focus();
+        } else if (internalEditorRef.current.getContainerDomNode) {
+          internalEditorRef.current.getContainerDomNode()?.focus();
+        }
+      }
+    },
+    getContainerDomNode: () => internalEditorRef.current?.getContainerDomNode()
   }), [codeValue]);
 
-  // Create and add style tag on component mount
+  // Add output area styles
   useEffect(() => {
-    // Create a style element for our output styles
     const styleTag = document.createElement('style');
     styleTag.textContent = outputAreaStyles;
     document.head.appendChild(styleTag);
-    styleRef.current = styleTag;
+    styleTagRef.current = styleTag;
     
     // Cleanup on unmount
     return () => {
-      if (styleRef.current && document.head.contains(styleRef.current)) {
-        document.head.removeChild(styleRef.current);
+      if (styleTagRef.current) {
+        styleTagRef.current.remove();
+        styleTagRef.current = null;
       }
     };
   }, []);
@@ -119,8 +143,8 @@ export const CodeCell: React.FC<CodeCellProps> = ({
 
   // Update editor height when content changes
   const updateEditorHeight = useCallback(() => {
-    if (editorRef.current) {
-      const model = editorRef.current.getModel();
+    if (internalEditorRef.current) {
+      const model = internalEditorRef.current.getModel();
       if (model) {
         const lineCount = model.getLineCount();
         // Add extra lines to account for widgets and prevent scrolling issues
@@ -145,7 +169,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
 
     const handleWheel = (e: WheelEvent) => {
       // Get the editor element
-      const editor = editorRef.current;
+      const editor = internalEditorRef.current;
       if (!editor) return;
 
       const model = editor.getModel();
@@ -181,7 +205,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     if (!isReady || isExecuting) return;
     
     // Get the current value from the editor
-    const currentCode = editorRef.current?.getValue() || codeValue;
+    const currentCode = internalEditorRef.current?.getValue() || codeValue;
     
     if (onExecute) {
       onExecute();
@@ -265,7 +289,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Check if the editor or its container has focus
-      const isEditorFocused = editorRef.current?.hasTextFocus?.() || 
+      const isEditorFocused = internalEditorRef.current?.hasTextFocus?.() || 
                              editorDivRef.current?.contains(document.activeElement);
 
       if (!isEditorFocused) return;
@@ -283,8 +307,22 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   }, [handleExecute]);
 
   // Function to handle editor mounting
-  const handleEditorDidMount = (editor: any) => {
-    editorRef.current = editor;
+  const handleEditorDidMount: OnMount = (editor) => {
+    internalEditorRef.current = editor as unknown as MonacoEditor;
+    if (blockRef) {
+      (blockRef as any).current = {
+        getCurrentCode: () => editor.getValue(),
+        focus: () => {
+          if (typeof editor.focus === 'function') {
+            editor.focus();
+          } else if (editor.getContainerDomNode) {
+            editor.getContainerDomNode()?.focus();
+          }
+        },
+        getContainerDomNode: () => editor.getContainerDomNode()
+      };
+    }
+    editor.setValue(code);
     updateEditorHeight();
     editor.onDidContentSizeChange(() => {
       updateEditorHeight();
@@ -296,8 +334,19 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     // Add keyboard shortcut handler for Shift+Enter
     if (monacoRef.current) {
       editor.addCommand(monacoRef.current.KeyMod.Shift | monacoRef.current.KeyCode.Enter, () => {
-        handleExecute();
+        onExecute?.();
       });
+    }
+
+    // Focus the editor if this is active
+    if (isActive) {
+      setTimeout(() => {
+        if (typeof editor.focus === 'function') {
+          editor.focus();
+        } else if (editor.getContainerDomNode) {
+          editor.getContainerDomNode()?.focus();
+        }
+      }, 100);
     }
   };
 
@@ -309,9 +358,9 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   // Handle click on the editor container
   const handleEditorClick = useCallback(() => {
     // If there's a way to set active cell in parent, this would be done through props
-    if (editorRef.current) {
+    if (internalEditorRef.current) {
       // Force focus on the editor
-      editorRef.current.focus();
+      internalEditorRef.current.focus();
     }
   }, []);
 

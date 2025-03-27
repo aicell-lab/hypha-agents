@@ -46,6 +46,7 @@ interface NotebookCell {
     trusted?: boolean;
     isNew?: boolean;
     role?: CellRole;
+    isEditing?: boolean;
   };
 }
 
@@ -293,6 +294,7 @@ const NotebookPage: React.FC = () => {
     modified: new Date().toISOString()
   });
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
+  const editorRefs = useRef<{ [key: string]: React.RefObject<any> }>({});
   
   // Add chat agent state
   const { server, isLoggedIn } = useHyphaStore();
@@ -317,15 +319,42 @@ const NotebookPage: React.FC = () => {
       metadata: {
         collapsed: false,
         trusted: true,
-        isNew: type === 'markdown' && !role, // Only editable for new markdown cells without role
-        role: role
+        isNew: true,
+        role: role,
+        isEditing: type === 'markdown' // Start markdown cells in edit mode
       }
     };
     
     // Create a ref for the new cell
-    cellRefs.current[newCell.id] = React.createRef();
+    editorRefs.current[newCell.id] = React.createRef();
     
     setCells(prev => [...prev, newCell]);
+    setActiveCellId(newCell.id); // Set as active cell
+
+    // Focus the new cell after a short delay to ensure it's mounted
+    setTimeout(() => {
+      const editor = editorRefs.current[newCell.id]?.current;
+      if (editor) {
+        if (type === 'code') {
+          // For code cells, focus the Monaco editor
+          if (typeof editor.focus === 'function') {
+            editor.focus();
+          } else if (editor.getContainerDomNode) {
+            // If it's a Monaco editor instance
+            editor.getContainerDomNode()?.focus();
+          }
+        } else {
+          // For markdown cells, ensure it's in edit mode and focused
+          toggleCellEditing(newCell.id, true);
+          if (typeof editor.focus === 'function') {
+            editor.focus();
+          } else if (editor.getContainerDomNode) {
+            editor.getContainerDomNode()?.focus();
+          }
+        }
+      }
+    }, 100);
+
     return newCell.id;
   }, []);
 
@@ -520,6 +549,7 @@ const NotebookPage: React.FC = () => {
       
       // Execute code and collect outputs
       const outputs: OutputItem[] = [];
+      let shortOutput = 'Outputs:\n'; // Track short output for LLM response
       
       try {
         await executeCode(code, {
@@ -556,6 +586,11 @@ const NotebookPage: React.FC = () => {
             
             // Save output to array
             outputs.push(processedOutput);
+            
+            // Update short output for LLM response
+            if (output.type === 'stdout' || output.type === 'stderr') {
+              shortOutput += output.content + '\n';
+            }
             
             // Update the running cell with current outputs
             setCells(prevCells => 
@@ -606,7 +641,8 @@ const NotebookPage: React.FC = () => {
           }
         });
         
-        return "Code executed successfully. Results are displayed in the notebook.";
+        // Return the short output if available, otherwise a generic success message
+        return shortOutput.trim() || "Code executed successfully. No output generated.";
       } catch (error) {
         console.error("[DEBUG] executeCode error:", error);
         
@@ -927,49 +963,46 @@ const NotebookPage: React.FC = () => {
     const normalizedCommand = command.toLowerCase().trim();
     let newCellId = '';
     
-    if (normalizedCommand === '/code' || normalizedCommand === '#code') {
-      newCellId = addCell('code');
-    } else if (normalizedCommand === '/markdown' || normalizedCommand === '#markdown') {
-      const newCell: NotebookCell = {
-        id: generateId(),
-        type: 'markdown',
-        content: 'Enter your markdown here',
-        executionState: 'idle',
-        metadata: {
-          collapsed: false,
-          trusted: true,
-          isNew: true, // Keep new markdown cells from commands in edit mode
-          role: 'user'
-        }
-      };
-      
-      cellRefs.current[newCell.id] = React.createRef();
-      setCells(prev => [...prev, newCell]);
-      newCellId = newCell.id;
-    } else if (normalizedCommand === '/clear') {
-      setCells([]);
-      newCellId = addCell('code'); // Always have at least one cell
-    } else if (normalizedCommand.startsWith('/run')) {
-      // This would be handled by the CodeCell component
-      // But we could also implement a "run all" feature later
-    } else {
-      // If no command is recognized, just add as rendered markdown
-      const newCell: NotebookCell = {
-        id: generateId(),
-        type: 'markdown',
-        content: command,
-        executionState: 'idle',
-        metadata: {
-          collapsed: false,
-          trusted: true,
-          isNew: false, // Mark as not a new cell, so it renders immediately
-          role: 'user'
-        }
-      };
-      
-      cellRefs.current[newCell.id] = React.createRef();
-      setCells(prev => [...prev, newCell]);
-      newCellId = newCell.id;
+    // Parse command and arguments
+    const [cmd, ...args] = normalizedCommand.split(/\s+/);
+    const content = args.join(' ');
+    
+    switch (cmd) {
+      case '/code':
+      case '#code':
+        // Add new code cell with content if provided
+        newCellId = addCell('code', content, 'user');
+        break;
+        
+      case '/markdown':
+      case '#markdown':
+        // Add new markdown cell with content if provided
+        newCellId = addCell('markdown', content, 'user');
+        break;
+        
+      case '/clear':
+        // Clear all cells
+        hasInitialized.current = true; // Prevent auto-initialization
+        setCells([]); // Clear all cells
+        // Add a single empty code cell after clearing
+        setTimeout(() => {
+          const cellId = addCell('code', '', 'user');
+          const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
+          if (cellElement) {
+            cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+        return; // Exit early since we handle scrolling separately
+        
+      case '/run':
+        // Run all cells
+        runAllCells();
+        break;
+        
+      default:
+        // If command not recognized, treat as markdown content
+        newCellId = addCell('markdown', command, 'user');
+        break;
     }
     
     // Scroll to the newly created cell
@@ -983,10 +1016,76 @@ const NotebookPage: React.FC = () => {
     }
   };
 
-  // Delete a cell by ID
-  const deleteCell = (id: string) => {
-    setCells(prev => prev.filter(cell => cell.id !== id));
-  };
+  // Delete a cell by ID with active cell tracking
+  const deleteCell = useCallback((id: string) => {
+    setCells(prev => {
+      const index = prev.findIndex(cell => cell.id === id);
+      if (index === -1) return prev;
+
+      const newCells = prev.filter(cell => cell.id !== id);
+      
+      // Update active cell if needed
+      if (id === activeCellId) {
+        // Try to activate the next cell, or the previous if there is no next
+        const nextIndex = Math.min(index, newCells.length - 1);
+        if (nextIndex >= 0) {
+          const nextCell = newCells[nextIndex];
+          setActiveCellId(nextCell.id);
+          // Focus the newly activated cell
+          setTimeout(() => {
+            const editor = editorRefs.current[nextCell.id]?.current;
+            if (editor) {
+              if (nextCell.type === 'code') {
+                // For code cells, focus the Monaco editor
+                if (typeof editor.focus === 'function') {
+                  editor.focus();
+                } else if (editor.getContainerDomNode) {
+                  editor.getContainerDomNode()?.focus();
+                }
+              } else {
+                // For markdown cells, ensure it's in edit mode and focused
+                toggleCellEditing(nextCell.id, true);
+                if (typeof editor.focus === 'function') {
+                  editor.focus();
+                } else if (editor.getContainerDomNode) {
+                  editor.getContainerDomNode()?.focus();
+                }
+              }
+            }
+          }, 100);
+        } else {
+          setActiveCellId(null);
+        }
+      }
+
+      return newCells;
+    });
+  }, [activeCellId]);
+
+  // Handle cell focus
+  const handleCellFocus = useCallback((id: string) => {
+    setActiveCellId(id);
+    // Add a class to the notebook cells container to indicate an active cell
+    document.querySelector('.notebook-cells-container')?.classList.add('has-active-cell');
+  }, []);
+
+  // Pass editor refs to components
+  const getEditorRef = useCallback((id: string) => {
+    if (!editorRefs.current[id]) {
+      editorRefs.current[id] = React.createRef();
+    }
+    return editorRefs.current[id];
+  }, []);
+
+  // Clean up refs when cells are removed
+  useEffect(() => {
+    const currentIds = new Set(cells.map(cell => cell.id));
+    Object.keys(editorRefs.current).forEach(id => {
+      if (!currentIds.has(id)) {
+        delete editorRefs.current[id];
+      }
+    });
+  }, [cells]);
 
   // Change cell type
   const changeCellType = (id: string, newType: CellType) => {
@@ -995,13 +1094,6 @@ const NotebookPage: React.FC = () => {
         cell.id === id ? { ...cell, type: newType } : cell
       )
     );
-  };
-
-  // Handle cell focus
-  const handleCellFocus = (id: string) => {
-    setActiveCellId(id);
-    // Add a class to the notebook cells container to indicate an active cell
-    document.querySelector('.notebook-cells-container')?.classList.add('has-active-cell');
   };
 
   // Handle keyboard shortcuts
@@ -1090,10 +1182,27 @@ const NotebookPage: React.FC = () => {
       },
       cells: cells.map(cell => ({
         ...cell,
-        role: cell.role, // Explicitly include the role property
+        // Keep the original cell properties
+        id: cell.id,
+        type: cell.type,
+        content: cell.content,
+        executionCount: cell.executionCount,
+        executionState: cell.executionState,
+        // Properly include outputs if they exist
+        output: cell.output ? cell.output.map(output => ({
+          ...output,
+          // Clean up any internal properties we don't want to save
+          attrs: {
+            ...output.attrs,
+            className: undefined // Don't save UI-specific classes
+          }
+        })) : undefined,
+        role: cell.role,
         metadata: {
           ...cell.metadata,
-          role: cell.role // Also store in metadata for better compatibility
+          role: cell.role,
+          collapsed: false,
+          trusted: true
         }
       }))
     };
@@ -1121,19 +1230,37 @@ const NotebookPage: React.FC = () => {
         const notebookData: NotebookData = JSON.parse(content);
         
         setNotebookMetadata(notebookData.metadata);
+        
+        // Find the highest execution count to continue from
+        let maxExecutionCount = 0;
+        notebookData.cells.forEach(cell => {
+          if (cell.executionCount && cell.executionCount > maxExecutionCount) {
+            maxExecutionCount = cell.executionCount;
+          }
+        });
+        
+        // Set the execution counter to continue from the highest number
+        setExecutionCounter(maxExecutionCount + 1);
+        
+        // Restore cells with their outputs
         setCells(notebookData.cells.map(cell => ({
           ...cell,
           id: generateId(), // Generate new IDs for loaded cells
-          executionState: 'idle',
-          output: undefined, // Clear outputs on load
-          role: cell.role || cell.metadata?.role, // Restore role from either location
+          executionState: cell.executionState || 'idle',
+          // Restore outputs if they exist
+          output: cell.output ? cell.output.map(output => ({
+            ...output,
+            attrs: {
+              ...output.attrs,
+              className: `output-area ${output.type === 'stderr' ? 'error-output' : ''}`
+            }
+          })) : undefined,
+          role: cell.role || cell.metadata?.role,
           metadata: {
             ...cell.metadata,
             isNew: false // Mark as not a new cell
           }
         })));
-        
-        setExecutionCounter(1); // Reset execution counter
       } catch (error) {
         console.error('Error loading notebook:', error);
         // TODO: Show error toast
@@ -1162,6 +1289,29 @@ const NotebookPage: React.FC = () => {
         cell.id === id ? { ...cell, role, metadata: { ...cell.metadata, role } } : cell
       )
     );
+  };
+
+  // Add state for editing cells
+  const toggleCellEditing = (id: string, isEditing: boolean) => {
+    setCells(prev => 
+      prev.map(cell => 
+        cell.id === id ? { 
+          ...cell, 
+          metadata: { 
+            ...cell.metadata, 
+            isEditing 
+          } 
+        } : cell
+      )
+    );
+  };
+
+  // Handle markdown cell rendering
+  const handleMarkdownRender = (id: string) => {
+    const cell = cells.find(c => c.id === id);
+    if (cell && cell.type === 'markdown') {
+      toggleCellEditing(id, false);
+    }
   };
 
   return (
@@ -1289,7 +1439,7 @@ const NotebookPage: React.FC = () => {
                         onExecute={() => executeCell(cell.id)}
                         isExecuting={cell.executionState === 'running'}
                         executionCount={cell.executionCount}
-                        blockRef={cellRefs.current[cell.id]}
+                        blockRef={getEditorRef(cell.id)}
                         isActive={activeCellId === cell.id}
                         role={cell.role}
                         onRoleChange={(role) => updateCellRole(cell.id, role)}
@@ -1302,6 +1452,10 @@ const NotebookPage: React.FC = () => {
                       initialEditMode={cell.metadata?.isNew === true}
                       role={cell.role}
                       onRoleChange={(role) => updateCellRole(cell.id, role)}
+                      isEditing={cell.metadata?.isEditing || false}
+                      onEditingChange={(isEditing) => toggleCellEditing(cell.id, isEditing)}
+                      editorRef={getEditorRef(cell.id)}
+                      isActive={activeCellId === cell.id}
                     />
                   )}
                   
@@ -1326,50 +1480,100 @@ const NotebookPage: React.FC = () => {
                 </div>
 
                 {/* Cell Toolbar - Show on hover */}
-                <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1">
+                <div 
+                  className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
+                  style={{ pointerEvents: 'auto' }}
+                >
+                  {/* Cell Type Indicator */}
+                  <span className="text-xs text-gray-500 px-1 border-r border-gray-200 mr-1">
+                    {cell.type === 'code' ? (
+                      <span className="flex items-center gap-1">
+                        <VscCode className="w-3 h-3" />
+                        Code
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <MdOutlineTextFields className="w-3 h-3" />
+                        Markdown
+                      </span>
+                    )}
+                  </span>
+
                   {cell.type === 'code' && (
                     <>
                       <button
                         onClick={() => executeCell(cell.id)}
                         disabled={!isReady || cell.executionState === 'running'}
-                        className="p-1 hover:bg-gray-100 rounded"
+                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
                         title="Run cell"
                       >
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
+                        <span className="text-xs">Run</span>
                       </button>
                       <button
                         onClick={() => changeCellType(cell.id, 'markdown')}
-                        className="p-1 hover:bg-gray-100 rounded"
+                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
                         title="Convert to Markdown"
                       >
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                         </svg>
+                        <span className="text-xs">Convert</span>
                       </button>
                     </>
                   )}
                   {cell.type === 'markdown' && (
-                    <button
-                      onClick={() => changeCellType(cell.id, 'code')}
-                      className="p-1 hover:bg-gray-100 rounded"
-                      title="Convert to Code"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                      </svg>
-                    </button>
+                    <>
+                      {cell.metadata?.isEditing ? (
+                        <button
+                          onClick={() => handleMarkdownRender(cell.id)}
+                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                          title="Render markdown (Shift+Enter)"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-xs">Render</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => toggleCellEditing(cell.id, true)}
+                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                          title="Edit markdown"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                          </svg>
+                          <span className="text-xs">Edit</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => changeCellType(cell.id, 'code')}
+                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                        title="Convert to Code"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                        </svg>
+                        <span className="text-xs">Convert</span>
+                      </button>
+                    </>
                   )}
                   <button
-                    onClick={() => deleteCell(cell.id)}
-                    className="p-1 hover:bg-gray-100 rounded text-red-500"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteCell(cell.id);
+                    }}
+                    className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
                     title="Delete cell"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
+                    <span className="text-xs">Delete</span>
                   </button>
                 </div>
               </div>
