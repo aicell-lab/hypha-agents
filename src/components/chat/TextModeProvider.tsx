@@ -5,7 +5,7 @@ import { useTools } from './ToolProvider';
 import OpenAI from 'openai';
 
 interface TextModeContextType {
-  isRecording: boolean;
+  isChatRunning: boolean;
   isPaused: boolean;
   startChat: (config: {
     onItemCreated?: (item: any) => void;
@@ -48,7 +48,7 @@ interface OpenAISession {
 }
 
 export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) => {
-  const [isRecording, setIsRecording] = useState(false);
+  const [isChatRunning, setisChatRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
@@ -399,7 +399,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       // Clear streaming text
       setStreamingText(null);
       
-      setIsRecording(false);
+      setisChatRunning(false);
       setStatus('Stopped');
       
       // Release the connection lock to allow new connections
@@ -410,7 +410,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       setStatus('Error stopping');
       
       // Force reset even if errors occurred
-      setIsRecording(false);
+      setisChatRunning(false);
       setStreamingText(null);
       
       // Release the connection lock even on error
@@ -450,7 +450,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       }, 30000); // 30 seconds timeout
       
       // Check if there's an existing chat session and close it first
-      if (isRecording) {
+      if (isChatRunning) {
         console.log('Existing chat session detected, closing it before starting a new one');
         await stopChat();
         // Small delay to ensure cleanup is complete
@@ -510,7 +510,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
         }
       }
 
-      setIsRecording(true);
+      setisChatRunning(true);
       setError(null);
       setStatus('Ready');
       setConnectionState('connected');
@@ -559,7 +559,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
   // Send text message
   const sendText = useCallback(async (text: string) => {
     try {
-      if (!isRecording) {
+      if (!isChatRunning) {
         throw new Error('Chat not started');
       }
       
@@ -598,12 +598,12 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       setStatus('Error sending message');
       setStreamingText(null); // Clear streaming text on error
     }
-  }, [isRecording, continueConversation]);
+  }, [isChatRunning, continueConversation]);
 
   // Register a callback to update the session when tools change
   useEffect(() => {
     // Only set up the listener if we're in an active chat and onToolsChange is available
-    if (isRecording && onToolsChange) {
+    if (isChatRunning && onToolsChange) {
       const unsubscribe = onToolsChange((updatedTools) => {
         console.log('Tools changed, updating chat with new tools:', updatedTools);
         chatConfigRef.current.tools = updatedTools;
@@ -611,11 +611,11 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
       
       return unsubscribe;
     }
-  }, [isRecording, onToolsChange]);
+  }, [isChatRunning, onToolsChange]);
 
   return (
     <TextModeContext.Provider value={{
-      isRecording,
+      isChatRunning,
       isPaused,
       startChat,
       stopChat,

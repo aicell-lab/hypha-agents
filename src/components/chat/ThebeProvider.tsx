@@ -508,6 +508,11 @@ print(f"{sys.version.split()[0]}")
             path: '/service-worker.js',
             workerUrl: '/worker.js'
           },
+          "@jupyterlite/pyodide-kernel-extension:kernel": {
+            "pyodideUrl": "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/pyodide.js",
+            "pipliteUrls": ["https://unpkg.com/@jupyterlite/pyodide-kernel@0.5.2/pypi/all.json"],
+            "pipliteWheelUrl": "https://unpkg.com/@jupyterlite/pyodide-kernel@0.5.2/pypi/piplite-0.5.2-py3-none-any.whl"
+          }
         }
       };
 

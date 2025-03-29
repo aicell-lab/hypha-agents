@@ -291,7 +291,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
   
   // Select the appropriate mode based on configuration
   const { 
-    isRecording, 
+    isChatRunning, 
     isPaused,
     startChat, 
     stopChat,
@@ -817,12 +817,12 @@ const ChatContent: React.FC<ChatProps> = (props) => {
       <div className="flex items-center gap-2">
         <div className="relative">
           <button
-            onClick={isRecording ? handlePauseResumeVoiceChat : handleStartVoiceChat}
+            onClick={isChatRunning ? handlePauseResumeVoiceChat : handleStartVoiceChat}
             disabled={isDisabled}
             className={`p-3 rounded-full transition-all duration-300 relative group ${
               isDisabled
                 ? 'bg-gray-300 cursor-not-allowed scale-100'
-                : isRecording 
+                : isChatRunning 
                   ? isPaused
                     ? 'bg-yellow-500 hover:bg-yellow-600'
                     : 'bg-red-500 hover:bg-red-600 animate-pulse' 
@@ -831,7 +831,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
             title={
               !schemaAgents 
                 ? "Waiting for AI service..."
-                : isRecording 
+                : isChatRunning 
                   ? isPaused
                     ? "Resume Recording"
                     : "Pause Recording" 
@@ -846,7 +846,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               </div>
-            ) : isRecording ? (
+            ) : isChatRunning ? (
               isPaused ? (
                 // Play/Resume button with animation
                 <svg 
@@ -877,14 +877,14 @@ const ChatContent: React.FC<ChatProps> = (props) => {
                   <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
                   <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                 </svg>
-                {isRecording && !isPaused && (
+                {isChatRunning && !isPaused && (
                   <div className="absolute -inset-2 rounded-full border-4 border-red-300 opacity-75 animate-ping"></div>
                 )}
               </div>
             )}
 
             {/* Small stop button in corner - only show on hover */}
-            {isRecording && (
+            {isChatRunning && (
               <div
                 onClick={(e) => {
                   e.stopPropagation();
@@ -919,7 +919,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
     useVoiceBasedOnConfig, 
     schemaAgents, 
     isTyping, 
-    isRecording, 
+    isChatRunning, 
     isPaused, 
     isConnecting, 
     hasIncomingVoice, 

@@ -71,6 +71,7 @@ interface CodeCellProps {
   isActive?: boolean;
   role?: CellRole;
   onRoleChange?: (role: CellRole) => void;
+  onChange?: (code: string) => void;
 }
 
 export const CodeCell: React.FC<CodeCellProps> = ({ 
@@ -85,7 +86,8 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   blockRef,
   isActive = false,
   role,
-  onRoleChange
+  onRoleChange,
+  onChange
 }) => {
   const { executeCodeWithDOMOutput, status, isReady } = useThebe();
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
@@ -96,12 +98,24 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = useState<number>(0);
-  const lineHeightPx = 19; // Approximate line height in pixels
-  const minLines = 3; // Minimum number of lines to show
-  const paddingHeight = 16; // 8px padding top + 8px padding bottom
+  const lineHeightPx = 19;
+  const minLines = 3;
+  const paddingHeight = 16;
   const monacoRef = useRef<any>(null);
   const hasFinalDomOutput = useRef<boolean>(false);
   const styleTagRef = useRef<HTMLStyleElement | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Calculate initial height based on content
+  const calculateInitialHeight = useCallback((content: string) => {
+    const lineCount = content.split('\n').length;
+    return Math.max(lineCount * lineHeightPx + paddingHeight, minLines * lineHeightPx + paddingHeight);
+  }, []);
+
+  // Set initial height when component mounts
+  useEffect(() => {
+    setEditorHeight(calculateInitialHeight(code));
+  }, [code, calculateInitialHeight]);
 
   // Expose methods through ref
   React.useImperativeHandle(blockRef, () => ({
@@ -373,7 +387,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       <div className="jupyter-cell-flex-container items-start w-full max-w-full">
         {/* Execution count with role icon */}
         <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-          <div className="text-gray-500 pr-2">
+          <div className="text-gray-500">
             {isExecuting 
               ? '[*]:'
               : executionCount
@@ -394,7 +408,9 @@ export const CodeCell: React.FC<CodeCellProps> = ({
             language={language}
             value={codeValue}
             onChange={(value) => {
-              setCodeValue(value || '');
+              const newValue = value || '';
+              setCodeValue(newValue);
+              onChange?.(newValue);
               // Update editor height with a slight delay to ensure content is processed
               setTimeout(updateEditorHeight, 10);
             }}

@@ -6,6 +6,7 @@
   transition: border-color 0.2s ease;
   overflow: visible !important;
   max-width: 100%;
+  min-height: 76px; /* Initial minimum height: enough for 3 lines (19px * 3) + padding (19px) */
 }
 
 /* Flex container with execution count */

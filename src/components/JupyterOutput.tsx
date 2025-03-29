@@ -113,6 +113,17 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
   );
 };
 
+// Function to detect and wrap URLs in text content
+const processURLs = (content: string): string => {
+  // URL regex pattern that matches common URL formats
+  const urlPattern = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/gi;
+  
+  // Replace URLs with anchor tags
+  return content.replace(urlPattern, (url) => {
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${url}</a>`;
+  });
+};
+
 // Function to render different output types
 const renderOutput = (output: OutputItem, wrapLongLines = false) => {
   const wrapClass = wrapLongLines ? 'whitespace-pre-wrap break-words' : 'whitespace-pre';
@@ -127,27 +138,58 @@ const renderOutput = (output: OutputItem, wrapLongLines = false) => {
   
   switch (output.type) {
     case 'stdout':
-      return <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>;
+      // Process URLs in stdout content
+      const processedStdout = processURLs(output.content);
+      return processedStdout !== output.content ? (
+        <pre 
+          className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}
+          dangerouslySetInnerHTML={{ __html: processedStdout }}
+        />
+      ) : (
+        <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
+      );
     
     case 'stderr':
-      return isPreProcessed ? (
-        <pre 
-          className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`}
-          dangerouslySetInnerHTML={{ __html: output.content }}
-        />
-      ) : (
-        <pre className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}>{output.content}</pre>
-      );
+      if (isPreProcessed) {
+        return (
+          <pre 
+            className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`}
+            dangerouslySetInnerHTML={{ __html: output.content }}
+          />
+        );
+      } else {
+        // Process URLs in stderr content
+        const processedStderr = processURLs(output.content);
+        return processedStderr !== output.content ? (
+          <pre 
+            className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}
+            dangerouslySetInnerHTML={{ __html: processedStderr }}
+          />
+        ) : (
+          <pre className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}>{output.content}</pre>
+        );
+      }
     
     case 'error':
-      return isPreProcessed ? (
-        <pre 
-          className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`}
-          dangerouslySetInnerHTML={{ __html: output.content }}
-        />
-      ) : (
-        <pre className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}>{output.content}</pre>
-      );
+      if (isPreProcessed) {
+        return (
+          <pre 
+            className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`}
+            dangerouslySetInnerHTML={{ __html: output.content }}
+          />
+        );
+      } else {
+        // Process URLs in error content
+        const processedError = processURLs(output.content);
+        return processedError !== output.content ? (
+          <pre 
+            className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}
+            dangerouslySetInnerHTML={{ __html: processedError }}
+          />
+        ) : (
+          <pre className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}>{output.content}</pre>
+        );
+      }
     
     case 'img':
       return <img src={output.content} alt="Output" className="max-w-full my-2 rounded output-area" />;
@@ -161,27 +203,49 @@ const renderOutput = (output: OutputItem, wrapLongLines = false) => {
       );
     
     case 'text':
-      return isPreProcessed ? (
-        <pre 
-          className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`}
-          dangerouslySetInnerHTML={{ __html: output.content }}
-        />
-      ) : (
-        <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
-      );
+      if (isPreProcessed) {
+        return (
+          <pre 
+            className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`}
+            dangerouslySetInnerHTML={{ __html: output.content }}
+          />
+        );
+      } else {
+        // Process URLs in text content
+        const processedText = processURLs(output.content);
+        return processedText !== output.content ? (
+          <pre 
+            className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}
+            dangerouslySetInnerHTML={{ __html: processedText }}
+          />
+        ) : (
+          <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
+        );
+      }
     
     // Additional output types can be handled here
     
     default:
       if (typeof output.content === 'string') {
-        return isPreProcessed ? (
-          <pre 
-            className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`}
-            dangerouslySetInnerHTML={{ __html: output.content }}
-          />
-        ) : (
-          <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
-        );
+        if (isPreProcessed) {
+          return (
+            <pre 
+              className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`}
+              dangerouslySetInnerHTML={{ __html: output.content }}
+            />
+          );
+        } else {
+          // Process URLs in default content
+          const processedDefault = processURLs(output.content);
+          return processedDefault !== output.content ? (
+            <pre 
+              className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}
+              dangerouslySetInnerHTML={{ __html: processedDefault }}
+            />
+          ) : (
+            <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
+          );
+        }
       }
       return <div className="text-gray-500 text-sm output-area">Unsupported output format</div>;
   }

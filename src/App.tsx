@@ -60,7 +60,7 @@ const AppContent: React.FC = () => {
   return (
     <div className="flex flex-col h-screen">
       <Navbar className="flex-shrink-0" />
-      <main className="flex-1 flex flex-col min-h-0">
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <Routes>
           <Route path="/" element={<ResourceGrid />} />
           <Route path="/resources/:id" element={<ResourceDetails />} />

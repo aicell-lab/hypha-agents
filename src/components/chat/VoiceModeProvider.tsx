@@ -4,7 +4,7 @@ import { Tool } from './ToolProvider';
 import { useTools } from './ToolProvider';
 
 interface VoiceModeContextType {
-  isRecording: boolean;
+  isChatRunning: boolean;
   isPaused: boolean;
   startChat: (config: {
     onItemCreated?: (item: any) => void;
@@ -46,7 +46,7 @@ interface OpenAISession {
 }
 
 export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }) => {
-  const [isRecording, setIsRecording] = useState(false);
+  const [isChatRunning, setisChatRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
@@ -362,7 +362,7 @@ Remember:
       }, 30000); // 30 seconds timeout
       
       // Check if there's an existing connection and close it first
-      if (isRecording || peerConnectionRef.current || dataChannelRef.current || mediaStreamRef.current) {
+      if (isChatRunning || peerConnectionRef.current || dataChannelRef.current || mediaStreamRef.current) {
         console.log('Existing WebRTC connection detected, closing it before starting a new one');
         await stopChat();
         // Small delay to ensure cleanup is complete
@@ -522,7 +522,7 @@ Remember:
       };
       await pc.setRemoteDescription(answer);
 
-      setIsRecording(true);
+      setisChatRunning(true);
       setError(null);
       setStatus('Ready');
       
@@ -618,7 +618,7 @@ Remember:
         audioElementRef.current = null;
       }
 
-      setIsRecording(false);
+      setisChatRunning(false);
       setStatus('Stopped');
       
       // Release the connection lock to allow new connections
@@ -633,7 +633,7 @@ Remember:
       dataChannelRef.current = null;
       peerConnectionRef.current = null;
       audioElementRef.current = null;
-      setIsRecording(false);
+      setisChatRunning(false);
       
       // Release the connection lock even on error
       connectionLockRef.current = false;
@@ -716,7 +716,7 @@ Remember:
   // Register a callback to update the session when tools change
   useEffect(() => {
     // Only set up the listener if we're recording and onToolsChange is available
-    if (isRecording && dataChannelRef.current?.readyState === 'open' && onToolsChange) {
+    if (isChatRunning && dataChannelRef.current?.readyState === 'open' && onToolsChange) {
       const unsubscribe = onToolsChange((updatedTools) => {
         console.log('Tools changed, updating session with new tools:', updatedTools);
         updateSession({
@@ -727,11 +727,11 @@ Remember:
       
       return unsubscribe;
     }
-  }, [isRecording, onToolsChange, updateSession]);
+  }, [isChatRunning, onToolsChange, updateSession]);
 
   return (
     <VoiceModeContext.Provider value={{
-      isRecording,
+      isChatRunning,
       isPaused,
       startChat,
       stopChat,
