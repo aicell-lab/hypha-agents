@@ -9,7 +9,7 @@ cp -R node_modules/@jupyterlite/server/style/* public/thebe/
 
 # Copy service worker files
 cp node_modules/thebe-lite/dist/lib/service-worker.js public/
-cp node_modules/@jupyterlite/server/build/worker.js public/
+# cp node_modules/@jupyterlite/server/build/worker.js public/
 
 # Copy Thebe core files
 cp -R node_modules/thebe-core/dist/lib/* public/thebe/

@@ -47,6 +47,9 @@ interface NotebookCell {
     isNew?: boolean;
     role?: CellRole;
     isEditing?: boolean;
+    autoHideOnSuccess?: boolean;
+    isCodeVisible?: boolean;
+    hasOutput?: boolean;
   };
 }
 
@@ -59,9 +62,9 @@ interface NotebookMetadata {
     name: string;
     version: string;
   };
-  title?: string;
-  created?: string;
-  modified?: string;
+  title: string; // Make title required
+  created: string;
+  modified: string;
 }
 
 interface NotebookData {
@@ -97,15 +100,30 @@ const safeParse = (str: string | null) => {
 // Helper to save notebook state to localStorage
 const saveToLocalStorage = (cells: NotebookCell[], metadata: NotebookMetadata) => {
   const data = safeStringify({
-    cells,
+    cells: cells.map(cell => ({
+      ...cell,
+      output: cell.output ? cell.output.map(output => ({
+        ...output,
+        attrs: {
+          ...output.attrs,
+          className: undefined // Remove className as it's UI-specific
+        }
+      })) : undefined,
+      metadata: {
+        ...cell.metadata,
+        hasOutput: cell.output && cell.output.length > 0
+      }
+    })),
     metadata: {
       ...metadata,
       modified: new Date().toISOString()
     }
   });
+  
   if (data) {
     try {
       localStorage.setItem(STORAGE_KEY, data);
+      console.log('[DEBUG] Saved notebook with cells:', cells.length);
     } catch (error) {
       console.error('Error saving to localStorage:', error);
     }
@@ -344,6 +362,731 @@ const convertCellsToHistory = (cells: NotebookCell[]): Array<{role: string; cont
   return history;
 };
 
+// Add default notebook metadata at the top of the file, after interfaces
+const defaultNotebookMetadata: NotebookMetadata = {
+  kernelspec: {
+    name: 'python',
+    display_name: 'Python'
+  },
+  language_info: {
+    name: 'python',
+    version: '3.10'
+  },
+  title: 'Untitled Notebook',
+  created: new Date().toISOString(),
+  modified: new Date().toISOString()
+};
+
+// Add CellManager class after the helpers and before NotebookPage component
+
+// Cell Manager utility class to encapsulate cell operations
+class CellManager {
+  cells: NotebookCell[];
+  setCells: React.Dispatch<React.SetStateAction<NotebookCell[]>>;
+  activeCellId: string | null;
+  setActiveCellId: React.Dispatch<React.SetStateAction<string | null>>;
+  executionCounter: number;
+  setExecutionCounter: React.Dispatch<React.SetStateAction<number>>;
+  editorRefs: React.MutableRefObject<{ [key: string]: React.RefObject<any> }>;
+  notebookMetadata: NotebookMetadata;
+  lastAgentCellRef: React.MutableRefObject<string | null>;
+  executeCodeFn: any;
+  
+  constructor(
+    cells: NotebookCell[],
+    setCells: React.Dispatch<React.SetStateAction<NotebookCell[]>>,
+    activeCellId: string | null,
+    setActiveCellId: React.Dispatch<React.SetStateAction<string | null>>,
+    executionCounter: number,
+    setExecutionCounter: React.Dispatch<React.SetStateAction<number>>,
+    editorRefs: React.MutableRefObject<{ [key: string]: React.RefObject<any> }>,
+    notebookMetadata: NotebookMetadata,
+    lastAgentCellRef: React.MutableRefObject<string | null>,
+    executeCodeFn: any
+  ) {
+    this.cells = cells;
+    this.setCells = setCells;
+    this.activeCellId = activeCellId;
+    this.setActiveCellId = setActiveCellId;
+    this.executionCounter = executionCounter;
+    this.setExecutionCounter = setExecutionCounter;
+    this.editorRefs = editorRefs;
+    this.notebookMetadata = notebookMetadata;
+    this.lastAgentCellRef = lastAgentCellRef;
+    this.executeCodeFn = executeCodeFn;
+  }
+  
+  // Generate a unique ID for cells
+  generateId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2);
+  }
+  
+  // Add a cell of specified type and content after a specific cell (or at the end)
+  addCell(
+    type: CellType, 
+    content: string = '', 
+    role?: CellRole, 
+    afterCellId?: string
+  ): string {
+    const newCell: NotebookCell = {
+      id: this.generateId(),
+      type,
+      content: content || (type === 'code' ? '# Enter your code here' : 'Enter your markdown here'),
+      executionState: 'idle',
+      role,
+      metadata: {
+        collapsed: false,
+        trusted: true,
+        isNew: type === 'code',
+        role: role,
+        isEditing: false,
+        isCodeVisible: true
+      }
+    };
+    
+    // Create a ref for the new cell
+    this.editorRefs.current[newCell.id] = React.createRef();
+    
+    this.setCells(prev => {
+      // If afterCellId is provided, insert after that cell
+      if (afterCellId) {
+        const insertIndex = prev.findIndex(cell => cell.id === afterCellId);
+        if (insertIndex !== -1) {
+          const newCells = [...prev];
+          newCells.splice(insertIndex + 1, 0, newCell);
+          return newCells;
+        }
+      }
+      // If no afterCellId or not found, use activeCellId
+      if (this.activeCellId) {
+        const activeIndex = prev.findIndex(cell => cell.id === this.activeCellId);
+        if (activeIndex !== -1) {
+          const newCells = [...prev];
+          newCells.splice(activeIndex + 1, 0, newCell);
+          return newCells;
+        }
+      }
+      // If no active cell or not found, append to the end
+      return [...prev, newCell];
+    });
+
+    return newCell.id;
+  }
+  
+  // Add a cell of specified type and content before a specific cell
+  addCellBefore(
+    type: CellType, 
+    content: string = '', 
+    role?: CellRole, 
+    beforeCellId?: string
+  ): string {
+    const newCell: NotebookCell = {
+      id: this.generateId(),
+      type,
+      content: content || (type === 'code' ? '# Enter your code here' : 'Enter your markdown here'),
+      executionState: 'idle',
+      role,
+      metadata: {
+        collapsed: false,
+        trusted: true,
+        isNew: type === 'code',
+        role: role,
+        isEditing: false,
+        isCodeVisible: true
+      }
+    };
+    
+    // Create a ref for the new cell
+    this.editorRefs.current[newCell.id] = React.createRef();
+    
+    this.setCells(prev => {
+      // If beforeCellId is provided, insert before that cell
+      if (beforeCellId) {
+        const insertIndex = prev.findIndex(cell => cell.id === beforeCellId);
+        if (insertIndex !== -1) {
+          const newCells = [...prev];
+          newCells.splice(insertIndex, 0, newCell);
+          return newCells;
+        }
+      }
+      
+      // If beforeCellId not found or not provided, default to adding at the end
+      // This is a fallback behavior
+      return [...prev, newCell];
+    });
+
+    return newCell.id;
+  }
+  
+  // Delete a cell by ID
+  deleteCell(id: string): void {
+    this.setCells(prev => {
+      const index = prev.findIndex(cell => cell.id === id);
+      if (index === -1) return prev;
+
+      const newCells = prev.filter(cell => cell.id !== id);
+      
+      // Update active cell if needed
+      if (id === this.activeCellId) {
+        // Try to activate the next cell, or the previous if there is no next
+        const nextIndex = Math.min(index, newCells.length - 1);
+        if (nextIndex >= 0) {
+          const nextCell = newCells[nextIndex];
+          this.setActiveCellId(nextCell.id);
+          // Focus the newly activated cell
+          setTimeout(() => {
+            const editor = this.editorRefs.current[nextCell.id]?.current;
+            if (editor) {
+              if (nextCell.type === 'code') {
+                // For code cells, focus the Monaco editor
+                if (typeof editor.focus === 'function') {
+                  editor.focus();
+                } else if (editor.getContainerDomNode) {
+                  editor.getContainerDomNode()?.focus();
+                }
+              } else {
+                // For markdown cells, ensure it's in edit mode and focused
+                this.toggleCellEditing(nextCell.id, true);
+                if (typeof editor.focus === 'function') {
+                  editor.focus();
+                } else if (editor.getContainerDomNode) {
+                  editor.getContainerDomNode()?.focus();
+                }
+              }
+            }
+          }, 100);
+        } else {
+          this.setActiveCellId(null);
+        }
+      }
+
+      return newCells;
+    });
+  }
+  
+  // Clear all cells and reset references
+  clearAllCells(): void {
+    this.setCells([]);
+    this.setActiveCellId(null);
+    this.editorRefs.current = {};
+  }
+  
+  // Update cell content
+  updateCellContent(id: string, content: string): void {
+    this.setCells(prev => 
+      prev.map(cell => 
+        cell.id === id ? { ...cell, content } : cell
+      )
+    );
+  }
+  
+  // Update cell execution state
+  updateCellExecutionState(id: string, state: ExecutionState, output?: OutputItem[]): void {
+    this.setCells(prev => 
+      prev.map(cell => {
+        if (cell.id === id) {
+          // Only toggle visibility when state changes to 'success' and autoHideOnSuccess is true
+          // Keep code visible during running state
+          let isCodeVisible = cell.metadata?.isCodeVisible;
+          
+          // If in running state, always show the code (expanded)
+          if (state === 'running') {
+            isCodeVisible = true;
+          }
+          // If execution successful and autoHideOnSuccess is set, then collapse
+          else if (state === 'success' && cell.metadata?.autoHideOnSuccess) {
+            isCodeVisible = false;
+          }
+          
+          const updates: Partial<NotebookCell> = { 
+            executionState: state,
+            metadata: {
+              ...cell.metadata,
+              isCodeVisible
+            }
+          };
+          
+          if (state === 'success' && cell.type === 'code') {
+            updates.executionCount = this.executionCounter;
+            this.setExecutionCounter(prev => prev + 1);
+          }
+          
+          if (!output || output.length === 0) {
+            updates.output = undefined;
+          } else {
+            const processedOutput = this.processOutputItems(output);
+            updates.output = processedOutput;
+          }
+          
+          return { ...cell, ...updates };
+        }
+        return cell;
+      })
+    );
+  }
+  
+  // Process output items for ANSI codes
+  processOutputItems(output: OutputItem[]): OutputItem[] {
+    return output.map(item => {
+      if ((item.type === 'stderr' || item.type === 'error') && 
+          (item.content.includes('[0;') || item.content.includes('[1;'))) {
+        try {
+          const convert = new Convert({
+            fg: '#000',
+            bg: '#fff',
+            newline: true,
+            escapeXML: true,
+            stream: false
+          });
+          const htmlContent = convert.toHtml(item.content);
+          return {
+            ...item,
+            content: htmlContent,
+            attrs: {
+              ...item.attrs,
+              className: `output-area ${item.attrs?.className || ''}`,
+              isProcessedAnsi: true
+            }
+          };
+        } catch (error) {
+          console.error("Error converting ANSI:", error);
+        }
+      }
+      return {
+        ...item,
+        attrs: {
+          ...item.attrs,
+          className: `output-area ${item.attrs?.className || ''}`
+        }
+      };
+    });
+  }
+  
+  // Toggle cell editing mode (for markdown cells)
+  toggleCellEditing(id: string, isEditing: boolean): void {
+    this.setCells(prev => 
+      prev.map(cell => 
+        cell.id === id ? { 
+          ...cell, 
+          metadata: { 
+            ...cell.metadata, 
+            isEditing 
+          } 
+        } : cell
+      )
+    );
+  }
+  
+  // Toggle code visibility (for code cells)
+  toggleCodeVisibility(id: string): void {
+    this.setCells(prev => 
+      prev.map(cell => {
+        if (cell.id === id) {
+          const currentVisibility = cell.metadata?.isCodeVisible !== false; // if undefined, treat as visible
+          return {
+            ...cell,
+            metadata: {
+              ...cell.metadata,
+              isCodeVisible: !currentVisibility
+            }
+          };
+        }
+        return cell;
+      })
+    );
+  }
+  
+  // Set cell role
+  updateCellRole(id: string, role: CellRole): void {
+    this.setCells(prev => 
+      prev.map(cell => 
+        cell.id === id ? { 
+          ...cell, 
+          role, 
+          metadata: { ...cell.metadata, role } 
+        } : cell
+      )
+    );
+  }
+  
+  // Change cell type
+  changeCellType(id: string, newType: CellType): void {
+    this.setCells(prev => 
+      prev.map(cell => 
+        cell.id === id ? { ...cell, type: newType } : cell
+      )
+    );
+  }
+  
+  // Set active cell ID
+  setActiveCell(id: string): void {
+    // Remove active state from all cells first
+    document.querySelectorAll('.notebook-cell-container').forEach(cell => {
+      cell.classList.remove('notebook-cell-container-active');
+    });
+    
+    // Add active state to the clicked cell
+    const cellElement = document.querySelector(`[data-cell-id="${id}"]`);
+    if (cellElement) {
+      cellElement.classList.add('notebook-cell-container-active');
+    }
+    
+    this.setActiveCellId(id);
+  }
+  
+  // Move to next cell
+  moveToNextCell(currentCellId: string): void {
+    const currentIndex = this.cells.findIndex(c => c.id === currentCellId);
+    if (currentIndex === -1) return;
+
+    if (currentIndex < this.cells.length - 1) {
+      // Move to next existing cell
+      const nextCell = this.cells[currentIndex + 1];
+      this.setActiveCellId(nextCell.id);
+      
+      // Focus the cell
+      const cellElement = document.querySelector(`[data-cell-id="${nextCell.id}"]`);
+      if (cellElement) {
+        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        const editor = this.editorRefs.current[nextCell.id]?.current;
+        if (editor) {
+          if (nextCell.type === 'code') {
+            if (typeof editor.focus === 'function') {
+              editor.focus();
+            } else if (editor.getContainerDomNode) {
+              editor.getContainerDomNode()?.focus();
+            }
+          } else {
+            this.toggleCellEditing(nextCell.id, true);
+            if (typeof editor.focus === 'function') {
+              editor.focus();
+            } else if (editor.getContainerDomNode) {
+              editor.getContainerDomNode()?.focus();
+            }
+          }
+        }
+      }
+    } else {
+      // Create and focus new cell at the end
+      const newCellId = this.addCell('code', '', 'user');
+      this.setActiveCellId(newCellId);
+      
+      // Focus the new cell
+      setTimeout(() => {
+        const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
+        if (cellElement) {
+          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          const editor = this.editorRefs.current[newCellId]?.current;
+          if (editor) {
+            if (typeof editor.focus === 'function') {
+              editor.focus();
+            } else if (editor.getContainerDomNode) {
+              editor.getContainerDomNode()?.focus();
+            }
+          }
+        }
+      }, 100);
+    }
+  }
+  
+  // Execute a cell
+  async executeCell(id: string, shouldMoveFocus: boolean = false): Promise<void> {
+    const cell = this.cells.find(c => c.id === id);
+    if (!cell || cell.type !== 'code' || !this.executeCodeFn) return;
+
+    // Get the current code from the editor ref
+    const editorRef = this.editorRefs.current[id]?.current;
+    const currentCode = editorRef?.getValue?.() || cell.content;
+
+    // Update cell content first to ensure we're using the latest code
+    this.updateCellContent(id, currentCode);
+    
+    // Make code visible during execution
+    this.setCells(prev => prev.map(c => 
+      c.id === id 
+        ? { 
+            ...c, 
+            metadata: { 
+              ...c.metadata, 
+              isCodeVisible: true // Make code visible during execution 
+            } 
+          }
+        : c
+    ));
+    
+    // Update to running state
+    this.updateCellExecutionState(id, 'running');
+    
+    // If shouldMoveFocus is true, move to the next cell immediately before execution
+    if (shouldMoveFocus) {
+      this.moveToNextCell(id);
+    }
+    
+    try {
+      const outputs: OutputItem[] = [];
+      await this.executeCodeFn(currentCode, {
+        onOutput: (output: OutputItem) => {
+          outputs.push(output);
+          this.updateCellExecutionState(id, 'running', outputs);
+        },
+        onStatus: (status: string) => {
+          if (status === 'Completed') {
+            this.updateCellExecutionState(id, 'success', outputs);
+          } else if (status === 'Error') {
+            this.updateCellExecutionState(id, 'error', outputs);
+          }
+        }
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      let content = errorMessage;
+      let isProcessedAnsi = false;
+      
+      // Process ANSI codes in the error message
+      if (errorMessage.includes('[0;') || errorMessage.includes('[1;')) {
+        try {
+          const convert = new Convert({
+            fg: '#000',
+            bg: '#fff',
+            newline: true,
+            escapeXML: true,
+            stream: false
+          });
+          content = convert.toHtml(errorMessage);
+          isProcessedAnsi = true;
+        } catch (e) {
+          console.error("Error converting ANSI in error message:", e);
+        }
+      }
+      
+      this.updateCellExecutionState(id, 'error', [{
+        type: 'stderr',
+        content,
+        attrs: {
+          className: 'output-area error-output',
+          isProcessedAnsi
+        }
+      }]);
+    }
+  }
+  
+  // Find cell by condition
+  findCell(predicate: (cell: NotebookCell) => boolean): NotebookCell | undefined {
+    return this.cells.find(predicate);
+  }
+  
+  // Find last cell by condition
+  findLastCell(predicate: (cell: NotebookCell) => boolean): NotebookCell | undefined {
+    return this.cells.findLast(predicate);
+  }
+  
+  // Filter cells by specific criteria
+  filterCells(predicate: (cell: NotebookCell) => boolean): void {
+    this.setCells(prev => prev.filter(predicate));
+  }
+  
+  // Get current state of cells with editor content
+  getCurrentCellsContent(): NotebookCell[] {
+    return this.cells.map(cell => {
+      if (cell.type === 'code') {
+        // Get current content from editor ref if visible, otherwise use stored content
+        const editorRef = this.editorRefs.current[cell.id];
+        const currentContent = cell.metadata?.isCodeVisible === false 
+          ? cell.content  // Use stored content if code is hidden
+          : editorRef?.current?.getCurrentCode?.() || cell.content;
+        
+        return {
+          ...cell,
+          content: currentContent,
+          output: cell.output, // Preserve the output array
+          executionState: cell.executionState,
+          executionCount: cell.executionCount,
+          metadata: {
+            ...cell.metadata,
+            hasOutput: cell.output && cell.output.length > 0
+          }
+        };
+      }
+      return cell;
+    });
+  }
+  
+  // Save to localStorage
+  saveToLocalStorage(): void {
+    const currentCells = this.getCurrentCellsContent();
+    console.log('[DEBUG] Auto-saving notebook with cells:', currentCells.length);
+    saveToLocalStorage(currentCells, this.notebookMetadata);
+  }
+  
+  // Run all cells
+  async runAllCells(): Promise<void> {
+    for (const cell of this.cells) {
+      if (cell.type === 'code') {
+        await this.executeCell(cell.id);
+      }
+    }
+  }
+  
+  // Clear all outputs
+  clearAllOutputs(): void {
+    this.setCells(prev => prev.map(cell => ({
+      ...cell,
+      output: undefined,
+      executionState: 'idle'
+    })));
+  }
+  
+  // Collapse code cell after execution
+  collapseCodeCell(cellId: string): void {
+    this.setCells(prev => prev.map(cell => 
+      cell.id === cellId
+        ? { 
+            ...cell,
+            metadata: {
+              ...cell.metadata,
+              isCodeVisible: false, // Hide code editor but show output
+              autoHideOnSuccess: true // Auto-hide on successful execution
+            }
+          }
+        : cell
+    ));
+    console.log('[DEBUG] Set code cell to collapsed mode:', cellId);
+  }
+  
+  // Handle agent response for messages, function calls, etc.
+  handleAgentResponse(item: any): void {
+    console.log('[DEBUG] Handling agent response:', JSON.stringify(item, null, 2).substring(0, 500) + '...');
+    
+    try {
+      // Get the thinking cell ID for placing responses correctly
+      const thinkingCellId = this.lastAgentCellRef.current;
+      
+      // Handle function calls (code cells)
+      if (item.type === 'function_call') {
+        console.log('[DEBUG] Processing function call:', item.name);
+        
+        return;
+      }
+      
+      // Handle function call outputs
+      if (item.type === 'function_call_output') {
+        console.log('[DEBUG] Processing function call output');
+        
+        // Find the last code cell from the assistant to collapse it
+        const lastCodeCell = this.findLastCell(cell => 
+          cell.role === 'assistant' && cell.type === 'code'
+        );
+        
+        if (lastCodeCell) {
+          this.collapseCodeCell(lastCodeCell.id);
+        }
+        return;
+      }
+      
+      // Handle assistant messages (final response)
+      if (item.type === 'message' && item.role === 'assistant') {
+        if (item.content && item.content.length > 0) {
+          console.log('[DEBUG] Processing assistant message with items:', item.content.length);
+          
+          // Find the last code cell from the assistant to insert after
+          const lastCodeCell = this.findLastCell(cell => 
+            cell.role === 'assistant' && cell.type === 'code'
+          );
+          
+          let lastAddedCellId = lastCodeCell?.id;
+          
+          // Create a new markdown cell for the response
+          if (item.content[0]) {
+            lastAddedCellId = this.addCell(
+              'markdown',
+              item.content[0].text || item.content[0].content,
+              'assistant',
+              lastAddedCellId
+            );
+            
+            console.log('[DEBUG] Added final response markdown cell:', lastAddedCellId);
+          }
+          
+          // Scroll to the last added cell
+          if (lastAddedCellId) {
+            setTimeout(() => {
+              const cellElement = document.querySelector(`[data-cell-id="${lastAddedCellId}"]`);
+              if (cellElement) {
+                cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 100);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[DEBUG] Error processing agent response:', error);
+    }
+  }
+
+  // Remove the thinking cell after processing is complete
+  cleanupThinkingCell(thinkingCellId: string): void {
+    // Only remove the specific thinking cell, leaving other cells intact
+    this.setCells(prev => prev.filter(cell => cell.id !== thinkingCellId));
+    
+    // Clear the reference to this cell in editorRefs if it exists
+    if (this.editorRefs.current[thinkingCellId]) {
+      delete this.editorRefs.current[thinkingCellId];
+    }
+    
+    // If this was the active cell, reset active cell to null
+    if (this.activeCellId === thinkingCellId) {
+      this.setActiveCellId(null);
+    }
+    
+    // Reset lastAgentCellRef if it points to the thinking cell
+    if (this.lastAgentCellRef.current === thinkingCellId) {
+      this.lastAgentCellRef.current = null;
+    }
+  }
+}
+
+// Hook to use cell manager
+function useCellManager(
+  cells: NotebookCell[],
+  setCells: React.Dispatch<React.SetStateAction<NotebookCell[]>>,
+  activeCellId: string | null,
+  setActiveCellId: React.Dispatch<React.SetStateAction<string | null>>,
+  executionCounter: number,
+  setExecutionCounter: React.Dispatch<React.SetStateAction<number>>,
+  editorRefs: React.MutableRefObject<{ [key: string]: React.RefObject<any> }>,
+  notebookMetadata: NotebookMetadata,
+  lastAgentCellRef: React.MutableRefObject<string | null>,
+  executeCodeFn: any
+) {
+  const cellManagerRef = useRef<CellManager | null>(null);
+  
+  if (!cellManagerRef.current) {
+    cellManagerRef.current = new CellManager(
+      cells,
+      setCells,
+      activeCellId,
+      setActiveCellId,
+      executionCounter,
+      setExecutionCounter,
+      editorRefs,
+      notebookMetadata,
+      lastAgentCellRef,
+      executeCodeFn
+    );
+  } else {
+    // Update the references when they change
+    cellManagerRef.current.cells = cells;
+    cellManagerRef.current.activeCellId = activeCellId;
+    cellManagerRef.current.executionCounter = executionCounter;
+    cellManagerRef.current.notebookMetadata = notebookMetadata;
+    cellManagerRef.current.executeCodeFn = executeCodeFn;
+  }
+  
+  return cellManagerRef.current;
+}
+
 const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
   const [cells, setCells] = useState<NotebookCell[]>([]);
@@ -354,19 +1097,7 @@ const NotebookPage: React.FC = () => {
   const cellRefs = useRef<{ [key: string]: React.RefObject<{ getCurrentCode: () => string }> }>({});
   const hasInitialized = useRef(false);
   const autoSaveTimerRef = useRef<NodeJS.Timeout>();
-  const [notebookMetadata, setNotebookMetadata] = useState<NotebookMetadata>({
-    kernelspec: {
-      name: 'python',
-      display_name: 'Python'
-    },
-    language_info: {
-      name: 'python',
-      version: '3.10'
-    },
-    title: 'Untitled Notebook',
-    created: new Date().toISOString(),
-    modified: new Date().toISOString()
-  });
+  const [notebookMetadata, setNotebookMetadata] = useState<NotebookMetadata>(defaultNotebookMetadata);
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
   const editorRefs = useRef<{ [key: string]: React.RefObject<any> }>({});
   
@@ -385,82 +1116,22 @@ const NotebookPage: React.FC = () => {
   const [isExecuting, setIsExecuting] = useState(false); // Track global execution state
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set()); // Track cells that are executing
 
-  // Add state for editing cells
-  const toggleCellEditing = (id: string, isEditing: boolean) => {
-    setCells(prev => 
-      prev.map(cell => 
-        cell.id === id ? { 
-          ...cell, 
-          metadata: { 
-            ...cell.metadata, 
-            isEditing 
-          } 
-        } : cell
-      )
-    );
-  };
+  // Add a ref to track the last cell ID for agent responses
+  const lastAgentCellRef = useRef<string | null>(null);
 
-  // Create a stable addCell function with useCallback
-  const addCell = useCallback((type: CellType, content: string = '', role?: CellRole) => {
-    const newCell: NotebookCell = {
-      id: generateId(),
-      type,
-      content: content || (type === 'code' ? '# Enter your code here' : 'Enter your markdown here'),
-      executionState: 'idle',
-      role,
-      metadata: {
-        collapsed: false,
-        trusted: true,
-        isNew: type === 'code', // Only set isNew to true for code cells
-        role: role,
-        isEditing: false
-      }
-    };
-    
-    // Create a ref for the new cell
-    editorRefs.current[newCell.id] = React.createRef();
-    
-    setCells(prev => {
-      // If there's an active cell, insert after it
-      if (activeCellId) {
-        const activeIndex = prev.findIndex(cell => cell.id === activeCellId);
-        if (activeIndex !== -1) {
-          const newCells = [...prev];
-          newCells.splice(activeIndex + 1, 0, newCell);
-          return newCells;
-        }
-      }
-      // If no active cell or active cell not found, append to the end
-      return [...prev, newCell];
-    });
-
-    setActiveCellId(newCell.id); // Set as active cell
-
-    // Scroll the new cell into view and focus it
-    setTimeout(() => {
-      // Find the cell element
-      const cellElement = document.querySelector(`[data-cell-id="${newCell.id}"]`);
-      if (cellElement) {
-        // Scroll the cell into view with smooth behavior
-        cellElement.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'center'
-        });
-        
-        // Focus the editor after scrolling
-        const editor = editorRefs.current[newCell.id]?.current;
-        if (editor && type === 'code') { // Only focus code cells
-          if (typeof editor.focus === 'function') {
-            editor.focus();
-          } else if (editor.getContainerDomNode) {
-            editor.getContainerDomNode()?.focus();
-          }
-        }
-      }
-    }, 100); // Short delay to ensure the cell is rendered
-
-    return newCell.id;
-  }, [activeCellId]);
+  // Initialize the cell manager
+  const cellManager = useCellManager(
+    cells,
+    setCells,
+    activeCellId,
+    setActiveCellId,
+    executionCounter,
+    setExecutionCounter,
+    editorRefs,
+    notebookMetadata,
+    lastAgentCellRef,
+    executeCode
+  );
 
   // Load saved state on mount
   useEffect(() => {
@@ -468,7 +1139,7 @@ const NotebookPage: React.FC = () => {
       const savedState = loadFromLocalStorage();
       if (savedState) {
         console.log('Restored notebook state from localStorage');
-        setCells(savedState.cells);
+        cellManager.setCells(savedState.cells);
         setNotebookMetadata(savedState.metadata);
         
         // Find the highest execution count to continue from
@@ -482,26 +1153,24 @@ const NotebookPage: React.FC = () => {
       } else {
         // No saved state, add welcome cells
         console.log('No saved state found, adding welcome cells');
-        addCell('markdown', `# 🚀 Welcome to the Interactive Notebook\n\nThis notebook combines the power of Jupyter notebooks with AI assistance.\n\n* Type your question or request in the chat input below\n* Add code cells with \`/code\` command\n* Add markdown cells with \`/markdown\` command\n* Run cells with the run button or Ctrl+Enter`, 'assistant');
-        addCell('code', '', 'assistant');
+        cellManager.addCell('markdown', `# 🚀 Welcome to the Interactive Notebook\n\nThis notebook combines the power of Jupyter notebooks with AI assistance.\n\n* Type your question or request in the chat input below\n* Add code cells with \`/code\` command\n* Add markdown cells with \`/markdown\` command\n* Run cells with the run button or Ctrl+Enter`, 'assistant');
+        cellManager.addCell('code', '', 'assistant');
       }
       hasInitialized.current = true;
     }
-  }, [addCell]);
+  }, [cellManager]);
 
-  // Auto-save whenever cells or metadata changes
+  // Update auto-save effect to use a debounce
   useEffect(() => {
     // Clear any pending auto-save
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
     
-    // Set new auto-save timer
+    // Set new auto-save timer with longer delay
     autoSaveTimerRef.current = setTimeout(() => {
-      const currentCells = getCurrentCellsContent();
-      console.log('[DEBUG] Auto-saving notebook with cells:', currentCells.length);
-      saveToLocalStorage(currentCells, notebookMetadata);
-    }, AUTO_SAVE_DELAY);
+      cellManager.saveToLocalStorage();
+    }, 2000); // Increased delay to 2 seconds
     
     // Cleanup timer on unmount
     return () => {
@@ -509,95 +1178,10 @@ const NotebookPage: React.FC = () => {
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [cells, notebookMetadata]);
+  }, [cells, notebookMetadata, cellManager]);
 
-  // Generate a unique ID for cells
-  const generateId = () => {
-    return Date.now().toString(36) + Math.random().toString(36).substring(2);
-  };
-  
-  // Update cell content
-  const updateCellContent = (id: string, content: string) => {
-    setCells(prev => 
-      prev.map(cell => 
-        cell.id === id ? { ...cell, content } : cell
-      )
-    );
-  };
-
-  // Update cell execution state
-  const updateCellExecutionState = (id: string, state: ExecutionState, output?: OutputItem[]) => {
-    setCells(prev => 
-      prev.map(cell => {
-        if (cell.id === id) {
-          const updates: Partial<NotebookCell> = { executionState: state };
-          if (state === 'success' && cell.type === 'code') {
-            updates.executionCount = executionCounter;
-            setExecutionCounter(prev => prev + 1);
-          }
-          // Always set output to undefined if no output is provided or empty array
-          if (!output || output.length === 0) {
-            updates.output = undefined;
-          } else {
-            // Process output items to ensure consistent styling
-            const processedOutput = output.map(item => {
-              // Special processing for stderr and error types to handle ANSI codes
-              if ((item.type === 'stderr' || item.type === 'error') && 
-                  (item.content.includes('[0;') || item.content.includes('[1;'))) {
-                try {
-                  // Use raw HTML output since we'll render it with dangerouslySetInnerHTML
-                  const htmlContent = convert.toHtml(item.content);
-                  return {
-                    ...item,
-                    content: htmlContent,
-                    attrs: {
-                      ...item.attrs,
-                      className: `output-area ${item.attrs?.className || ''}`,
-                      isProcessedAnsi: true
-                    }
-                  };
-                } catch (error) {
-                  console.error("Error converting ANSI:", error);
-                  // Fall back to unprocessed content if conversion fails
-                  return {
-                    ...item,
-                    attrs: {
-                      ...item.attrs,
-                      className: `output-area ${item.attrs?.className || ''}`
-                    }
-                  };
-                }
-              }
-              return {
-                ...item,
-                attrs: {
-                  ...item.attrs,
-                  className: `output-area ${item.attrs?.className || ''}`
-                }
-              };
-            });
-            updates.output = processedOutput;
-          }
-          return { ...cell, ...updates };
-        }
-        return cell;
-      })
-    );
-  };
-
-  // Execute a cell
+  // Execute a cell with management of execution states
   const executeCell = async (id: string, shouldMoveFocus: boolean = false) => {
-    const cell = cells.find(c => c.id === id);
-    if (!cell || cell.type !== 'code' || !isReady) return;
-
-    // Get the current code from the editor ref
-    const editorRef = editorRefs.current[id]?.current;
-    const currentCode = editorRef?.getValue?.() || cell.content;
-
-    // Update cell content first to ensure we're using the latest code
-    updateCellContent(id, currentCode);
-    updateCellExecutionState(id, 'running');
-    
     // Update global execution state
     setIsExecuting(true);
     
@@ -608,157 +1192,53 @@ const NotebookPage: React.FC = () => {
       return newSet;
     });
 
-    // If shouldMoveFocus is true, move to the next cell immediately before execution
-    if (shouldMoveFocus) {
-      moveToNextCell(id);
-    }
+    await cellManager.executeCell(id, shouldMoveFocus);
     
-    try {
-      const outputs: OutputItem[] = [];
-      await executeCode(currentCode, {
-        onOutput: (output) => {
-          // Process output to ensure proper ANSI handling
-          let processedOutput = output;
-          
-          // Handle ANSI codes in stderr and error outputs
-          if ((output.type === 'stderr' || output.type === 'error') && 
-              (output.content.includes('[0;') || output.content.includes('[1;'))) {
-            try {
-              const htmlContent = convert.toHtml(output.content);
-              processedOutput = {
-                ...output,
-                content: htmlContent,
-                attrs: {
-                  ...output.attrs,
-                  className: `output-area ${output.attrs?.className || ''}`,
-                  isProcessedAnsi: true
-                }
-              };
-            } catch (error) {
-              console.error("Error converting ANSI:", error);
-              processedOutput = {
-                ...output,
-                attrs: {
-                  ...output.attrs,
-                  className: `output-area ${output.attrs?.className || ''}`
-                }
-              };
-            }
-          } else {
-            processedOutput = {
-              ...output,
-              attrs: {
-                ...output.attrs,
-                className: `output-area ${output.attrs?.className || ''}`
-              }
-            };
-          }
-          
-          outputs.push(processedOutput);
-          updateCellExecutionState(id, 'running', outputs);
-        },
-        onStatus: (status) => {
-          if (status === 'Completed') {
-            updateCellExecutionState(id, 'success', outputs);
-            
-            // Remove cell from executing cells set
-            setExecutingCells(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(id);
-              // If no more cells are executing, update global state
-              if (newSet.size === 0) {
-                setIsExecuting(false);
-              }
-              return newSet;
-            });
-          } else if (status === 'Error') {
-            updateCellExecutionState(id, 'error', outputs);
-            
-            // Remove cell from executing cells set
-            setExecutingCells(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(id);
-              // If no more cells are executing, update global state
-              if (newSet.size === 0) {
-                setIsExecuting(false);
-              }
-              return newSet;
-            });
-          }
-        }
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      let content = errorMessage;
-      let isProcessedAnsi = false;
-      
-      // Process ANSI codes in the error message
-      if (errorMessage.includes('[0;') || errorMessage.includes('[1;')) {
-        try {
-          content = convert.toHtml(errorMessage);
-          isProcessedAnsi = true;
-        } catch (e) {
-          console.error("Error converting ANSI in error message:", e);
-        }
+    // Remove cell from executing cells set
+    setExecutingCells(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(id);
+      // If no more cells are executing, update global state
+      if (newSet.size === 0) {
+        setIsExecuting(false);
       }
-      
-      updateCellExecutionState(id, 'error', [{
-        type: 'stderr',
-        content,
-        attrs: {
-          className: 'output-area error-output',
-          isProcessedAnsi
-        }
-      }]);
-      
-      // Remove cell from executing cells set
-      setExecutingCells(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(id);
-        // If no more cells are executing, update global state
-        if (newSet.size === 0) {
-          setIsExecuting(false);
-        }
-        return newSet;
-      });
-    }
+      return newSet;
+    });
   };
 
-  // Handle code execution from agent
+  // Update handleExecuteCode to properly save and persist outputs
   const handleExecuteCode = useCallback(async (code: string): Promise<string> => {
     try {
-      console.log("[DEBUG] handleExecuteCode - Starting execution with code:", code.substring(0, 100) + "...");
+      // Check if there's already a recently added code cell with this code
+      // This prevents duplication when the agent calls runCode
+      const existingCodeCell = cellManager.findLastCell(cell => 
+        cell.type === 'code' && 
+        cell.role === 'assistant' && 
+        cell.content === code
+      );
       
-      // Create a new code cell with the agent's code - CRITICAL STEP
-      const cellId = addCell('code', code, 'assistant');
-      console.log("[DEBUG] New cell created with ID:", cellId);
+      let cellId: string;
       
-      // Scroll to the new code cell
-      setTimeout(() => {
-        const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
-        if (cellElement) {
-          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          console.log("[DEBUG] Scrolled to newly added code cell:", cellId);
-        }
-      }, 50);
+      if (existingCodeCell) {
+        // Use the existing cell instead of creating a new one
+        cellId = existingCodeCell.id;
+      } else {
+        // If for some reason we don't have a reference (shouldn't happen normally),
+        // create a new code cell
+        cellId = cellManager.addCell('code', code, 'assistant', lastAgentCellRef.current || undefined);
+        lastAgentCellRef.current = cellId;
+      }
+    
+      // Update cell state to running and execute the code
+      cellManager.updateCellExecutionState(cellId, 'running');
       
-      // Force immediate state update to ensure cell is visible
-      await new Promise(resolve => setTimeout(resolve, 10));
-      
-      // Mark cell as running to show it's being processed
-      updateCellExecutionState(cellId, 'running');
-      console.log("[DEBUG] Cell marked as running");
-      
-      // Execute code and collect outputs
       const outputs: OutputItem[] = [];
-      let shortOutput = 'Outputs:\n'; // Track short output for LLM response
+      let shortOutput = 'Outputs:\n';
       
       try {
         await executeCode(code, {
           onOutput: (output) => {
-            console.log("[DEBUG] Output received:", output.type);
-            
-            // Process output
+            // Process ANSI codes in output
             let processedOutput = output;
             if ((output.type === 'stderr' || output.type === 'error') && 
                 (output.content.includes('[0;') || output.content.includes('[1;'))) {
@@ -786,82 +1266,52 @@ const NotebookPage: React.FC = () => {
               };
             }
             
-            // Save output to array
+            // Add to outputs array
             outputs.push(processedOutput);
             
-            // Update short output for LLM response
             if (output.type === 'stdout' || output.type === 'stderr') {
               shortOutput += output.content + '\n';
             }
             
-            // Update the running cell with current outputs
-            setCells(prevCells => 
-              prevCells.map(cell => 
-                cell.id === cellId ? {
-                  ...cell,
-                  executionState: 'running' as ExecutionState,
-                  output: [...outputs]
-                } : cell
-              )
-            );
+            // Update cell with current outputs
+            cellManager.updateCellExecutionState(cellId, 'running', outputs);
           },
           onStatus: (status) => {
-            console.log("[DEBUG] Execution status:", status);
-            
             if (status === 'Completed') {
-              console.log("[DEBUG] Code completed successfully, setting success state with outputs:", outputs.length);
+              // Save final outputs on completion
+              cellManager.updateCellExecutionState(cellId, 'success', outputs);
               
-              // Mark the cell as successfully executed with proper execution count
-              setCells(prevCells => 
-                prevCells.map(cell => 
-                  cell.id === cellId ? {
-                    ...cell, 
-                    executionState: 'success' as ExecutionState,
-                    executionCount: executionCounter,
-                    // Only set output if we have actual outputs
-                    output: outputs.length > 0 ? [...outputs] : undefined
-                  } : cell
-                )
-              );
-              
-              // Increment execution counter for next execution
-              setExecutionCounter(prevCount => prevCount + 1);
+              // Save to localStorage after successful execution
+              setTimeout(() => {
+                cellManager.saveToLocalStorage();
+              }, 100);
             } else if (status === 'Error') {
-              console.log("[DEBUG] Code execution error, setting error state with outputs:", outputs.length);
+              // Save error outputs
+              cellManager.updateCellExecutionState(cellId, 'error', outputs);
               
-              setCells(prevCells => 
-                prevCells.map(cell => 
-                  cell.id === cellId ? {
-                    ...cell, 
-                    executionState: 'error' as ExecutionState,
-                    // Only set output if we have actual outputs
-                    output: outputs.length > 0 ? [...outputs] : undefined
-                  } : cell
-                )
-              );
+              // Save to localStorage after error
+              setTimeout(() => {
+                cellManager.saveToLocalStorage();
+              }, 100);
             }
           }
         });
         
-        // Return the short output if available, otherwise a generic success message
         return shortOutput.trim() || "Code executed successfully. No output generated.";
       } catch (error) {
         console.error("[DEBUG] executeCode error:", error);
         
-        // If error during execution, still mark the cell with error state
-        setCells(prevCells => 
-          prevCells.map(cell => 
-            cell.id === cellId ? {
-              ...cell,
-              executionState: 'error' as ExecutionState,
-              output: [{
-                type: 'stderr',
-                content: `Error: ${error instanceof Error ? error.message : String(error)}`,
-                attrs: { className: 'output-area error-output' }
-              }]
-            } : cell
-          )
-        );
+        // Save error state and output
+        cellManager.updateCellExecutionState(cellId, 'error', [{
+          type: 'stderr',
+          content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          attrs: { className: 'output-area error-output' }
+        }]);
+        
+        // Save to localStorage after error
+        setTimeout(() => {
+          cellManager.saveToLocalStorage();
+        }, 100);
         
         return `Error executing code: ${error instanceof Error ? error.message : String(error)}`;
       }
@@ -869,78 +1319,17 @@ const NotebookPage: React.FC = () => {
       console.error("[DEBUG] Fatal error in handleExecuteCode:", error);
       return `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
     }
-  }, [addCell, executeCode, setCells, updateCellExecutionState, executionCounter]);
+  }, [cellManager, executeCode, lastAgentCellRef]);
 
   // Use the proper custom hook to register tools
   const { tools, isToolRegistered } = useNotebookTools(isReady, executeCode, handleExecuteCode);
 
   // Handle agent responses
   const handleAgentResponse = useCallback((item: any) => {
-    console.log('[DEBUG] Handling agent response:', JSON.stringify(item, null, 2).substring(0, 500) + '...');
-    
-    if (item.type === 'message' && item.role === 'assistant') {
-      setIsProcessingAgentResponse(true);
-      
-      try {
-        // Process each content item in the message
-        if (item.content && item.content.length > 0) {
-          // Track if we have any tool calls to handle
-          let hasToolCalls = false;
-          let lastAddedCellId = '';
-          
-          console.log('[DEBUG] Processing message content items:', item.content.length);
-          
-          item.content.forEach((contentItem: any, index: number) => {
-            console.log(`[DEBUG] Content item ${index} type:`, contentItem.type);
-            
-            if (contentItem.type === 'text' || contentItem.type === 'markdown') {
-              console.log('[DEBUG] Adding markdown cell from text/markdown content');
-              // Add as markdown cell with assistant role
-              lastAddedCellId = addCell('markdown', contentItem.text || contentItem.content, 'assistant');
-            } else if (contentItem.type === 'tool_call' && contentItem.content) {
-              // This will be handled by the tool registration system
-              // The code will be added and executed through the handleExecuteCode function
-              console.log('[DEBUG] Tool call from agent:', JSON.stringify(contentItem, null, 2));
-              
-              if (contentItem.content.name === 'runCode') {
-                console.log('[DEBUG] runCode tool call detected with args:', 
-                  JSON.stringify(contentItem.content.args, null, 2).substring(0, 200) + '...');
-              }
-              
-              hasToolCalls = true;
-            } else {
-              console.log('[DEBUG] Unhandled content item type:', contentItem.type, contentItem);
-            }
-          });
-          
-          // If this message contained tool calls but no response was sent back,
-          // handle the case to prevent the "tool_call_id did not have response messages" error
-          if (hasToolCalls) {
-            console.log('[DEBUG] Message contained tool calls, ensuring responses are sent');
-          }
-          
-          // Scroll to the last added cell after a short delay to ensure rendering is complete
-          if (lastAddedCellId) {
-            setTimeout(() => {
-              const cellElement = document.querySelector(`[data-cell-id="${lastAddedCellId}"]`);
-              if (cellElement) {
-                cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                console.log('[DEBUG] Scrolled to newly added cell:', lastAddedCellId);
-              }
-            }, 100);
-          }
-        } else {
-          console.log('[DEBUG] No content items in message');
-        }
-      } catch (error) {
-        console.error('[DEBUG] Error processing agent response:', error);
-      } finally {
-        setIsProcessingAgentResponse(false);
-      }
-    } else {
-      console.log('[DEBUG] Ignoring non-assistant message:', item.type, item.role);
-    }
-  }, [addCell]);
+    // Forward to cell manager
+    cellManager.handleAgentResponse(item);
+    setIsProcessingAgentResponse(item.type === 'message' && item.role === 'assistant');
+  }, [cellManager]);
 
   // Initialize schema-agents
   useEffect(() => {
@@ -951,29 +1340,31 @@ const NotebookPage: React.FC = () => {
     const initSchemaAgents = async () => {
       if (!server || !isMounted) return;
       
-      // Check if user is logged in
-      if (!isLoggedIn) {
-        setInitializationError("You must be logged in to use the AI assistant. Please log in and try again.");
+      // Check if user is logged in and server is connected
+      if (!isLoggedIn || !server) {
+        console.log('[DEBUG] Waiting for login and server connection before initializing AI assistant');
+        setInitializationError(null); // Clear any previous error
         return;
       }
       
       try {
-        console.log('Attempting to initialize schema-agents service...');
+        console.log('[DEBUG] Attempting to initialize schema-agents service...');
         const service = await server.getService("schema-agents");
         
         if (isMounted) {
           if (service) {
-            console.log('Schema-agents service initialized successfully');
+            console.log('[DEBUG] Schema-agents service initialized successfully');
             setSchemaAgents(service);
+            setInitializationError(null);
           } else {
-            console.error('Schema-agents service returned null');
+            console.error('[DEBUG] Schema-agents service returned null');
             setInitializationError("Could not connect to the AI service. Please check your connection.");
             retryIfNeeded();
           }
         }
       } catch (error) {
         if (isMounted) {
-          console.error('Failed to initialize schema-agents:', error);
+          console.error('[DEBUG] Failed to initialize schema-agents:', error);
           setInitializationError("Error connecting to AI service: " + 
             (error instanceof Error ? error.message : "Unknown error"));
           retryIfNeeded();
@@ -982,17 +1373,33 @@ const NotebookPage: React.FC = () => {
     };
     
     const retryIfNeeded = () => {
-      if (retryCount < MAX_RETRIES && isMounted) {
+      if (retryCount < MAX_RETRIES && isMounted && isLoggedIn && server) {
         retryCount++;
-        console.log(`Retrying schema-agents initialization (attempt ${retryCount}/${MAX_RETRIES})...`);
+        console.log(`[DEBUG] Retrying schema-agents initialization (attempt ${retryCount}/${MAX_RETRIES})...`);
         setTimeout(initSchemaAgents, 2000); // Wait 2 seconds before retrying
       } else if (isMounted) {
-        // Max retries reached
-        setInitializationError("Failed to connect to AI service after multiple attempts. Please refresh the page to try again.");
+        // Max retries reached or prerequisites not met
+        if (!isLoggedIn) {
+          setInitializationError("Please log in to use the AI assistant.");
+        } else if (!server) {
+          setInitializationError("Waiting for server connection...");
+        } else {
+          setInitializationError("Failed to connect to AI service after multiple attempts. Please refresh the page to try again.");
+        }
       }
     };
 
-    initSchemaAgents();
+    // Only initialize if logged in and server is connected
+    if (isLoggedIn && server) {
+      initSchemaAgents();
+    } else {
+      console.log('[DEBUG] Waiting for login and server connection...', { isLoggedIn, hasServer: !!server });
+      setInitializationError(
+        !isLoggedIn ? "Please log in to use the AI assistant." :
+        !server ? "Waiting for server connection..." :
+        "Waiting for prerequisites..."
+      );
+    }
     
     return () => {
       isMounted = false;
@@ -1004,43 +1411,31 @@ const NotebookPage: React.FC = () => {
     // Keep track of whether component is mounted
     let isMounted = true;
     
-    // Add a timeout for initialization
-    const initTimeout = setTimeout(() => {
-      if (isMounted && !isChatRunning) {
-        console.warn('AI assistant initialization is taking longer than expected. Will continue to try in the background.');
-        setInitializationError("AI assistant initialization is taking longer than expected. Still trying...");
-      }
-    }, 8000);
-    
     const startAgentChat = async () => {
-      // Skip if already recording/initialized or missing dependencies
-      if (!isReady || !schemaAgents || isChatRunning || !isMounted || !isLoggedIn) {
-        console.log('Skipping chat initialization:', {
+      // Skip if already running or missing dependencies
+      if (!isReady || !schemaAgents || isChatRunning || !isMounted || !isLoggedIn || !server) {
+        console.log('[DEBUG] Skipping chat initialization:', {
           isReady,
           hasSchemaAgents: !!schemaAgents,
           isChatRunning,
           isMounted,
-          isLoggedIn
+          isLoggedIn,
+          hasServer: !!server
         });
         return;
       }
       
       // Make sure tools are available
       if (!tools || tools.length === 0) {
-        console.log('No tools available yet, waiting for tools to be registered...');
+        console.log('[DEBUG] No tools available yet, waiting for tools to be registered...');
         setInitializationError("Waiting for code tools to be registered...");
-        setTimeout(() => {
-          if (isMounted && !isChatRunning) {
-            startAgentChat(); // Try again after tools are hopefully registered
-          }
-        }, 1000);
         return;
       }
       
       // Ensure the runCode tool is registered
       const hasRunCodeTool = tools.some(tool => tool.name === 'runCode');
       if (!hasRunCodeTool) {
-        console.warn('runCode tool not found in registered tools. Available tools:', 
+        console.warn('[DEBUG] runCode tool not found in registered tools. Available tools:', 
           tools.map(t => t.name)
         );
         setInitializationError("Code execution tool not available. Please try refreshing the page.");
@@ -1048,7 +1443,7 @@ const NotebookPage: React.FC = () => {
       }
       
       try {
-        console.log('Starting notebook agent chat with config:', {
+        console.log('[DEBUG] Starting notebook agent chat with config:', {
           model: defaultAgentConfig.model,
           temperature: defaultAgentConfig.temperature,
           toolCount: tools.length,
@@ -1060,52 +1455,38 @@ const NotebookPage: React.FC = () => {
           setInitializationError(null);
         }
         
-        // Convert existing cells to chat history
-        const chatHistory = convertCellsToHistory(cells);
-        console.log('Generated chat history from cells:', chatHistory);
-        
         await startChat({
           onItemCreated: handleAgentResponse,
           instructions: defaultAgentConfig.instructions,
           temperature: defaultAgentConfig.temperature,
           tools: tools,
-          model: defaultAgentConfig.model,
-          // chatHistory: chatHistory
+          model: defaultAgentConfig.model
         });
         
-        console.log('Chat initialization completed successfully');
+        console.log('[DEBUG] Chat initialization completed successfully');
       } catch (error) {
         // Only log error if component is still mounted
         if (isMounted) {
-          console.error('Failed to start agent chat:', error);
+          console.error('[DEBUG] Failed to start agent chat:', error);
           setInitializationError("Could not connect to the AI assistant. Will retry automatically.");
-          
-          // After a short delay, try again
-          setTimeout(() => {
-            if (isMounted && !isChatRunning) {
-              console.log('Retrying chat initialization...');
-              startAgentChat();
-            }
-          }, 3000);
         }
       }
     };
 
-    // Only start chat if not already recording and we have all dependencies
-    if (!isChatRunning && isReady && schemaAgents && isLoggedIn && tools?.length > 0) {
-      console.log('Starting chat initialization...');
+    // Only start chat if we have all dependencies
+    if (!isChatRunning && isReady && schemaAgents && isLoggedIn && server && tools?.length > 0) {
+      console.log('[DEBUG] Starting chat initialization...');
       startAgentChat();
     }
     
     // Clean up when component unmounts
     return () => {
       isMounted = false;
-      clearTimeout(initTimeout);
     };
-  }, [isReady, schemaAgents, isLoggedIn, tools]); // Remove isChatRunning from dependencies
+  }, [isReady, schemaAgents, isLoggedIn, server, tools, isChatRunning, handleAgentResponse]);
 
   // Handle user input from the chat input component
-  const handleSendMessage = (message: string) => {
+  const handleSendMessage = async (message: string) => {
     // If not logged in, show error
     if (!isLoggedIn) {
       setInitializationError("You must be logged in to use the AI assistant. Please log in and try again.");
@@ -1119,11 +1500,17 @@ const NotebookPage: React.FC = () => {
     }
 
     // Add as a rendered markdown cell with user role
-    const cellId = addCell('markdown', message, 'user');
+    const userCellId = cellManager.addCell('markdown', message, 'user');
     
-    // Scroll to the user message
+    // Add a thinking cell right after the user's message
+    const thinkingCellId = cellManager.addCell('markdown', '🤔 Thinking...', 'assistant', userCellId);
+    
+    // Set the thinking cell as the activeAgentCell for anchoring responses
+    lastAgentCellRef.current = thinkingCellId;
+    
+    // Scroll to the thinking message
     setTimeout(() => {
-      const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
+      const cellElement = document.querySelector(`[data-cell-id="${thinkingCellId}"]`);
       if (cellElement) {
         cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -1132,10 +1519,18 @@ const NotebookPage: React.FC = () => {
     // Send to agent
     if (isChatRunning) {
       try {
-        sendText(message);
+        setIsProcessingAgentResponse(true);
+        await sendText(message);
       } catch (error) {
         console.error('Error sending message to AI:', error);
         setInitializationError("Error communicating with AI assistant. Please try again or refresh the page.");
+      } finally {
+        setIsProcessingAgentResponse(false);
+        
+        // Remove the thinking cell after processing is complete
+        setTimeout(() => {
+          cellManager.cleanupThinkingCell(thinkingCellId);
+        }, 100); // Small delay to ensure all agent responses are processed
       }
     }
   };
@@ -1153,22 +1548,23 @@ const NotebookPage: React.FC = () => {
       case '/code':
       case '#code':
         // Add new code cell with content if provided
-        newCellId = addCell('code', content, 'user');
+        newCellId = cellManager.addCell('code', content, 'user');
         break;
         
       case '/markdown':
       case '#markdown':
         // Add new markdown cell with content if provided
-        newCellId = addCell('markdown', content, 'user');
+        newCellId = cellManager.addCell('markdown', content, 'user');
         break;
         
       case '/clear':
         // Clear all cells
         hasInitialized.current = true; // Prevent auto-initialization
-        setCells([]); // Clear all cells
+        cellManager.clearAllCells(); // Use cellManager to clear cells
+        
         // Add a single empty code cell after clearing
         setTimeout(() => {
-          const cellId = addCell('code', '', 'user');
+          const cellId = cellManager.addCell('code', '', 'user');
           const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
           if (cellElement) {
             cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1178,12 +1574,12 @@ const NotebookPage: React.FC = () => {
         
       case '/run':
         // Run all cells
-        runAllCells();
+        cellManager.runAllCells();
         break;
         
       default:
         // If command not recognized, treat as markdown content
-        newCellId = addCell('markdown', command, 'user');
+        newCellId = cellManager.addCell('markdown', command, 'user');
         break;
     }
     
@@ -1198,179 +1594,15 @@ const NotebookPage: React.FC = () => {
     }
   };
 
-  // Delete a cell by ID with active cell tracking
-  const deleteCell = useCallback((id: string) => {
-    setCells(prev => {
-      const index = prev.findIndex(cell => cell.id === id);
-      if (index === -1) return prev;
-
-      const newCells = prev.filter(cell => cell.id !== id);
-      
-      // Update active cell if needed
-      if (id === activeCellId) {
-        // Try to activate the next cell, or the previous if there is no next
-        const nextIndex = Math.min(index, newCells.length - 1);
-        if (nextIndex >= 0) {
-          const nextCell = newCells[nextIndex];
-          setActiveCellId(nextCell.id);
-          // Focus the newly activated cell
-          setTimeout(() => {
-            const editor = editorRefs.current[nextCell.id]?.current;
-            if (editor) {
-              if (nextCell.type === 'code') {
-                // For code cells, focus the Monaco editor
-                if (typeof editor.focus === 'function') {
-                  editor.focus();
-                } else if (editor.getContainerDomNode) {
-                  editor.getContainerDomNode()?.focus();
-                }
-              } else {
-                // For markdown cells, ensure it's in edit mode and focused
-                toggleCellEditing(nextCell.id, true);
-                if (typeof editor.focus === 'function') {
-                  editor.focus();
-                } else if (editor.getContainerDomNode) {
-                  editor.getContainerDomNode()?.focus();
-                }
-              }
-            }
-          }, 100);
-        } else {
-          setActiveCellId(null);
-        }
-      }
-
-      return newCells;
-    });
-  }, [activeCellId]);
-
-  // Store function references to break circular dependencies
-  const functionRefs = useRef({
-    runAllCells: async () => {
-      // Set global execution state
-      setIsExecuting(true);
-      
-      for (const cell of cells) {
-        if (cell.type === 'code') {
-          // Add cell to executing cells set
-          setExecutingCells(prev => {
-            const newSet = new Set(prev);
-            newSet.add(cell.id);
-            return newSet;
-          });
-          
-          await executeCell(cell.id);
-        }
-      }
-      
-      // Clear global execution state when all cells are executed
-      setIsExecuting(false);
-    }
-  });
-
-  // Update function refs when dependencies change
-  useEffect(() => {
-    functionRefs.current.runAllCells = async () => {
-      setIsExecuting(true);
-      
-      for (const cell of cells) {
-        if (cell.type === 'code') {
-          setExecutingCells(prev => {
-            const newSet = new Set(prev);
-            newSet.add(cell.id);
-            return newSet;
-          });
-          
-          await executeCell(cell.id);
-        }
-      }
-      
-      setIsExecuting(false);
-    };
-  }, [cells, executeCell, setExecutingCells]);
-
   // Handle markdown cell rendering
   const handleMarkdownRender = useCallback((id: string) => {
-    const cell = cells.find(c => c.id === id);
+    const cell = cellManager.findCell(c => c.id === id);
     if (cell && cell.type === 'markdown') {
-      toggleCellEditing(id, false);
+      cellManager.toggleCellEditing(id, false);
     }
-  }, [cells, toggleCellEditing]);
+  }, [cellManager]);
 
-  // Add CSS class for active cell
-  const handleCellFocus = useCallback((id: string) => {
-    // Remove active state from all cells first
-    document.querySelectorAll('.notebook-cell-container').forEach(cell => {
-      cell.classList.remove('notebook-cell-container-active');
-    });
-    
-    // Add active state to the clicked cell
-    const cellElement = document.querySelector(`[data-cell-id="${id}"]`);
-    if (cellElement) {
-      cellElement.classList.add('notebook-cell-container-active');
-    }
-    
-    setActiveCellId(id);
-  }, []);
-
-  // Function to move focus to next cell or create one if at the end
-  const moveToNextCell = useCallback((currentCellId: string) => {
-    const currentIndex = cells.findIndex(c => c.id === currentCellId);
-    if (currentIndex === -1) return;
-
-    if (currentIndex < cells.length - 1) {
-      // Move to next existing cell
-      const nextCell = cells[currentIndex + 1];
-      setActiveCellId(nextCell.id);
-      
-      // Focus the cell
-      const cellElement = document.querySelector(`[data-cell-id="${nextCell.id}"]`);
-      if (cellElement) {
-        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        const editor = editorRefs.current[nextCell.id]?.current;
-        if (editor) {
-          if (nextCell.type === 'code') {
-            if (typeof editor.focus === 'function') {
-              editor.focus();
-            } else if (editor.getContainerDomNode) {
-              editor.getContainerDomNode()?.focus();
-            }
-          } else {
-            toggleCellEditing(nextCell.id, true);
-            if (typeof editor.focus === 'function') {
-              editor.focus();
-            } else if (editor.getContainerDomNode) {
-              editor.getContainerDomNode()?.focus();
-            }
-          }
-        }
-      }
-    } else {
-      // Create and focus new cell at the end
-      const newCellId = addCell('code', '', 'user');
-      setActiveCellId(newCellId);
-      
-      // Focus the new cell
-      setTimeout(() => {
-        const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
-        if (cellElement) {
-          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
-          const editor = editorRefs.current[newCellId]?.current;
-          if (editor) {
-            if (typeof editor.focus === 'function') {
-              editor.focus();
-            } else if (editor.getContainerDomNode) {
-              editor.getContainerDomNode()?.focus();
-            }
-          }
-        }
-      }, 100);
-    }
-  }, [cells, addCell, toggleCellEditing]);
-
-  // Update keyboard event handler to use moveToNextCell
+  // Add keyboard event handler
   const handleKeyboardEvent = useCallback((e: KeyboardEvent) => {
     // Only ignore if we're in a text input field (not Monaco editor)
     if (e.target instanceof HTMLInputElement || 
@@ -1390,14 +1622,15 @@ const NotebookPage: React.FC = () => {
       const cellId = activeCell.getAttribute('data-cell-id');
       if (!cellId) return;
       
-      const cell = cells.find(c => c.id === cellId);
+      // Get cell from cellManager
+      const cell = cellManager.findCell(c => c.id === cellId);
       if (!cell) return;
       
       if (cell.type === 'code') {
         executeCell(cellId, true); // Execute and move focus
       } else if (cell.type === 'markdown') {
         handleMarkdownRender(cellId);
-        moveToNextCell(cellId);
+        cellManager.moveToNextCell(cellId);
       }
       return;
     }
@@ -1422,8 +1655,8 @@ const NotebookPage: React.FC = () => {
       if (activeCell) {
         const cellId = activeCell.getAttribute('data-cell-id');
         if (cellId) {
-          const newCellId = addCell('code', '', 'user');
-          setActiveCellId(newCellId);
+          const newCellId = cellManager.addCell('code', '', 'user');
+          cellManager.setActiveCell(newCellId);
           const editor = editorRefs.current[newCellId]?.current;
           if (editor) {
             if (editor.focus) editor.focus();
@@ -1437,10 +1670,10 @@ const NotebookPage: React.FC = () => {
     // Handle Ctrl/Cmd + Shift + Enter
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
       e.preventDefault();
-      functionRefs.current.runAllCells();
+      cellManager.runAllCells();
       return;
     }
-  }, [cells, executeCell, handleMarkdownRender, moveToNextCell, addCell]);
+  }, [executeCell, handleMarkdownRender, cellManager, editorRefs]);
 
   // Add keyboard event listener
   useEffect(() => {
@@ -1466,55 +1699,6 @@ const NotebookPage: React.FC = () => {
     });
   }, [cells]);
 
-  // Change cell type
-  const changeCellType = (id: string, newType: CellType) => {
-    setCells(prev => 
-      prev.map(cell => 
-        cell.id === id ? { ...cell, type: newType } : cell
-      )
-    );
-  };
-
-  // Run all cells
-  const runAllCells = async () => {
-    // Set global execution state
-    setIsExecuting(true);
-    
-    for (const cell of cells) {
-      if (cell.type === 'code') {
-        // Add cell to executing cells set
-        setExecutingCells(prev => {
-          const newSet = new Set(prev);
-          newSet.add(cell.id);
-          return newSet;
-        });
-        
-        await executeCell(cell.id);
-      }
-    }
-    
-    // Clear global execution state when all cells are executed
-    setIsExecuting(false);
-  };
-
-  // Clear all outputs
-  const clearAllOutputs = () => {
-    setCells(prev => prev.map(cell => ({
-      ...cell,
-      output: undefined,
-      executionState: 'idle'
-    })));
-  };
-
-  // Update cell role
-  const updateCellRole = (id: string, role: CellRole) => {
-    setCells(prev => 
-      prev.map(cell => 
-        cell.id === id ? { ...cell, role, metadata: { ...cell.metadata, role } } : cell
-      )
-    );
-  };
-
   // Restart kernel and clear outputs
   const restartKernel = async () => {
     // Show confirmation dialog
@@ -1522,7 +1706,7 @@ const NotebookPage: React.FC = () => {
       return;
     }
     
-    clearAllOutputs();
+    cellManager.clearAllOutputs();
     setExecutionCounter(1);
     
     try {
@@ -1537,32 +1721,9 @@ const NotebookPage: React.FC = () => {
     }
   };
 
-  // Add new function to get current editor content
-  const getCurrentCellsContent = () => {
-    return cells.map(cell => {
-      if (cell.type === 'code') {
-        // Get current content from editor ref
-        const editorRef = editorRefs.current[cell.id];
-        if (editorRef?.current) {
-          // For Monaco editor
-          if (editorRef.current.getCurrentCode) {
-            const currentCode = editorRef.current.getCurrentCode();
-            return {
-              ...cell,
-              content: currentCode
-            };
-          }
-        }
-      }
-      return cell;
-    });
-  };
-
   // Update save function to include current editor content
   const saveNotebook = () => {
-    const currentCells = getCurrentCellsContent();
-    console.log('[DEBUG] Saving notebook with cells:', currentCells.length);
-    saveToLocalStorage(currentCells, notebookMetadata);
+    cellManager.saveToLocalStorage();
     // Show a brief success message
     const messageDiv = document.createElement('div');
     messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
@@ -1576,7 +1737,7 @@ const NotebookPage: React.FC = () => {
 
   // Update download function to include current editor content
   const downloadNotebook = () => {
-    const currentCells = getCurrentCellsContent();
+    const currentCells = cellManager.getCurrentCellsContent();
     console.log('[DEBUG] Downloading notebook with cells:', currentCells.length);
     const notebookData: NotebookData = {
       metadata: {
@@ -1629,7 +1790,15 @@ const NotebookPage: React.FC = () => {
         const content = e.target?.result as string;
         const notebookData: NotebookData = JSON.parse(content);
         
-        setNotebookMetadata(notebookData.metadata);
+        // Ensure title is always defined
+        const metadata = {
+          ...defaultNotebookMetadata,
+          ...notebookData.metadata,
+          title: notebookData.metadata?.title || 'Untitled Notebook',
+          modified: new Date().toISOString()
+        };
+        
+        setNotebookMetadata(metadata);
         
         // Find the highest execution count to continue from
         let maxExecutionCount = 0;
@@ -1641,56 +1810,51 @@ const NotebookPage: React.FC = () => {
         
         setExecutionCounter(maxExecutionCount + 1);
         
-        // Restore cells with their outputs and content
-        const restoredCells = notebookData.cells.map(cell => {
-          const newId = Date.now().toString(36) + Math.random().toString(36).substring(2);
-          console.log(`[DEBUG] Restoring cell ${newId} with content:`, cell.content?.substring(0, 50) + '...');
-          
-          return {
-            ...cell,
-            id: newId,
-            executionState: cell.executionState || 'idle',
-            content: cell.content || '',  // Ensure content is never undefined
-            output: cell.output ? cell.output.map(output => ({
-              ...output,
-              attrs: {
-                ...output.attrs,
-                className: `output-area ${output.type === 'stderr' ? 'error-output' : ''}`
-              }
-            })) : undefined,
-            role: cell.role || cell.metadata?.role,
-            metadata: {
-              ...cell.metadata,
-              isNew: false
-            }
-          };
-        });
-
-        console.log('[DEBUG] Setting restored cells:', restoredCells.length);
-        setCells(restoredCells);
-
-        // After cells are set, update the editor refs
+        // Clear existing cells using cellManager
+        cellManager.clearAllCells();
+        
+        // Add a small delay to ensure cells are cleared before adding new ones
         setTimeout(() => {
-          restoredCells.forEach(cell => {
-            if (cell.type === 'code') {
-              const editorRef = editorRefs.current[cell.id];
-              if (editorRef?.current) {
-                // For Monaco editor
-                if (editorRef.current.setValue) {
-                  editorRef.current.setValue(cell.content);
-                }
-                // For CodeCell component
-                else if (editorRef.current.updateContent) {
-                  editorRef.current.updateContent(cell.content);
-                }
-              }
+          // Create new cells using cellManager
+          notebookData.cells.forEach((cell, index) => {
+            // Create the cell with the appropriate type, content and role
+            const cellId = cellManager.addCell(
+              cell.type, 
+              cell.content || '',
+              cell.role || (cell.metadata?.role as CellRole | undefined)
+            );
+            
+            // Update cell with execution state and outputs if they exist
+            if (cell.executionCount) {
+              const executionState = cell.executionState || 'idle';
+              const outputs = cell.output ? 
+                cell.output.map(output => ({
+                  ...output,
+                  attrs: {
+                    ...output.attrs,
+                    className: `output-area ${output.type === 'stderr' ? 'error-output' : ''}`
+                  }
+                })) : undefined;
+                
+              cellManager.updateCellExecutionState(cellId, executionState, outputs);
+            }
+            
+            // Set code visibility based on metadata
+            if (cell.type === 'code' && cell.metadata?.isCodeVisible === false) {
+              cellManager.toggleCodeVisibility(cellId);
+            }
+            
+            // If it's the last cell, make it active
+            if (index === notebookData.cells.length - 1) {
+              cellManager.setActiveCell(cellId);
             }
           });
-        }, 100);
 
+          // Save the newly loaded notebook to localStorage
+          cellManager.saveToLocalStorage();
+        }, 100);
       } catch (error) {
         console.error('Error loading notebook:', error);
-        // TODO: Show error toast
       }
     };
     reader.readAsText(file);
@@ -1721,7 +1885,7 @@ const NotebookPage: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cells, notebookMetadata]);
+  }, [cells, notebookMetadata, cellManager]);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -1733,8 +1897,12 @@ const NotebookPage: React.FC = () => {
             <div className="flex items-center gap-3">
               <input
                 type="text"
-                value={notebookMetadata.title}
-                onChange={(e) => setNotebookMetadata(prev => ({ ...prev, title: e.target.value }))}
+                value={notebookMetadata.title || 'Untitled Notebook'}
+                onChange={(e) => setNotebookMetadata(prev => ({ 
+                  ...prev, 
+                  title: e.target.value || 'Untitled Notebook',
+                  modified: new Date().toISOString()
+                }))}
                 className="text-xl font-semibold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
                 placeholder="Untitled Notebook"
               />
@@ -1773,7 +1941,7 @@ const NotebookPage: React.FC = () => {
                   <FaDownload className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={runAllCells}
+                  onClick={() => cellManager.runAllCells()}
                   className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
                   title="Run all cells (Ctrl/Cmd + Shift + Enter)"
                   disabled={isExecuting}
@@ -1785,7 +1953,7 @@ const NotebookPage: React.FC = () => {
                   )}
                 </button>
                 <button
-                  onClick={clearAllOutputs}
+                  onClick={() => cellManager.clearAllOutputs()}
                   className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
                   title="Clear all outputs"
                   disabled={isExecuting}
@@ -1804,7 +1972,7 @@ const NotebookPage: React.FC = () => {
 
               <div className="flex items-center ml-2 border-l border-gray-200 pl-2">
                 <button 
-                  onClick={() => addCell('code')}
+                  onClick={() => cellManager.addCell('code')}
                   className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition flex items-center"
                   title="Add code cell (Ctrl/Cmd + B)"
                 >
@@ -1812,7 +1980,7 @@ const NotebookPage: React.FC = () => {
                   <AiOutlinePlus className="w-3 h-3" />
                 </button>
                 <button 
-                  onClick={() => addCell('markdown')}
+                  onClick={() => cellManager.addCell('markdown')}
                   className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition flex items-center"
                   title="Add markdown cell"
                 >
@@ -1846,8 +2014,8 @@ const NotebookPage: React.FC = () => {
               } mb-1 bg-white overflow-hidden rounded-md ${
                 activeCellId === cell.id ? 'notebook-cell-container-active' : ''
               }`}
-              onFocus={() => handleCellFocus(cell.id)}
-              onClick={() => handleCellFocus(cell.id)}
+              onFocus={() => cellManager.setActiveCell(cell.id)}
+              onClick={() => cellManager.setActiveCell(cell.id)}
               tabIndex={0}
             >
               {/* Cell Content */}
@@ -1865,19 +2033,22 @@ const NotebookPage: React.FC = () => {
                         blockRef={getEditorRef(cell.id)}
                         isActive={activeCellId === cell.id}
                         role={cell.role}
-                        onRoleChange={(role) => updateCellRole(cell.id, role)}
-                        onChange={(newCode) => updateCellContent(cell.id, newCode)}
+                        onRoleChange={(role) => cellManager.updateCellRole(cell.id, role)}
+                        onChange={(newCode) => cellManager.updateCellContent(cell.id, newCode)}
+                        autoHideOnSuccess={cell.metadata?.autoHideOnSuccess}
+                        hideCode={cell.metadata?.isCodeVisible === false}
+                        onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
                       />
                     </div>
                   ) : (
                     <MarkdownCell
                       content={cell.content}
-                      onChange={(content) => updateCellContent(cell.id, content)}
+                      onChange={(content) => cellManager.updateCellContent(cell.id, content)}
                       initialEditMode={cell.metadata?.isNew === true}
                       role={cell.role}
-                      onRoleChange={(role) => updateCellRole(cell.id, role)}
+                      onRoleChange={(role) => cellManager.updateCellRole(cell.id, role)}
                       isEditing={cell.metadata?.isEditing || false}
-                      onEditingChange={(isEditing) => toggleCellEditing(cell.id, isEditing)}
+                      onEditingChange={(isEditing) => cellManager.toggleCellEditing(cell.id, isEditing)}
                       editorRef={getEditorRef(cell.id)}
                       isActive={activeCellId === cell.id}
                     />
@@ -1929,6 +2100,36 @@ const NotebookPage: React.FC = () => {
 
                   {cell.type === 'code' && (
                     <>
+                      {/* Hide/Show Code Button - Moved before Run button */}
+                      <button
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          cellManager.toggleCodeVisibility(cell.id);
+                        }}
+                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                        title={cell.metadata?.isCodeVisible === false ? "Show code" : "Hide code"}
+                      >
+                        <svg 
+                          className={`w-4 h-4 transition-transform ${cell.metadata?.isCodeVisible === false ? 'transform rotate-180' : ''}`}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={2} 
+                            d={cell.metadata?.isCodeVisible === false
+                              ? "M9 5l7 7-7 7"
+                              : "M19 9l-7 7-7-7"
+                            } 
+                          />
+                        </svg>
+                        <span className="text-xs">
+                          {cell.metadata?.isCodeVisible === false ? 'Show' : 'Hide'}
+                        </span>
+                      </button>
+
                       <button
                         onClick={() => executeCell(cell.id)}
                         disabled={!isReady || cell.executionState === 'running'}
@@ -1945,8 +2146,9 @@ const NotebookPage: React.FC = () => {
                         )}
                         <span className="text-xs">Run</span>
                       </button>
+
                       <button
-                        onClick={() => changeCellType(cell.id, 'markdown')}
+                        onClick={() => cellManager.changeCellType(cell.id, 'markdown')}
                         className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
                         title="Convert to Markdown"
                         disabled={cell.executionState === 'running'}
@@ -1973,7 +2175,7 @@ const NotebookPage: React.FC = () => {
                         </button>
                       ) : (
                         <button
-                          onClick={() => toggleCellEditing(cell.id, true)}
+                          onClick={() => cellManager.toggleCellEditing(cell.id, true)}
                           className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
                           title="Edit markdown"
                         >
@@ -1984,7 +2186,7 @@ const NotebookPage: React.FC = () => {
                         </button>
                       )}
                       <button
-                        onClick={() => changeCellType(cell.id, 'code')}
+                        onClick={() => cellManager.changeCellType(cell.id, 'code')}
                         className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
                         title="Convert to Code"
                       >
@@ -1998,7 +2200,7 @@ const NotebookPage: React.FC = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteCell(cell.id);
+                      cellManager.deleteCell(cell.id);
                     }}
                     className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
                     title="Delete cell"

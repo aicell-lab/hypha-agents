@@ -6,12 +6,14 @@ import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
-import { Editor } from '@monaco-editor/react';
+import Editor, { OnMount } from '@monaco-editor/react';
 import { executeScripts } from '../../utils/script-utils';
 import { processTextOutput, processAnsiInOutputElement, outputAreaStyles } from '../../utils/ansi-utils';
 import Convert from 'ansi-to-html';
-import { RoleSelector, CellRole } from './RoleSelector';
-import type { OnMount } from '@monaco-editor/react';
+import { RoleSelector } from './RoleSelector';
+import { VscCode } from 'react-icons/vsc';
+import { MdOutlineTextFields } from 'react-icons/md';
+import { FaSpinner } from 'react-icons/fa';
 
 const convert = new Convert({
   fg: '#000',
@@ -58,6 +60,8 @@ interface MonacoEditor {
   setValue: (value: string) => void;
 }
 
+type CellRole = 'user' | 'assistant' | 'system';
+
 interface CodeCellProps {
   code: string;
   language?: string;
@@ -67,11 +71,18 @@ interface CodeCellProps {
   onExecute?: () => void;
   isExecuting?: boolean;
   executionCount?: number;
-  blockRef?: React.RefObject<any>;
+  blockRef?: React.RefObject<{
+    getCurrentCode: () => string;
+    focus: () => void;
+    getContainerDomNode: () => HTMLElement | null;
+  }>;
   isActive?: boolean;
   role?: CellRole;
   onRoleChange?: (role: CellRole) => void;
-  onChange?: (code: string) => void;
+  onChange?: (value: string) => void;
+  hideCode?: boolean;
+  autoHideOnSuccess?: boolean;
+  onVisibilityChange?: (isVisible: boolean) => void;
 }
 
 export const CodeCell: React.FC<CodeCellProps> = ({ 
@@ -87,13 +98,17 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   isActive = false,
   role,
   onRoleChange,
-  onChange
+  onChange,
+  hideCode = false,
+  autoHideOnSuccess = false,
+  onVisibilityChange
 }) => {
   const { executeCodeWithDOMOutput, status, isReady } = useThebe();
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [isEditing, setIsEditing] = useState(false);
   const [codeValue, setCodeValue] = useState(code);
   const [output, setOutput] = useState<string>('');
+  const [isHovered, setIsHovered] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
@@ -125,11 +140,15 @@ export const CodeCell: React.FC<CodeCellProps> = ({
         if (typeof internalEditorRef.current.focus === 'function') {
           internalEditorRef.current.focus();
         } else if (internalEditorRef.current.getContainerDomNode) {
-          internalEditorRef.current.getContainerDomNode()?.focus();
+          const node = internalEditorRef.current.getContainerDomNode();
+          if (node) node.focus();
         }
       }
     },
-    getContainerDomNode: () => internalEditorRef.current?.getContainerDomNode()
+    getContainerDomNode: () => {
+      const node = internalEditorRef.current?.getContainerDomNode();
+      return node || null;
+    }
   }), [codeValue]);
 
   // Add output area styles
@@ -321,7 +340,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   }, [handleExecute]);
 
   // Function to handle editor mounting
-  const handleEditorDidMount: OnMount = (editor) => {
+  const handleEditorDidMount: OnMount = (editor, monaco) => {
     internalEditorRef.current = editor as unknown as MonacoEditor;
     if (blockRef) {
       (blockRef as any).current = {
@@ -378,6 +397,35 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     }
   }, []);
 
+  // Handle visibility toggle with direct parent notification
+  const handleVisibilityToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onVisibilityChange?.(!hideCode);
+  };
+
+  // Add effect to handle auto-hiding when execution completes
+  useEffect(() => {
+    if (autoHideOnSuccess && !isExecuting && executionCount && outputRef.current?.innerHTML) {
+      onVisibilityChange?.(false);
+    }
+  }, [autoHideOnSuccess, isExecuting, executionCount, onVisibilityChange]);
+
+  // Get the first line of actual code for preview
+  const getCodePreview = () => {
+    if (!codeValue) return '';
+    
+    // Get first non-empty line that isn't a comment
+    const firstLine = codeValue.split('\n')
+      .find(line => {
+        const trimmed = line.trim();
+        return trimmed.length > 0 && !trimmed.startsWith('#');
+      }) || '';
+    
+    // Truncate if too long
+    return firstLine.length > 50 ? firstLine.slice(0, 47) + '...' : firstLine;
+  };
+
   return (
     <div 
       ref={editorDivRef}
@@ -403,53 +451,131 @@ export const CodeCell: React.FC<CodeCellProps> = ({
         
         {/* Editor */}
         <div className={`editor-container w-full overflow-hidden ${isActive ? 'editor-container-active' : ''}`}>
-          <Editor
-            height={editorHeight}
-            language={language}
-            value={codeValue}
-            onChange={(value) => {
-              const newValue = value || '';
-              setCodeValue(newValue);
-              onChange?.(newValue);
-              // Update editor height with a slight delay to ensure content is processed
-              setTimeout(updateEditorHeight, 10);
-            }}
-            onMount={handleEditorDidMount}
-            beforeMount={handleBeforeMount}
-            options={{
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              wordWrap: 'on',
-              lineNumbers: 'on', // Enable line numbers
-              renderWhitespace: 'selection',
-              folding: true,
-              fontSize: 13,
-              fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-              lineHeight: 1.5,
-              padding: { top: 8, bottom: 8 },
-              glyphMargin: false,
-              lineDecorationsWidth: 0,
-              lineNumbersMinChars: 2,
-              renderLineHighlight: 'none',
-              overviewRulerBorder: false,
-              scrollbar: {
-                vertical: 'auto',
-                horizontalSliderSize: 4,
-                verticalSliderSize: 4,
-                horizontal: 'hidden',
-                useShadows: false,
-                verticalHasArrows: false,
-                horizontalHasArrows: false,
-                alwaysConsumeMouseWheel: false
-              },
-              overviewRulerLanes: 0,
-              hideCursorInOverviewRuler: true,
-              contextmenu: false,
-              fixedOverflowWidgets: true,
-              automaticLayout: true
-            }}
-            className="jupyter-editor w-full max-w-full overflow-x-hidden"
-          />
+          {/* Collapsed Code Cell Header */}
+          {hideCode && (
+            <div 
+              className="flex items-center gap-2 p-2 bg-gray-50 rounded-t-md cursor-pointer hover:bg-gray-100 transition-colors relative"
+              onClick={handleVisibilityToggle}
+              role="button"
+              tabIndex={0}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleVisibilityToggle(e as any);
+                }
+              }}
+            >
+              <svg 
+                className={`w-4 h-4 text-gray-500 transform transition-transform ${hideCode ? 'rotate-0' : 'rotate-90'}`}
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              <span className="text-sm text-gray-600 font-mono">
+                {language === 'python' ? 'Python Code' : language}
+                {getCodePreview() && ` • ${getCodePreview()}`}
+              </span>
+            </div>
+          )}
+
+          {/* Cell Toolbar - Show on hover */}
+          <div 
+            className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
+            style={{ pointerEvents: hideCode ? 'none' : 'auto' }}
+          >
+            {/* Cell Type Indicator */}
+            <span className="text-xs text-gray-500 px-1 border-r border-gray-200 mr-1">
+              <span className="flex items-center gap-1">
+                <VscCode className="w-3 h-3" />
+                Code
+              </span>
+            </span>
+
+            {/* Run Button */}
+            <button
+              onClick={onExecute}
+              disabled={!isReady || isExecuting}
+              className="p-1 hover:bg-gray-100 rounded flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Run cell"
+            >
+              {isExecuting ? (
+                <FaSpinner className="w-4 h-4 animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span className="text-xs">Run</span>
+            </button>
+
+            {/* Convert Button */}
+            <button
+              onClick={() => onChange?.('markdown')}
+              className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+              title="Convert to Markdown"
+              disabled={isExecuting}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+              <span className="text-xs">Convert</span>
+            </button>
+          </div>
+
+          {/* Expandable Code Editor */}
+          {!hideCode && (
+            <div className="relative">
+              <Editor
+                height={editorHeight}
+                language={language}
+                value={codeValue}
+                onChange={(value) => {
+                  const newValue = value || '';
+                  setCodeValue(newValue);
+                  onChange?.(newValue);
+                  setTimeout(updateEditorHeight, 10);
+                }}
+                onMount={handleEditorDidMount}
+                beforeMount={handleBeforeMount}
+                options={{
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'on',
+                  lineNumbers: 'on',
+                  renderWhitespace: 'selection',
+                  folding: true,
+                  fontSize: 13,
+                  fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+                  lineHeight: 1.5,
+                  padding: { top: 8, bottom: 8 },
+                  glyphMargin: false,
+                  lineDecorationsWidth: 0,
+                  lineNumbersMinChars: 2,
+                  renderLineHighlight: 'none',
+                  overviewRulerBorder: false,
+                  scrollbar: {
+                    vertical: 'auto',
+                    horizontalSliderSize: 4,
+                    verticalSliderSize: 4,
+                    horizontal: 'hidden',
+                    useShadows: false,
+                    verticalHasArrows: false,
+                    horizontalHasArrows: false,
+                    alwaysConsumeMouseWheel: false
+                  },
+                  overviewRulerLanes: 0,
+                  hideCursorInOverviewRuler: true,
+                  contextmenu: false,
+                  fixedOverflowWidgets: true,
+                  automaticLayout: true
+                }}
+                className="jupyter-editor w-full max-w-full overflow-x-hidden"
+              />
+            </div>
+          )}
         </div>
       </div>
       
