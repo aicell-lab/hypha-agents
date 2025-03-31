@@ -607,8 +607,6 @@ class CellManager {
           if (state === 'running') {
             isCodeVisible = true;
           }
-          // No longer auto-collapse on success
-          
           const updates: Partial<NotebookCell> = { 
             executionState: state,
             metadata: {
@@ -1459,7 +1457,6 @@ const NotebookPage: React.FC = () => {
             parentId = thinkingCell.metadata?.parent;
             
             // Insert code cell BEFORE the thinking cell
-            // This keeps it sandwiched between user message and thinking indicator
             actualCellId = cellManager.addCellBefore('code', code, 'assistant', thinkingCellId, parentId);
             console.log('[DEBUG] Added code cell before thinking cell:', actualCellId, 'with parent:', parentId);
           } else {
@@ -1539,15 +1536,18 @@ const NotebookPage: React.FC = () => {
           },
           onStatus: (status) => {
             if (status === 'Completed') {
-              // Save final outputs on completion
+              // Save final outputs on completion and collapse code if not manually expanded
               cellManager.updateCellExecutionState(actualCellId, 'success', outputs);
+              
+              // Collapse the code cell after successful execution
+              cellManager.collapseCodeCell(actualCellId);
               
               // Save to localStorage after successful execution
               setTimeout(() => {
                 cellManager.saveToLocalStorage();
               }, 100);
             } else if (status === 'Error') {
-              // Save error outputs
+              // Save error outputs and keep code visible
               cellManager.updateCellExecutionState(actualCellId, 'error', outputs);
               
               // Save to localStorage after error
@@ -1557,11 +1557,14 @@ const NotebookPage: React.FC = () => {
             }
           }
         });
+        // Collapse the code cell
+        
+
         return `[Cell Id: ${actualCellId}]\n${shortOutput.trim() || "Code executed successfully. No output generated."}`;
       } catch (error) {
         console.error("[DEBUG] executeCode error:", error);
         
-        // Save error state and output
+        // Save error state and output, keep code visible
         cellManager.updateCellExecutionState(actualCellId, 'error', [{
           type: 'stderr',
           content: `Error: ${error instanceof Error ? error.message : String(error)}`,
@@ -2259,7 +2262,7 @@ const NotebookPage: React.FC = () => {
                 <svg 
                   stroke="currentColor" 
                   fill="currentColor" 
-                  stroke-width="0" 
+                  strokeWidth="0" 
                   viewBox="0 0 24 24" 
                   className="h-8 w-8 text-blue-600" 
                   height="1em" 

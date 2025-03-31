@@ -281,7 +281,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
             />
           ) : (
             <div 
-              className="markdown-preview group relative overflow-x-auto w-full"
+              className="markdown-preview group relative overflow-x-auto w-[calc(100%-24px)] pt-2"
               onDoubleClick={() => onEditingChange?.(true)}
             >
               <div className="markdown-body py-2 overflow-auto break-words min-h-[60px]">
