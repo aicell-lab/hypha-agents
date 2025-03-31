@@ -21,6 +21,7 @@ import { MdOutlineTextFields } from 'react-icons/md';
 
 // Add styles for the active cell
 import '../styles/notebook.css';
+import LoginButton from '../components/LoginButton';
 
 const convert = new Convert({
   fg: '#000',
@@ -1328,7 +1329,7 @@ const NotebookPage: React.FC = () => {
   const editorRefs = useRef<{ [key: string]: React.RefObject<any> }>({});
   
   // Add chat agent state
-  const { server, isLoggedIn } = useHyphaStore();
+  const { server, isLoggedIn, user } = useHyphaStore();
   const [schemaAgents, setSchemaAgents] = useState<any>(null);
   const [isProcessingAgentResponse, setIsProcessingAgentResponse] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
@@ -2379,6 +2380,11 @@ const NotebookPage: React.FC = () => {
                   <FaKeyboard className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* Add login button section */}
+              <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
+                <LoginButton className="scale-75 z-100" />
+              </div>
             </div>
           </div>
         </div>
@@ -2668,19 +2674,11 @@ const NotebookPage: React.FC = () => {
       </div>
 
       {/* Input Area - Add a semi-transparent background */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm p-4 shadow-md z-10">
+      <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md z-10">
         <div className="max-w-6xl mx-auto">
           <div className="mb-2 text-xs text-center">
             {!isLoggedIn ? (
-              <div className="p-2 bg-yellow-100 rounded">
-                <p className="text-yellow-800 font-semibold">You need to log in to use the AI assistant</p>
-                <button 
-                  onClick={() => navigate('/')}
-                  className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition"
-                >
-                  Go to Login
-                </button>
-              </div>
+              <p className="text-yellow-800">Please log in to use the AI assistant</p>
             ) : (
               <p className="text-gray-500">
                 {isProcessingAgentResponse ? "AI is thinking..." : 
