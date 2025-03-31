@@ -25,6 +25,7 @@ const AppContent: React.FC = () => {
   const hasResourceId = searchParams.has('id');
   const isChatRoute = location.pathname === '/chat';
   const isChatDetailRoute = location.pathname.startsWith('/chat/');
+  const isNotebookRoute = location.pathname === '/notebook';
 
   // Add state for Snackbar
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
@@ -57,6 +58,19 @@ const AppContent: React.FC = () => {
     );
   }
 
+  // For notebook route, don't show the Navbar
+  if (isNotebookRoute) {
+    return (
+      <div className="flex flex-col h-screen">
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <Routes>
+            <Route path="/notebook" element={<NotebookPage />} />
+          </Routes>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen">
       <Navbar className="flex-shrink-0" />
@@ -84,7 +98,6 @@ const AppContent: React.FC = () => {
               }} 
             />
           } />
-          <Route path="/notebook" element={<NotebookPage />} />
           <Route path="/collab-test" element={<CollabTest />} />
         </Routes>
       </main>

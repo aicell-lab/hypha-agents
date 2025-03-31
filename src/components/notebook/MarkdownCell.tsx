@@ -54,6 +54,20 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   const monacoRef = useRef<any>(null);
   const [isFocused, setIsFocused] = useState(false);
 
+  // Update effect to handle edit mode based on active state and empty content
+  useEffect(() => {
+    // Enter edit mode if this is the active cell and either:
+    // 1. It's a new cell (empty content)
+    // 2. It's explicitly set to initialEditMode
+    if (isActive && (initialEditMode || !content.trim())) {
+      onEditingChange?.(true);
+    }
+    // Exit edit mode when cell becomes inactive
+    else if (!isActive && isEditing) {
+      onEditingChange?.(false);
+    }
+  }, [isActive, initialEditMode, content, isEditing, onEditingChange]);
+
   // Update editor height when content changes
   const updateEditorHeight = useCallback(() => {
     if (internalEditorRef.current) {
@@ -127,8 +141,8 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
       });
     }
 
-    // Focus the editor if this is a new cell or is active
-    if (initialEditMode || isActive) {
+    // Focus the editor if it's active
+    if (isActive) {
       setTimeout(() => {
         if (typeof editor.focus === 'function') {
           editor.focus();
@@ -270,7 +284,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
               className="markdown-preview group relative overflow-x-auto w-full"
               onDoubleClick={() => onEditingChange?.(true)}
             >
-              <div className="markdown-body py-2 overflow-auto break-words">
+              <div className="markdown-body py-2 overflow-auto break-words min-h-[60px]">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{

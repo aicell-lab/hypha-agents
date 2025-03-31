@@ -1,0 +1,264 @@
+/* Notebook and Jupyter-like Styling */
+
+/* Base Editor Styles */
+.jupyter-editor {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+  transition: border-color 0.2s ease;
+  overflow: visible !important;
+  max-width: 100%;
+  min-height: 76px; /* Initial minimum height: enough for 3 lines (19px * 3) + padding (19px) */
+}
+
+/* Cell Layout and Structure */
+.jupyter-cell-flex-container {
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+}
+
+.notebook-cell-container {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  outline: none !important;
+}
+
+.notebook-cell {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+/* Editor Container Styling */
+.editor-container {
+  padding-bottom: 3px;
+  flex-grow: 1;
+  min-width: 0;
+  max-width: calc(100% - 64px); /* Account for execution count width */
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Border Styles for Different Cell Types */
+.code-cell .editor-container,
+.markdown-cell.editing .editor-container {
+  border: 2px solid rgb(229 231 235); /* Tailwind gray-200 */
+  border-radius: 4px;
+}
+
+/* Active States */
+.code-cell .editor-container-active,
+.markdown-cell.editing .editor-container-active,
+.markdown-cell.editing .editor-container:focus-within {
+  border-color: rgb(59 130 246) !important; /* Tailwind blue-500 */
+  box-shadow: 0 2px 4px -1px rgba(59, 130, 246, 0.1);
+  z-index: 2;
+}
+
+.jupyter-editor.editor-active {
+  z-index: 2;
+}
+
+.notebook-cell-active {
+  position: relative;
+}
+
+/* Active Cell Indicator */
+.notebook-cell-container-active::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #3b82f6;
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Child Cell Relationships */
+.child-cell {
+  position: relative; 
+  margin-left: 12px;
+  border-left: 2px solid #e5e7eb;
+}
+
+.child-cell::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  background-color: #e5e7eb;
+}
+
+.child-cell:first-of-type::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 0;
+  height: 10px;
+  width: 10px;
+  border-bottom-left-radius: 6px;
+  border-left: 2px solid #e5e7eb;
+  border-bottom: 2px solid #e5e7eb;
+  background-color: transparent;
+}
+
+/* Monaco Editor Overrides */
+.monaco-editor .margin,
+.monaco-editor .monaco-editor-background,
+.monaco-editor .inputarea.ime-input,
+.monaco-editor {
+  border: none !important;
+  outline: none !important;
+}
+
+.jupyter-editor .monaco-editor {
+  padding-left: 8px;
+  padding-right: 8px;
+  overflow: visible !important;
+}
+
+.jupyter-editor .monaco-editor .margin {
+  background: transparent !important;
+}
+
+.jupyter-editor .monaco-editor .line-numbers {
+  color: #999 !important;
+  font-size: 12px !important;
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace !important;
+  margin-right: 8px !important;
+}
+
+/* Scrollbar Styling */
+.jupyter-editor .monaco-scrollable-element {
+  scrollbar-width: none !important;
+}
+
+.jupyter-editor .monaco-scrollable-element::-webkit-scrollbar {
+  display: none !important;
+}
+
+.monaco-scrollable-element > .scrollbar > .slider {
+  background: rgba(100, 100, 100, 0.4) !important;
+}
+
+/* Output Styling */
+.jupyter-output {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 0;
+}
+
+.jupyter-output pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.output-area {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-x: auto;
+  padding: 4px 0;
+  max-width: 100%;
+}
+
+.jupyter-output-container {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Clean Output Containers */
+.jupyter-output-container,
+.output-area,
+.bg-gray-50 {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Execution Count Styling */
+.execution-count {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: #878788;
+  width: 64px;
+  min-width: 64px;
+  text-align: right;
+  padding-right: 8px;
+  padding-top: 9px;
+  -webkit-user-select: none;
+  user-select: none;
+  font-weight: bold;
+}
+
+/* Markdown Cell Styling */
+.markdown-cell:not(.editing) .editor-container {
+  border: none;
+  box-shadow: none;
+}
+
+/* Remove Focus Outlines */
+.notebook-cell:focus-within {
+  outline: none !important;
+}
+
+/* Add specific focus styles for active cells only */
+.notebook-cell-container:focus-within:not(.notebook-cell-container-active) {
+  outline: none !important;
+}
+
+.notebook-cell-container:focus {
+  outline: none !important;
+}
+
+/* Ensure only active cells show focus styles */
+.notebook-cell-container-active:focus-within {
+  outline: none !important;
+}
+
+/* Remove any lingering focus styles */
+.notebook-cell-container *:focus {
+  outline: none !important;
+}
+
+/* Clean up Monaco editor focus styles */
+.monaco-editor .focused {
+  outline: none !important;
+}
+
+/* Delete Button Group */
+.expanded .hidden {
+  display: flex;
+}
+
+.expanded {
+  background-color: #fff;
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.expanded:hover {
+  background-color: #fee2e2;
+}
+
+.whitespace-nowrap {
+  white-space: nowrap;
+  height: 100%;
+}
+
+/* Scroll and Overflow Handling */
+.monaco-editor .overflow-guard {
+  overflow: visible !important;
+}
+
+.monaco-editor-background {
+  pointer-events: auto !important;
+}
+
+.monaco-editor .scroll-decoration {
+  box-shadow: none !important;
+} 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ThebeProvider, useThebe } from '../components/chat/ThebeProvider';
 import { CodeCell } from '../components/notebook/CodeCell';
 import { ChatInput } from '../components/chat/ChatInput';
@@ -8,7 +8,7 @@ import MarkdownCell from '../components/notebook/MarkdownCell';
 import { Dialog } from '@headlessui/react';
 import Convert from 'ansi-to-html';
 import '../styles/ansi.css';
-import '../styles/jupyter.css';
+import '../styles/notebook.css';
 import { useHyphaStore } from '../store/hyphaStore';
 import { TextModeProvider, useTextMode } from '../components/chat/TextModeProvider';
 import { ToolProvider, useTools } from '../components/chat/ToolProvider';
@@ -20,7 +20,7 @@ import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
 
 // Add styles for the active cell
-import './NotebookPage.css';
+import '../styles/notebook.css';
 
 const convert = new Convert({
   fg: '#000',
@@ -437,7 +437,7 @@ class CellManager {
     const newCell: NotebookCell = {
       id: this.generateId(),
       type,
-      content: content || (type === 'code' ? '# Enter your code here' : 'Enter your markdown here'),
+      content: content || "",
       executionState: 'idle',
       role,
       metadata: {
@@ -494,7 +494,7 @@ class CellManager {
     const newCell: NotebookCell = {
       id: this.generateId(),
       type,
-      content: content || (type === 'code' ? '# Enter your code here' : 'Enter your markdown here'),
+      content: content || "",
       executionState: 'idle',
       role,
       metadata: {
@@ -746,29 +746,49 @@ class CellManager {
       const nextCell = this.cells[currentIndex + 1];
       this.setActiveCellId(nextCell.id);
       
-      // Focus the cell
-      const cellElement = document.querySelector(`[data-cell-id="${nextCell.id}"]`);
-      if (cellElement) {
-        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        const editor = this.editorRefs.current[nextCell.id]?.current;
-        if (editor) {
-          if (nextCell.type === 'code') {
-            if (typeof editor.focus === 'function') {
-              editor.focus();
-            } else if (editor.getContainerDomNode) {
-              editor.getContainerDomNode()?.focus();
-            }
-          } else {
-            this.toggleCellEditing(nextCell.id, true);
-            if (typeof editor.focus === 'function') {
-              editor.focus();
-            } else if (editor.getContainerDomNode) {
-              editor.getContainerDomNode()?.focus();
+      // Focus the cell with a small delay to ensure DOM is ready
+      setTimeout(() => {
+        const cellElement = document.querySelector(`[data-cell-id="${nextCell.id}"]`);
+        if (cellElement) {
+          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          const editor = this.editorRefs.current[nextCell.id]?.current;
+          if (editor) {
+            if (nextCell.type === 'code') {
+              // For code cells, focus the Monaco editor
+              if (typeof editor.focus === 'function') {
+                editor.focus();
+              } else if (editor.getContainerDomNode) {
+                const editorNode = editor.getContainerDomNode();
+                if (editorNode) {
+                  editorNode.focus();
+                  // Try to focus the actual editor input
+                  const inputElement = editorNode.querySelector('.monaco-editor textarea');
+                  if (inputElement) {
+                    (inputElement as HTMLTextAreaElement).focus();
+                  }
+                }
+              }
+            } else {
+              // For markdown cells, ensure it's in edit mode and focused
+              this.toggleCellEditing(nextCell.id, true);
+              if (typeof editor.focus === 'function') {
+                editor.focus();
+              } else if (editor.getContainerDomNode) {
+                const editorNode = editor.getContainerDomNode();
+                if (editorNode) {
+                  editorNode.focus();
+                  // Try to focus the actual editor input
+                  const inputElement = editorNode.querySelector('textarea');
+                  if (inputElement) {
+                    (inputElement as HTMLTextAreaElement).focus();
+                  }
+                }
+              }
             }
           }
         }
-      }
+      }, 100);
     } else {
       // Create and focus new cell at the end
       const newCellId = this.addCell('code', '', 'user');
@@ -785,7 +805,15 @@ class CellManager {
             if (typeof editor.focus === 'function') {
               editor.focus();
             } else if (editor.getContainerDomNode) {
-              editor.getContainerDomNode()?.focus();
+              const editorNode = editor.getContainerDomNode();
+              if (editorNode) {
+                editorNode.focus();
+                // Try to focus the actual editor input
+                const inputElement = editorNode.querySelector('.monaco-editor textarea');
+                if (inputElement) {
+                  (inputElement as HTMLTextAreaElement).focus();
+                }
+              }
             }
           }
         }
@@ -1079,7 +1107,7 @@ class CellManager {
     console.log('[DEBUG] Cleaning up thinking cell:', thinkingCellId);
     
     // Only remove the specific thinking cell, leaving other cells intact
-    this.setCells(prev => prev.filter(cell => cell.id !== thinkingCellId));
+    this.setCells((prev: NotebookCell[]) => prev.filter(cell => cell.id !== thinkingCellId));
     
     // Clear the reference to this cell in editorRefs if it exists
     if (this.editorRefs.current[thinkingCellId]) {
@@ -1722,7 +1750,7 @@ const NotebookPage: React.FC = () => {
   }, [isReady, schemaAgents, isLoggedIn, server, tools, isChatRunning, handleAgentResponse]);
 
   // Handle user input from the chat input component
-  const handleSendMessage = async (message: string) => {
+  const handleSendMessage = useCallback(async (message: string) => {
     // If not logged in, show error
     if (!isLoggedIn) {
       setInitializationError("You must be logged in to use the AI assistant. Please log in and try again.");
@@ -1778,16 +1806,12 @@ const NotebookPage: React.FC = () => {
         setInitializationError("Error communicating with AI assistant. Please try again or refresh the page.");
       } finally {
         setIsProcessingAgentResponse(false);
-        
-        // Note: We don't remove the thinking cell here anymore.
-        // It's now removed by the handleAgentResponse method after the final 
-        // assistant message is processed
       }
     }
-  };
+  }, [activeCellId, cellManager, isChatRunning, isLoggedIn, lastAgentCellRef, sendText]);
 
   // Handle special commands
-  const handleCommand = (command: string) => {
+  const handleCommand = useCallback((command: string) => {
     const normalizedCommand = command.toLowerCase().trim();
     let newCellId = '';
     
@@ -1843,7 +1867,7 @@ const NotebookPage: React.FC = () => {
         }
       }, 50);
     }
-  };
+  }, [cellManager, hasInitialized]);
 
   // Handle markdown cell rendering
   const handleMarkdownRender = useCallback((id: string) => {
@@ -1853,13 +1877,46 @@ const NotebookPage: React.FC = () => {
     }
   }, [cellManager]);
 
-  // Add keyboard event handler
+  // Handle keyboard event handler
   const handleKeyboardEvent = useCallback((e: KeyboardEvent) => {
     // Only ignore if we're in a text input field (not Monaco editor)
     if (e.target instanceof HTMLInputElement || 
         (e.target instanceof HTMLTextAreaElement && 
          !(e.target.closest('.monaco-editor') || e.target.closest('.notebook-cell-container')))) {
       return;
+    }
+
+    // Handle arrow key navigation when not in editor
+    const isInEditor = e.target instanceof HTMLTextAreaElement || 
+                      e.target instanceof HTMLInputElement ||
+                      (e.target as HTMLElement)?.classList?.contains('monaco-editor');
+
+    if (!isInEditor) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Tab') {
+        e.preventDefault(); // Prevent default scrolling
+        
+        // Find current cell index
+        const currentIndex = cells.findIndex(cell => cell.id === activeCellId);
+        if (currentIndex === -1) return;
+        
+        let nextIndex;
+        if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) {
+          nextIndex = Math.max(0, currentIndex - 1);
+        } else {
+          nextIndex = Math.min(cells.length - 1, currentIndex + 1);
+        }
+        
+        // Set active cell and focus it
+        const nextCell = cells[nextIndex];
+        if (nextCell) {
+          cellManager.setActiveCell(nextCell.id);
+          const cellElement = document.querySelector(`[data-cell-id="${nextCell.id}"]`);
+          if (cellElement) {
+            cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+        return;
+      }
     }
 
     // Handle Escape key to focus active cell
@@ -1935,7 +1992,7 @@ const NotebookPage: React.FC = () => {
       cellManager.runAllCells();
       return;
     }
-  }, [executeCell, handleMarkdownRender, cellManager, editorRefs, activeCellId]);
+  }, [executeCell, handleMarkdownRender, cellManager, editorRefs, activeCellId, cells]);
 
   // Add keyboard event listener
   useEffect(() => {
@@ -2181,10 +2238,29 @@ const NotebookPage: React.FC = () => {
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
       <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
-        <div className="px-4 py-3">
+        <div className="px-4 py-2">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
-            {/* Title */}
+            {/* Title and Logo */}
             <div className="flex items-center gap-3">
+              <Link 
+                to="/" 
+                className="flex items-center hover:opacity-80 transition"
+                title="Go to Home"
+              >
+                <svg 
+                  stroke="currentColor" 
+                  fill="currentColor" 
+                  stroke-width="0" 
+                  viewBox="0 0 24 24" 
+                  className="h-8 w-8 text-blue-600" 
+                  height="1em" 
+                  width="1em" 
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="m21.406 6.086-9-4a1.001 1.001 0 0 0-.813 0l-9 4c-.02.009-.034.024-.054.035-.028.014-.058.023-.084.04-.022.015-.039.034-.06.05a.87.87 0 0 0-.19.194c-.02.028-.041.053-.059.081a1.119 1.119 0 0 0-.076.165c-.009.027-.023.052-.031.079A1.013 1.013 0 0 0 2 7v10c0 .396.232.753.594.914l9 4c.13.058.268.086.406.086a.997.997 0 0 0 .402-.096l.004.01 9-4A.999.999 0 0 0 22 17V7a.999.999 0 0 0-.594-.914zM12 4.095 18.538 7 12 9.905l-1.308-.581L5.463 7 12 4.095zM4 16.351V8.539l7 3.111v7.811l-7-3.11zm9 3.11V11.65l7-3.111v7.812l-7 3.11z"></path>
+                </svg>
+              </Link>
+              <div className="h-5 w-px bg-gray-200 mx-1"></div>
               <input
                 type="text"
                 value={notebookMetadata.title || 'Untitled Notebook'}
@@ -2193,13 +2269,13 @@ const NotebookPage: React.FC = () => {
                   title: e.target.value || 'Untitled Notebook',
                   modified: new Date().toISOString()
                 }))}
-                className="text-xl font-semibold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
+                className="text-lg font-medium bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
                 placeholder="Untitled Notebook"
               />
             </div>
 
             {/* Action buttons in a single row */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <div className="flex items-center">
                 <input
                   type="file"
@@ -2211,56 +2287,56 @@ const NotebookPage: React.FC = () => {
                 />
                 <label
                   htmlFor="notebook-file"
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition cursor-pointer flex items-center"
+                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition cursor-pointer flex items-center"
                   title="Open notebook"
                 >
-                  <FaFolder className="w-4 h-4" />
+                  <FaFolder className="w-3.5 h-3.5" />
                 </label>
                 <button
                   onClick={saveNotebook}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
+                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
                   title="Save notebook (Ctrl/Cmd + S)"
                 >
-                  <FaSave className="w-4 h-4" />
+                  <FaSave className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={downloadNotebook}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
+                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
                   title="Download notebook (Ctrl/Cmd + Shift + S)"
                 >
-                  <FaDownload className="w-4 h-4" />
+                  <FaDownload className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => cellManager.runAllCells()}
-                  className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
+                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
                   title="Run all cells (Ctrl/Cmd + Shift + Enter)"
                   disabled={isExecuting}
                 >
                   {isExecuting ? (
-                    <FaSpinner className="w-4 h-4 animate-spin" />
+                    <FaSpinner className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <FaPlay className="w-4 h-4" />
+                    <FaPlay className="w-3.5 h-3.5" />
                   )}
                 </button>
                 <button
                   onClick={() => cellManager.clearAllOutputs()}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
+                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
                   title="Clear all outputs"
                   disabled={isExecuting}
                 >
-                  <FaTrash className="w-4 h-4" />
+                  <FaTrash className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={restartKernel}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition group relative"
+                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition group relative"
                   title="Restart kernel and clear outputs"
                   disabled={!isReady || isExecuting}
                 >
-                  <FaRedo className={`w-4 h-4 ${(!isReady || isExecuting) ? 'opacity-50' : ''}`} />
+                  <FaRedo className={`w-3.5 h-3.5 ${(!isReady || isExecuting) ? 'opacity-50' : ''}`} />
                 </button>
               </div>
 
-              <div className="flex items-center ml-2 border-l border-gray-200 pl-2">
+              <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
                 <button 
                   onClick={() => {
                     const newCellId = cellManager.addCell('code');
@@ -2272,11 +2348,11 @@ const NotebookPage: React.FC = () => {
                       }
                     }, 100);
                   }}
-                  className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition flex items-center"
+                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition flex items-center"
                   title="Add code cell (Ctrl/Cmd + B)"
                 >
-                  <VscCode className="w-4 h-4 mr-1" />
-                  <AiOutlinePlus className="w-3 h-3" />
+                  <VscCode className="w-3.5 h-3.5" />
+                  <AiOutlinePlus className="w-2.5 h-2.5 ml-0.5" />
                 </button>
                 <button 
                   onClick={() => {
@@ -2289,18 +2365,18 @@ const NotebookPage: React.FC = () => {
                       }
                     }, 100);
                   }}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition flex items-center"
+                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition flex items-center"
                   title="Add markdown cell"
                 >
-                  <MdOutlineTextFields className="w-4 h-4 mr-1" />
-                  <AiOutlinePlus className="w-3 h-3" />
+                  <MdOutlineTextFields className="w-3.5 h-3.5" />
+                  <AiOutlinePlus className="w-2.5 h-2.5 ml-0.5" />
                 </button>
                 <button
                   onClick={() => setIsShortcutsDialogOpen(true)}
-                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition ml-2"
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition ml-1"
                   title="Keyboard Shortcuts"
                 >
-                  <FaKeyboard className="w-4 h-4" />
+                  <FaKeyboard className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
