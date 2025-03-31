@@ -80,23 +80,23 @@
 .child-cell::before {
   content: '';
   position: absolute;
-  left: 6px;
+  left: 8px;
   top: 50%;
-  transform: translateY(-50%);
   width: 8px;
   height: 8px;
-  border-top: 2px solid rgb(229 231 235);
-  border-right: 2px solid rgb(229 231 235);
+  border-top: 2px solid rgb(156 163 175); /* Tailwind gray-400 for better visibility */
+  border-right: 2px solid rgb(156 163 175);
   transform: translateY(-50%) rotate(45deg);
   transition: border-color 0.2s ease;
 }
 
 .child-cell:hover::before {
-  border-color: rgba(59, 130, 246, 0.5);
+  border-color: rgba(59, 130, 246, 0.5); /* Tailwind blue-500 at 50% opacity */
 }
 
-.notebook-cell-container-active .child-cell::before {
-  border-color: rgb(59, 130, 246);
+.notebook-cell-active .child-cell::before,
+.child-cell:focus-within::before {
+  border-color: rgb(59, 130, 246); /* Tailwind blue-500 */
 }
 
 /* Remove old styles */
@@ -182,7 +182,7 @@
 /* Execution Count Styling */
 .execution-count {
   font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
+  font-size: 10px;
   color: #878788;
   width: 64px;
   min-width: 64px;

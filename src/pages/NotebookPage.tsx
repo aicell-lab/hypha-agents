@@ -116,7 +116,8 @@ const saveToLocalStorage = (cells: NotebookCell[], metadata: NotebookMetadata) =
       })) : undefined,
       metadata: {
         ...cell.metadata,
-        hasOutput: cell.output && cell.output.length > 0
+        hasOutput: cell.output && cell.output.length > 0,
+        parent: cell.metadata?.parent // Explicitly preserve parent key
       }
     })),
     metadata: {
@@ -158,7 +159,8 @@ const loadFromLocalStorage = (): { cells: NotebookCell[]; metadata: NotebookMeta
       })) : undefined,
       metadata: {
         ...cell.metadata,
-        isNew: false
+        isNew: false,
+        parent: cell.metadata?.parent // Explicitly preserve parent key
       }
     })),
     metadata: data.metadata
@@ -1433,10 +1435,11 @@ const NotebookPage: React.FC = () => {
     });
   };
 
-  // Update handleExecuteCode to properly save and persist outputs
+  // Update handleExecuteCode to properly handle parent property
   const handleExecuteCode = useCallback(async (code: string, cellId?: string): Promise<string> => {
     try {
       let actualCellId = cellId;
+      let parentId: string | undefined;
       
       if (actualCellId) {
         // Update the existing code cell with the new code
@@ -1453,18 +1456,19 @@ const NotebookPage: React.FC = () => {
           
           if (thinkingCell) {
             // Get the parent ID of the thinking cell (the user message that triggered this)
-            const parentId = thinkingCell.metadata?.parent;
+            parentId = thinkingCell.metadata?.parent;
             
             // Insert code cell BEFORE the thinking cell
             // This keeps it sandwiched between user message and thinking indicator
             actualCellId = cellManager.addCellBefore('code', code, 'assistant', thinkingCellId, parentId);
-            console.log('[DEBUG] Added code cell before thinking cell:', actualCellId);
+            console.log('[DEBUG] Added code cell before thinking cell:', actualCellId, 'with parent:', parentId);
           } else {
             // Fallback: find the last user message and add after it
             const lastUserCell = cellManager.findLastCell(c => c.role === 'user');
             if (lastUserCell) {
-              actualCellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id, lastUserCell.id);
-              console.log('[DEBUG] Added code cell after last user message:', actualCellId);
+              parentId = lastUserCell.id;
+              actualCellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id, parentId);
+              console.log('[DEBUG] Added code cell after last user message:', actualCellId, 'with parent:', parentId);
             } else {
               // Last resort: add to the end
               actualCellId = cellManager.addCell('code', code, 'assistant');
@@ -1475,8 +1479,9 @@ const NotebookPage: React.FC = () => {
           // Try to find the last user message and add after it
           const lastUserCell = cellManager.findLastCell(c => c.role === 'user');
           if (lastUserCell) {
-            actualCellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id, lastUserCell.id);
-            console.log('[DEBUG] No thinking cell, added code after last user message:', actualCellId);
+            parentId = lastUserCell.id;
+            actualCellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id, parentId);
+            console.log('[DEBUG] No thinking cell, added code after last user message:', actualCellId, 'with parent:', parentId);
           } else {
             // No user message found, add to the end
             actualCellId = cellManager.addCell('code', code, 'assistant');
@@ -2083,7 +2088,8 @@ const NotebookPage: React.FC = () => {
           ...cell.metadata,
           role: cell.role,
           collapsed: false,
-          trusted: true
+          trusted: true,
+          parent: cell.metadata?.parent // Explicitly preserve parent key
         }
       }))
     };
@@ -2141,7 +2147,9 @@ const NotebookPage: React.FC = () => {
             const cellId = cellManager.addCell(
               cell.type, 
               cell.content || '',
-              cell.role || (cell.metadata?.role as CellRole | undefined)
+              cell.role || (cell.metadata?.role as CellRole | undefined),
+              undefined, // afterCellId
+              cell.metadata?.parent // Pass the parent ID from metadata
             );
             
             // Update cell with execution state and outputs if they exist
@@ -2340,7 +2348,8 @@ const NotebookPage: React.FC = () => {
               <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
                 <button 
                   onClick={() => {
-                    const newCellId = cellManager.addCell('code');
+                    const afterId = activeCellId ? activeCellId : undefined;
+                    const newCellId = cellManager.addCell('code', '', undefined, afterId);
                     // Focus the new cell
                     setTimeout(() => {
                       const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
@@ -2357,7 +2366,8 @@ const NotebookPage: React.FC = () => {
                 </button>
                 <button 
                   onClick={() => {
-                    const newCellId = cellManager.addCell('markdown');
+                    const afterId = activeCellId ? activeCellId : undefined;
+                    const newCellId = cellManager.addCell('markdown', '', undefined, afterId);
                     // Focus the new cell
                     setTimeout(() => {
                       const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
