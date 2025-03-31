@@ -444,7 +444,13 @@ const ChatContent: React.FC<ChatProps> = (props) => {
         console.log('Empty content, skipping');
         return;
       }
-
+      // filter out input_audio
+      item.content = item.content.filter((c: any) => c.type !== 'input_audio');
+      // if item.content.length is 0, return
+      if (item.content.length === 0) {
+        console.log('No content, skipping');
+        return;
+      }
       // Convert the content items
       const convertedContent = item.content.map((c: any) => {
         console.log('Converting content item:', c);
@@ -548,6 +554,7 @@ const ChatContent: React.FC<ChatProps> = (props) => {
             const updatedContent = [...lastMessage.content];
             
             convertedContent.forEach((newItem: ContentItem) => {
+           
               if (newItem.type === 'code_execution') {
                 // If it's a tool_call_output, find and update the matching code block
                 if (newItem.attrs?.output && newItem.attrs.output.length > 0) {

@@ -115,7 +115,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🌟 Acknowledgments
 
 - The Hypha development team
-- Our telecom industry partners
 - All contributors and maintainers
 
 ---
@@ -210,7 +209,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🌟 Acknowledgments
 
 - The Hypha development team
-- Our telecom industry partners
 - All contributors and maintainers
 
 ---

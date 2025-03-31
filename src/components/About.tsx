@@ -8,13 +8,13 @@ const About: React.FC = () => {
       
       <div className="prose prose-lg max-w-none">
         <p className="lead text-xl text-gray-700 mb-8">
-          {SITE_NAME} empowers organizations to build and deploy customizable AI agents with deep telecom domain expertise. Our platform combines advanced LLM capabilities with specialized knowledge bases to create AI assistants that truly understand the telecommunications domain.
+          {SITE_NAME} empowers organizations to build and deploy customizable AI agents with deep domain expertise. Our platform combines advanced LLM capabilities with specialized knowledge bases to create AI assistants that truly understand the domain.
         </p>
 
         <section className="mb-12 bg-white rounded-lg shadow-sm p-8">
           <h2 className="text-2xl font-semibold mb-4 text-gray-800">Our Mission</h2>
           <p className="text-gray-600 leading-relaxed">
-            {SITE_NAME} leverages advanced LLM technology combined with specialized knowledge bases to create AI agents that truly understand the telecommunications domain. Our platform enables rapid development, testing, and deployment of agents that can assist with a wide range of telecom-specific tasks.
+            {SITE_NAME} leverages advanced LLM technology combined with specialized knowledge bases to create AI agents that truly understand the domain. Our platform enables rapid development, testing, and deployment of agents that can assist with a wide range of tasks.
           </p>
         </section>
 
@@ -58,7 +58,7 @@ const About: React.FC = () => {
         <section className="mb-12 bg-white rounded-lg shadow-sm p-8">
           <h2 className="text-2xl font-semibold mb-4 text-gray-800">Our Approach</h2>
           <p className="text-gray-600 leading-relaxed mb-6">
-            {SITE_NAME} leverages advanced LLM technology combined with specialized knowledge bases to create AI agents that truly understand the telecommunications domain. Our platform enables rapid development, testing, and deployment of agents that can assist with a wide range of telecom-specific tasks.
+            {SITE_NAME} leverages advanced LLM technology combined with specialized knowledge bases to create AI agents that truly understand the domain. Our platform enables rapid development, testing, and deployment of agents that can assist with a wide range of tasks.
           </p>
           <p className="text-gray-600 leading-relaxed">
             Through our extensible tool system and collaborative features, organizations can build, share, and improve their agents while maintaining full control over their resources and knowledge bases.
@@ -67,7 +67,7 @@ const About: React.FC = () => {
 
         <h2 className="text-2xl font-bold mt-12 mb-4">Technology</h2>
         <p>
-          {SITE_NAME} leverages advanced LLM technology combined with specialized knowledge bases to create AI agents that truly understand the telecommunications domain. Our platform enables rapid development, testing, and deployment of agents that can assist with a wide range of telecom-specific tasks.
+          {SITE_NAME} leverages advanced LLM technology combined with specialized knowledge bases to create AI agents that truly understand the domain. Our platform enables rapid development, testing, and deployment of agents that can assist with a wide range of tasks.
         </p>
       </div>
     </div>

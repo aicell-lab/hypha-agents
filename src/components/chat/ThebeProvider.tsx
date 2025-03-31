@@ -626,7 +626,10 @@ print(f"{sys.version.split()[0]}")
     switch (type) {
       case 'stdout':
       case 'stderr':
-        return `${stripAnsi(content.substring(0, maxLength))}... [Full output stored with key: ${storeOutput(content, type)}]`;
+        const firstHalf = stripAnsi(content.substring(0, maxLength/2));
+        const secondHalf = stripAnsi(content.substring(content.length - maxLength/2));
+        const key = storeOutput(content, type);
+        return `${firstHalf}... [truncated] ...${secondHalf} [Full output stored with key: ${key}]`;
       case 'html':
         return `[HTML content stored with key: ${storeOutput(content, type)}]`;
       case 'img':

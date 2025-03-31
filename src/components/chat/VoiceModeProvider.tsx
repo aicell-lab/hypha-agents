@@ -109,6 +109,9 @@ Remember:
 - Prioritize the most important information first`,
           voice: sessionConfig?.voice || "sage",
           output_audio_format: "pcm16",
+          input_audio_transcription: {
+            model: 'whisper-1',
+          },
           tools: formatToolsForOpenAI(sessionConfig?.tools),
           tool_choice: "auto",
           temperature: sessionConfig?.temperature || 0.8,
@@ -299,6 +302,22 @@ Remember:
         case 'conversation.item.created':
           setStatus('Message added to conversation');
           recordingConfigRef.current.onItemCreated?.(msg.item);
+          break;
+        
+        case 'conversation.item.input_audio_transcription.completed':
+          // get the transcription from the 'transcript' field of the msg
+          const transcription = msg.transcript;
+          console.log('Transcription:', transcription);
+          recordingConfigRef.current.onItemCreated?.({
+            type: 'message',
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: transcription
+              }
+            ]
+          });
           break;
         
         case 'response.done':

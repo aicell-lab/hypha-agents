@@ -146,8 +146,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
               const functionOutputItem = {
                 type: 'function_call_output',
                 call_id: toolCall.id,
-                output: typeof result === 'string' ? result : JSON.stringify(result),
-                content: typeof result === 'string' ? result : JSON.stringify(result)
+                output: typeof result === 'string' ? result : JSON.stringify(result)
               };
               
               // Notify about function call and result
@@ -170,8 +169,7 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
               const errorItem = {
                 type: 'function_call_output',
                 call_id: toolCall.id,
-                output: `Error executing code: ${error instanceof Error ? error.stack || error.message : String(error)}`,
-                content: `Error executing code: ${error instanceof Error ? error.stack || error.message : String(error)}`
+                output: `Error executing code: ${error instanceof Error ? error.stack || error.message : String(error)}`
               };
               
               chatConfigRef.current.onItemCreated?.(errorItem);

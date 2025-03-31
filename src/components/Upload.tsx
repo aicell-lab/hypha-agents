@@ -790,7 +790,7 @@ const Upload: React.FC<UploadProps> = ({ artifactId, onBack }) => {
                     </ol>
                     <div className="mt-6 space-y-4">
                       <p className="text-sm text-gray-500">
-                        Your contributions help expand the ecosystem of specialized telecom AI agents and support the broader community.
+                        Your contributions help expand the ecosystem of specialized AI agents and support the broader community.
                       </p>
                       <p className="text-sm text-gray-500">
                         Need assistance? Check our <a href="#" className="text-blue-600 hover:underline font-medium">documentation</a> or 

@@ -59,10 +59,10 @@ const Footer: React.FC = () => {
               {SITE_NAME}
             </div>
             <p className="text-base text-gray-700 font-medium mb-4">
-              Build and deploy intelligent AI agents for telecommunications
+              Build and deploy intelligent AI agents
             </p>
             <p className="text-sm text-gray-600 leading-relaxed px-4">
-              {SITE_NAME} enables organizations to create customized AI agents with deep telecom expertise. Join our community to build, share, and improve intelligent agents together.
+              {SITE_NAME} enables organizations to create customized AI agents with specialized domain expertise. Join our community to build, share, and improve intelligent agents together.
             </p>
           </div>
           <p className="text-sm text-gray-600 leading-relaxed px-4">

@@ -81,7 +81,6 @@ interface CodeCellProps {
   onRoleChange?: (role: CellRole) => void;
   onChange?: (value: string) => void;
   hideCode?: boolean;
-  autoHideOnSuccess?: boolean;
   onVisibilityChange?: (isVisible: boolean) => void;
 }
 
@@ -100,7 +99,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   onRoleChange,
   onChange,
   hideCode = false,
-  autoHideOnSuccess = false,
   onVisibilityChange
 }) => {
   const { executeCodeWithDOMOutput, status, isReady } = useThebe();
@@ -403,13 +401,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     e.preventDefault();
     onVisibilityChange?.(!hideCode);
   };
-
-  // Add effect to handle auto-hiding when execution completes
-  useEffect(() => {
-    if (autoHideOnSuccess && !isExecuting && executionCount && outputRef.current?.innerHTML) {
-      onVisibilityChange?.(false);
-    }
-  }, [autoHideOnSuccess, isExecuting, executionCount, onVisibilityChange]);
 
   // Get the first line of actual code for preview
   const getCodePreview = () => {

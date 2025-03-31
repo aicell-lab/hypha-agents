@@ -1,0 +1,25 @@
+/* Notebook Page Styles */
+
+/* Cell container */
+.notebook-cell-container {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  border: 1px solid transparent;
+}
+
+/* Active cell styling */
+.notebook-cell-container-active {
+  border-color: #e5e7eb;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Ensure the active indicator is shown correctly */
+.notebook-cell-container-active::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #3b82f6;
+} 

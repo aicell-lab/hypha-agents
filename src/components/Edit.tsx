@@ -1274,8 +1274,6 @@ my_global_var = 42`}
             </p>
             <ul className="list-disc pl-5 space-y-2 text-gray-600">
               <li>The {SITE_NAME}</li>
-              <li>Telecom industry standards and protocols</li>
-              <li>Network architecture and operations</li>
               <li>Customer service best practices</li>
             </ul>
             <p className="text-red-600 font-medium">
