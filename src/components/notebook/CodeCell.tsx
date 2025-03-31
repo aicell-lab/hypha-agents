@@ -426,6 +426,11 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       <div className="jupyter-cell-flex-container items-start w-full max-w-full">
         {/* Execution count with role icon */}
         <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
+        {role !== undefined && onRoleChange && (
+            <div className="pr-2">
+              <RoleSelector role={role} onChange={onRoleChange} />
+            </div>
+          )}
           <div className="text-gray-500">
             {isExecuting 
               ? '[*]:'
@@ -433,11 +438,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               ? `[${executionCount}]:`
               : ''}
           </div>
-          {role !== undefined && onRoleChange && (
-            <div className="pr-2">
-              <RoleSelector role={role} onChange={onRoleChange} />
-            </div>
-          )}
+          
         </div>
         
         {/* Editor */}
