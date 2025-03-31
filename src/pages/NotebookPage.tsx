@@ -53,6 +53,7 @@ interface NotebookCell {
     isCodeVisible?: boolean;
     hasOutput?: boolean;
     userModified?: boolean;
+    parent?: string; // ID of the parent cell (for tracking agent responses to user messages)
   };
 }
 
@@ -430,7 +431,8 @@ class CellManager {
     type: CellType, 
     content: string = '', 
     role?: CellRole, 
-    afterCellId?: string
+    afterCellId?: string,
+    parent?: string
   ): string {
     const newCell: NotebookCell = {
       id: this.generateId(),
@@ -444,7 +446,8 @@ class CellManager {
         isNew: type === 'code',
         role: role,
         isEditing: false,
-        isCodeVisible: true
+        isCodeVisible: true,
+        parent: parent
       }
     };
     
@@ -485,7 +488,8 @@ class CellManager {
     type: CellType, 
     content: string = '', 
     role?: CellRole, 
-    beforeCellId?: string
+    beforeCellId?: string,
+    parent?: string
   ): string {
     const newCell: NotebookCell = {
       id: this.generateId(),
@@ -499,7 +503,8 @@ class CellManager {
         isNew: type === 'code',
         role: role,
         isEditing: false,
-        isCodeVisible: true
+        isCodeVisible: true,
+        parent: parent
       }
     };
     
@@ -958,7 +963,12 @@ class CellManager {
   }
   
   // Handle agent response for messages, function calls, etc.
-  handleAgentResponse(item: any): void {
+  handleAgentResponse(item: { 
+    type: string; 
+    role?: string; 
+    content?: any;
+    name?: string;  // Add name property for function calls
+  }): void {
     console.log('[DEBUG] Handling agent response:', JSON.stringify(item, null, 2));
     
     try {
@@ -968,6 +978,10 @@ class CellManager {
         console.log('[DEBUG] No thinking cell ID available for response placement');
         return;
       }
+      
+      // Get the parent cell ID (parent of the thinking cell)
+      const thinkingCell = this.findCell(c => c.id === thinkingCellId);
+      const parentId = thinkingCell?.metadata?.parent;
       
       // Handle function calls (code cells) - these are handled by handleExecuteCode
       if (item.type === 'function_call') {
@@ -979,16 +993,30 @@ class CellManager {
       if (item.type === 'function_call_output') {
         console.log('[DEBUG] Processing function call output');
         
-        // Find the last code cell from the assistant to collapse it
-        const lastCodeCell = this.findLastCell(cell => 
-          cell.role === 'assistant' && cell.type === 'code'
-        );
+        // Get the thinking cell to find the parent user message
+        const thinkingCell = this.findCell((c: NotebookCell) => c.id === this.lastAgentCellRef.current);
+        const parentId = thinkingCell?.metadata?.parent;
         
-        if (lastCodeCell) {
-          setTimeout(() => {
-            // Wait a brief moment after execution completes before collapsing
-            this.collapseCodeCell(lastCodeCell.id);
-          }, 500);
+        if (parentId) {
+          // Find all code cells that are children of the parent user message
+          const childrenCells = this.findChildrenCells(parentId);
+          const codeCells = childrenCells.filter((cell: NotebookCell) => 
+            cell.type === 'code' && 
+            cell.role === 'assistant' && 
+            cell.executionState === 'success'
+          );
+          
+          // Collapse all successfully executed code cells
+          if (codeCells.length > 0) {
+            setTimeout(() => {
+              codeCells.forEach((cell: NotebookCell) => {
+                if (cell.id) {
+                  console.log('[DEBUG] Collapsing code cell:', cell.id);
+                  this.collapseCodeCell(cell.id);
+                }
+              });
+            }, 500);
+          }
         }
         return;
       }
@@ -1011,7 +1039,8 @@ class CellManager {
               'markdown',
               item.content[0].text || item.content[0].content,
               'assistant',
-              thinkingCellId
+              thinkingCellId,
+              parentId // Pass the parent ID to link this response to the user message
             );
             
             console.log('[DEBUG] Added final response cell before thinking cell:', responseCellId);
@@ -1066,6 +1095,154 @@ class CellManager {
     if (this.lastAgentCellRef.current === thinkingCellId) {
       this.lastAgentCellRef.current = null;
     }
+  }
+  
+  // Find all children cells of a given cell ID
+  findChildrenCells(parentId: string): NotebookCell[] {
+    return this.cells.filter(cell => cell.metadata?.parent === parentId);
+  }
+  
+  // Delete a cell and all its children cells
+  deleteWithChildren(id: string): void {
+    // First find all children cells
+    const childrenCells = this.findChildrenCells(id);
+    const childrenIds = childrenCells.map(cell => cell.id);
+    
+    // Add the parent cell ID to the list of cells to delete
+    const allIdsToDelete = [id, ...childrenIds];
+    
+    // Delete all cells at once
+    this.setCells(prev => {
+      const newCells = prev.filter(cell => !allIdsToDelete.includes(cell.id));
+      
+      // Update active cell if needed
+      if (allIdsToDelete.includes(this.activeCellId || '')) {
+        // Try to activate the cell after the last deleted cell, or previous if there is no next
+        const lastDeletedIndex = prev.findIndex(cell => cell.id === id);
+        if (lastDeletedIndex !== -1) {
+          const nextIndex = Math.min(lastDeletedIndex, newCells.length - 1);
+          if (nextIndex >= 0) {
+            const nextCell = newCells[nextIndex];
+            this.setActiveCellId(nextCell.id);
+            // Focus the newly activated cell
+            setTimeout(() => {
+              const editor = this.editorRefs.current[nextCell.id]?.current;
+              if (editor) {
+                if (nextCell.type === 'code') {
+                  // For code cells, focus the Monaco editor
+                  if (typeof editor.focus === 'function') {
+                    editor.focus();
+                  } else if (editor.getContainerDomNode) {
+                    editor.getContainerDomNode()?.focus();
+                  }
+                } else {
+                  // For markdown cells, ensure it's in edit mode and focused
+                  this.toggleCellEditing(nextCell.id, true);
+                  if (typeof editor.focus === 'function') {
+                    editor.focus();
+                  } else if (editor.getContainerDomNode) {
+                    editor.getContainerDomNode()?.focus();
+                  }
+                }
+              }
+            }, 100);
+          } else {
+            this.setActiveCellId(null);
+          }
+        }
+      }
+
+      // Clean up editor refs for deleted cells
+      allIdsToDelete.forEach(cellId => {
+        if (this.editorRefs.current[cellId]) {
+          delete this.editorRefs.current[cellId];
+        }
+      });
+      
+      return newCells;
+    });
+  }
+
+  // Regenerate agent responses for a user message cell
+  regenerateResponses(userCellId: string): { messageToRegenerate: string, thinkingCellId: string } | void {
+    // Find the user message cell
+    const userCell = this.findCell(cell => cell.id === userCellId);
+    if (!userCell || userCell.role !== 'user') {
+      console.error('[DEBUG] Cannot regenerate responses for a non-user cell or cell not found');
+      return;
+    }
+    
+    // Get the message content
+    const messageContent = userCell.content;
+    
+    // Find all children cells (responses from the agent for this user message)
+    const childrenCells = this.findChildrenCells(userCellId);
+    const childrenIds = childrenCells.map(cell => cell.id);
+    
+    // Remove all children cells first
+    this.setCells(prev => prev.filter(cell => !childrenIds.includes(cell.id)));
+    
+    // Clean up editor refs for deleted cells
+    childrenIds.forEach(cellId => {
+      if (this.editorRefs.current[cellId]) {
+        delete this.editorRefs.current[cellId];
+      }
+    });
+    
+    // Add a thinking cell right after the user's message
+    const thinkingCellId = this.addCell('markdown', '🤔 Thinking...', 'assistant', userCellId, userCellId);
+    
+    // Set the thinking cell reference for anchoring responses
+    this.lastAgentCellRef.current = thinkingCellId;
+    
+    // Scroll to the thinking message
+    setTimeout(() => {
+      const cellElement = document.querySelector(`[data-cell-id="${thinkingCellId}"]`);
+      if (cellElement) {
+        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 50);
+    
+    // Signal that we want to regenerate a response
+    return { 
+      messageToRegenerate: messageContent, 
+      thinkingCellId
+    };
+  }
+
+  // Add helper method to find the last cell of a conversation group
+  findLastCellOfConversation(cellId: string): string {
+    // If cell has no parent
+    const activeCell = this.findCell(c => c.id === cellId);
+    if (!activeCell) return cellId;
+    
+    // If cell has a parent, find all cells with the same parent
+    if (activeCell.metadata?.parent) {
+      const parentId = activeCell.metadata.parent;
+      const allSiblings = this.findChildrenCells(parentId);
+      
+      // Include the parent cell in consideration
+      const parentCell = this.findCell(c => c.id === parentId);
+      const conversationCells = [
+        parentCell,
+        ...allSiblings
+      ].filter((cell): cell is NotebookCell => cell !== undefined);
+      
+      // Sort cells by their position in the notebook
+      const sortedCells = conversationCells.sort((a, b) => {
+        const indexA = this.cells.findIndex(c => c.id === a.id);
+        const indexB = this.cells.findIndex(c => c.id === b.id);
+        return indexA - indexB;
+      });
+      
+      // Return the ID of the last cell
+      if (sortedCells.length > 0) {
+        return sortedCells[sortedCells.length - 1].id;
+      }
+    }
+    
+    // If no parent or no siblings found, return the original cell ID
+    return cellId;
   }
 }
 
@@ -1230,10 +1407,12 @@ const NotebookPage: React.FC = () => {
   // Update handleExecuteCode to properly save and persist outputs
   const handleExecuteCode = useCallback(async (code: string, cellId?: string): Promise<string> => {
     try {
-      if (cellId) {
+      let actualCellId = cellId;
+      
+      if (actualCellId) {
         // Update the existing code cell with the new code
-        cellManager.updateCellContent(cellId, code);
-        console.log('[DEBUG] Updated code cell:', cellId);
+        cellManager.updateCellContent(actualCellId, code);
+        console.log('[DEBUG] Updated code cell:', actualCellId);
       }
       else {
         // Get the thinking cell ID for proper placement
@@ -1244,38 +1423,41 @@ const NotebookPage: React.FC = () => {
           const thinkingCell = cellManager.findCell(c => c.id === thinkingCellId);
           
           if (thinkingCell) {
+            // Get the parent ID of the thinking cell (the user message that triggered this)
+            const parentId = thinkingCell.metadata?.parent;
+            
             // Insert code cell BEFORE the thinking cell
             // This keeps it sandwiched between user message and thinking indicator
-            cellId = cellManager.addCellBefore('code', code, 'assistant', thinkingCellId);
-            console.log('[DEBUG] Added code cell before thinking cell:', cellId);
+            actualCellId = cellManager.addCellBefore('code', code, 'assistant', thinkingCellId, parentId);
+            console.log('[DEBUG] Added code cell before thinking cell:', actualCellId);
           } else {
             // Fallback: find the last user message and add after it
             const lastUserCell = cellManager.findLastCell(c => c.role === 'user');
             if (lastUserCell) {
-              cellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id);
-              console.log('[DEBUG] Added code cell after last user message:', cellId);
+              actualCellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id, lastUserCell.id);
+              console.log('[DEBUG] Added code cell after last user message:', actualCellId);
             } else {
               // Last resort: add to the end
-              cellId = cellManager.addCell('code', code, 'assistant');
-              console.log('[DEBUG] No reference points found, added code cell at end:', cellId);
+              actualCellId = cellManager.addCell('code', code, 'assistant');
+              console.log('[DEBUG] No reference points found, added code cell at end:', actualCellId);
             }
           }
         } else {
           // Try to find the last user message and add after it
           const lastUserCell = cellManager.findLastCell(c => c.role === 'user');
           if (lastUserCell) {
-            cellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id);
-            console.log('[DEBUG] No thinking cell, added code after last user message:', cellId);
+            actualCellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id, lastUserCell.id);
+            console.log('[DEBUG] No thinking cell, added code after last user message:', actualCellId);
           } else {
             // No user message found, add to the end
-            cellId = cellManager.addCell('code', code, 'assistant');
-            console.log('[DEBUG] No user message found, added code cell at end:', cellId);
+            actualCellId = cellManager.addCell('code', code, 'assistant');
+            console.log('[DEBUG] No user message found, added code cell at end:', actualCellId);
           }
         }
       }
     
       // Update cell state to running and execute the code
-      cellManager.updateCellExecutionState(cellId, 'running');
+      cellManager.updateCellExecutionState(actualCellId, 'running');
       
       const outputs: OutputItem[] = [];
       let shortOutput = '';
@@ -1319,12 +1501,12 @@ const NotebookPage: React.FC = () => {
             }
             
             // Update cell with current outputs
-            cellManager.updateCellExecutionState(cellId, 'running', outputs);
+            cellManager.updateCellExecutionState(actualCellId, 'running', outputs);
           },
           onStatus: (status) => {
             if (status === 'Completed') {
               // Save final outputs on completion
-              cellManager.updateCellExecutionState(cellId, 'success', outputs);
+              cellManager.updateCellExecutionState(actualCellId, 'success', outputs);
               
               // Save to localStorage after successful execution
               setTimeout(() => {
@@ -1332,7 +1514,7 @@ const NotebookPage: React.FC = () => {
               }, 100);
             } else if (status === 'Error') {
               // Save error outputs
-              cellManager.updateCellExecutionState(cellId, 'error', outputs);
+              cellManager.updateCellExecutionState(actualCellId, 'error', outputs);
               
               // Save to localStorage after error
               setTimeout(() => {
@@ -1341,12 +1523,12 @@ const NotebookPage: React.FC = () => {
             }
           }
         });
-        return `[Cell Id: ${cellId}]\n${shortOutput.trim() || "Code executed successfully. No output generated."}`;
+        return `[Cell Id: ${actualCellId}]\n${shortOutput.trim() || "Code executed successfully. No output generated."}`;
       } catch (error) {
         console.error("[DEBUG] executeCode error:", error);
         
         // Save error state and output
-        cellManager.updateCellExecutionState(cellId, 'error', [{
+        cellManager.updateCellExecutionState(actualCellId, 'error', [{
           type: 'stderr',
           content: `Error: ${error instanceof Error ? error.message : String(error)}`,
           attrs: { className: 'output-area error-output' }
@@ -1357,7 +1539,7 @@ const NotebookPage: React.FC = () => {
           cellManager.saveToLocalStorage();
         }, 100);
         
-        return `[Cell Id: ${cellId}]\nError executing code: ${error instanceof Error ? error.message : String(error)}`;
+        return `[Cell Id: ${actualCellId}]\nError executing code: ${error instanceof Error ? error.message : String(error)}`;
       }
     } catch (error) {
       console.error("[DEBUG] Fatal error in handleExecuteCode:", error);
@@ -1553,16 +1735,25 @@ const NotebookPage: React.FC = () => {
       return;
     }
 
-    // Add user message after the current active cell
-    const userCellId = activeCellId 
-      ? cellManager.addCell('markdown', message, 'user', activeCellId)
+    // Determine where to add the new user message
+    let targetCellId = activeCellId;
+    
+    if (targetCellId) {
+      // Find the last cell of the conversation if active cell is part of a conversation
+      targetCellId = cellManager.findLastCellOfConversation(targetCellId);
+    }
+
+    // Add user message after the target cell (or at the end if no target)
+    const userCellId = targetCellId 
+      ? cellManager.addCell('markdown', message, 'user', targetCellId)
       : cellManager.addCell('markdown', message, 'user');
     
     // Make user message the active cell
     cellManager.setActiveCell(userCellId);
     
     // Add a thinking cell right after the user's message
-    const thinkingCellId = cellManager.addCell('markdown', '🤔 Thinking...', 'assistant', userCellId);
+    // Set the parent of the thinking cell to be the user message cell
+    const thinkingCellId = cellManager.addCell('markdown', '🤔 Thinking...', 'assistant', userCellId, userCellId);
     
     // Set the thinking cell reference for anchoring responses
     lastAgentCellRef.current = thinkingCellId;
@@ -1582,6 +1773,8 @@ const NotebookPage: React.FC = () => {
         await sendText(message);
       } catch (error) {
         console.error('Error sending message to AI:', error);
+        // Remove the thinking cell
+        cellManager.deleteCell(thinkingCellId);
         setInitializationError("Error communicating with AI assistant. Please try again or refresh the page.");
       } finally {
         setIsProcessingAgentResponse(false);
@@ -1956,6 +2149,34 @@ const NotebookPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cells, notebookMetadata, cellManager]);
 
+  // Handle regeneration of agent responses
+  const handleRegenerateClick = async (cellId: string) => {
+    if (!isChatRunning || !isReady || isProcessingAgentResponse) {
+      console.log('[DEBUG] Cannot regenerate while processing another response or not ready', 
+        { isChatRunning, isReady, isProcessingAgentResponse });
+      return;
+    }
+    
+    try {
+      // Use cellManager to regenerate responses
+      const result = cellManager.regenerateResponses(cellId);
+      
+      if (!result) {
+        console.error('[DEBUG] Failed to prepare for regeneration');
+        return;
+      }
+      
+      setIsProcessingAgentResponse(true);
+      
+      // Send the original message back to the agent
+      await sendText(result.messageToRegenerate);
+    } catch (error) {
+      console.error('[DEBUG] Error regenerating responses:', error);
+      setInitializationError("Error regenerating response. Please try again.");
+      setIsProcessingAgentResponse(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
@@ -2138,6 +2359,7 @@ const NotebookPage: React.FC = () => {
                       onEditingChange={(isEditing) => cellManager.toggleCellEditing(cell.id, isEditing)}
                       editorRef={getEditorRef(cell.id)}
                       isActive={activeCellId === cell.id}
+                      parent={cell.metadata?.parent}
                     />
                   )}
                   
@@ -2247,6 +2469,7 @@ const NotebookPage: React.FC = () => {
                       </button>
                     </>
                   )}
+                  
                   {cell.type === 'markdown' && (
                     <>
                       {cell.metadata?.isEditing ? (
@@ -2272,6 +2495,7 @@ const NotebookPage: React.FC = () => {
                           <span className="text-xs">Edit</span>
                         </button>
                       )}
+                      
                       <button
                         onClick={() => cellManager.changeCellType(cell.id, 'code')}
                         className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
@@ -2284,19 +2508,80 @@ const NotebookPage: React.FC = () => {
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cellManager.deleteCell(cell.id);
-                    }}
-                    className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
-                    title="Delete cell"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    <span className="text-xs">Delete</span>
-                  </button>
+
+                  {/* Add regenerate button for user message cells */}
+                  {cell.role === 'user' && (
+                    <button
+                      onClick={() => handleRegenerateClick(cell.id)}
+                      disabled={!isChatRunning || !isReady || isProcessingAgentResponse}
+                      className="p-1 hover:bg-green-100 rounded text-green-600 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Regenerate AI response"
+                    >
+                      <FaSyncAlt className="w-3 h-3" />
+                      <span className="text-xs">Regenerate</span>
+                    </button>
+                  )}
+                  
+                  {/* Delete buttons - different for user vs. assistant cells */}
+                  {cell.role === 'user' ? (
+                    <div className="relative flex items-center gap-1">
+                      {/* Delete button group with expanding options */}
+                      <div className="flex items-center gap-1 bg-white rounded overflow-hidden transition-all duration-200">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const target = e.currentTarget.parentElement;
+                            if (target) {
+                              target.classList.toggle('expanded');
+                            }
+                          }}
+                          className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
+                          title="Delete options"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          <span className="text-xs">Delete</span>
+                        </button>
+                        
+                        {/* Additional delete options - initially hidden */}
+                        <div className="hidden expanded:flex items-center gap-1 ml-1 pl-1 border-l border-gray-200">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              cellManager.deleteCell(cell.id);
+                            }}
+                            className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <span className="text-xs">This Cell</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              cellManager.deleteWithChildren(cell.id);
+                            }}
+                            className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <span className="text-xs">With Responses</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cellManager.deleteCell(cell.id);
+                      }}
+                      className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
+                      title="Delete cell"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      <span className="text-xs">Delete</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

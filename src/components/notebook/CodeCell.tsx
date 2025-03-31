@@ -82,6 +82,7 @@ interface CodeCellProps {
   onChange?: (value: string) => void;
   hideCode?: boolean;
   onVisibilityChange?: (isVisible: boolean) => void;
+  parent?: string;
 }
 
 export const CodeCell: React.FC<CodeCellProps> = ({ 
@@ -99,7 +100,8 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   onRoleChange,
   onChange,
   hideCode = false,
-  onVisibilityChange
+  onVisibilityChange,
+  parent
 }) => {
   const { executeCodeWithDOMOutput, status, isReady } = useThebe();
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
@@ -420,8 +422,9 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   return (
     <div 
       ref={editorDivRef}
-      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''}`}
+      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${parent ? 'child-cell' : ''}`}
       onClick={handleEditorClick}
+      data-parent={parent || undefined}
     >
       <div className="jupyter-cell-flex-container items-start w-full max-w-full">
         {/* Execution count with role icon */}

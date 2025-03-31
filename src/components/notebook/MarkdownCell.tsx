@@ -30,6 +30,7 @@ interface MarkdownCellProps {
   onEditingChange?: (isEditing: boolean) => void;
   editorRef?: React.RefObject<any>;
   isActive?: boolean;
+  parent?: string; // ID of parent cell (user message that triggered this cell)
 }
 
 const MarkdownCell: React.FC<MarkdownCellProps> = ({ 
@@ -41,7 +42,8 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   isEditing = false,
   onEditingChange,
   editorRef,
-  isActive = false
+  isActive = false,
+  parent
 }) => {
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
@@ -201,8 +203,9 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
 
   return (
     <div 
-      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''}`}
+      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''} ${parent ? 'child-cell' : ''}`}
       tabIndex={-1} // Make the container focusable
+      data-parent={parent || undefined}
     >
       <div 
         className="jupyter-cell-flex-container" 
