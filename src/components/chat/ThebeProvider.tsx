@@ -510,8 +510,8 @@ print(f"{sys.version.split()[0]}")
           },
           "@jupyterlite/pyodide-kernel-extension:kernel": {
             "pyodideUrl": "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/pyodide.js",
-            "pipliteUrls": ["https://unpkg.com/@jupyterlite/pyodide-kernel@0.5.2/pypi/all.json"],
-            "pipliteWheelUrl": "https://unpkg.com/@jupyterlite/pyodide-kernel@0.5.2/pypi/piplite-0.5.2-py3-none-any.whl"
+            "pipliteUrls": ["https://cdn.jsdelivr.net/npm/@jupyterlite/pyodide-kernel@0.5.2/pypi/all.json"],
+            "pipliteWheelUrl": "https://cdn.jsdelivr.net/npm/@jupyterlite/pyodide-kernel@0.5.2/pypi/piplite-0.5.2-py3-none-any.whl"
           }
         }
       };
@@ -876,11 +876,7 @@ print(f"{sys.version.split()[0]}")
             errorDiv.style.color = 'red';
             // parse the errorText to html
             const htmlWithAnsi = processTextOutput(errorText);
-            // Handle line breaks - keep text in a single line unless there's a newline character
-            // Filter out empty lines
-            const lines = htmlWithAnsi.split('\n').filter((line: string) => line.trim() !== '');
-            
-            errorDiv.innerHTML = lines.join('<br>');
+            errorDiv.innerHTML = htmlWithAnsi;
             outputElement.appendChild(errorDiv);
             
             onOutput?.({

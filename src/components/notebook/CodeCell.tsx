@@ -422,7 +422,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   return (
     <div 
       ref={editorDivRef}
-      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${parent ? 'child-cell' : ''}`}
+      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${parent ? 'child-cell' : 'parent-cell'}`}
       onClick={handleEditorClick}
       data-parent={parent || undefined}
     >
@@ -577,21 +577,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       {isExecuting && (
         <div className="absolute right-3 top-3 flex items-center">
           <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-blue-500"></div>
-        </div>
-      )}
-      
-      {/* Output area with execution count spacing */}
-      {outputRef.current && outputRef.current.innerHTML && (
-        <div className="jupyter-cell-flex-container mt-1">
-          <div className="execution-count flex-shrink-0">
-            {/* Empty space to align with code */}
-          </div>
-          <div className="editor-container w-full overflow-hidden">
-            <div 
-              ref={outputRef} 
-              className="output-area bg-gray-50 p-2 rounded-b-md w-full overflow-x-auto border-none"
-            ></div>
-          </div>
         </div>
       )}
     </div>

@@ -10,18 +10,21 @@ import Convert from 'ansi-to-html';
 import '../styles/ansi.css';
 import '../styles/notebook.css';
 import { useHyphaStore } from '../store/hyphaStore';
-import { TextModeProvider, useTextMode } from '../components/chat/TextModeProvider';
 import { ToolProvider, useTools } from '../components/chat/ToolProvider';
 import { JupyterOutput } from '../components/JupyterOutput';
+import { chatCompletion } from '../utils/chatCompletion';
 // Import icons
 import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
-
+import { CellManager } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
 import LoginButton from '../components/LoginButton';
+
+// Add type imports from chatCompletion
+import { ChatRole, ChatMessage } from '../utils/chatCompletion';
 
 const convert = new Convert({
   fg: '#000',
@@ -385,895 +388,6 @@ const defaultNotebookMetadata: NotebookMetadata = {
   modified: new Date().toISOString()
 };
 
-// Add CellManager class after the helpers and before NotebookPage component
-
-// Cell Manager utility class to encapsulate cell operations
-class CellManager {
-  cells: NotebookCell[];
-  setCells: React.Dispatch<React.SetStateAction<NotebookCell[]>>;
-  activeCellId: string | null;
-  setActiveCellId: React.Dispatch<React.SetStateAction<string | null>>;
-  executionCounter: number;
-  setExecutionCounter: React.Dispatch<React.SetStateAction<number>>;
-  editorRefs: React.MutableRefObject<{ [key: string]: React.RefObject<any> }>;
-  notebookMetadata: NotebookMetadata;
-  lastAgentCellRef: React.MutableRefObject<string | null>;
-  executeCodeFn: any;
-  
-  constructor(
-    cells: NotebookCell[],
-    setCells: React.Dispatch<React.SetStateAction<NotebookCell[]>>,
-    activeCellId: string | null,
-    setActiveCellId: React.Dispatch<React.SetStateAction<string | null>>,
-    executionCounter: number,
-    setExecutionCounter: React.Dispatch<React.SetStateAction<number>>,
-    editorRefs: React.MutableRefObject<{ [key: string]: React.RefObject<any> }>,
-    notebookMetadata: NotebookMetadata,
-    lastAgentCellRef: React.MutableRefObject<string | null>,
-    executeCodeFn: any
-  ) {
-    this.cells = cells;
-    this.setCells = setCells;
-    this.activeCellId = activeCellId;
-    this.setActiveCellId = setActiveCellId;
-    this.executionCounter = executionCounter;
-    this.setExecutionCounter = setExecutionCounter;
-    this.editorRefs = editorRefs;
-    this.notebookMetadata = notebookMetadata;
-    this.lastAgentCellRef = lastAgentCellRef;
-    this.executeCodeFn = executeCodeFn;
-  }
-  
-  // Generate a unique ID for cells
-  generateId(): string {
-    return Date.now().toString(36) + Math.random().toString(36).substring(2);
-  }
-  
-  // Add a cell of specified type and content after a specific cell (or at the end)
-  addCell(
-    type: CellType, 
-    content: string = '', 
-    role?: CellRole, 
-    afterCellId?: string,
-    parent?: string
-  ): string {
-    const newCell: NotebookCell = {
-      id: this.generateId(),
-      type,
-      content: content || "",
-      executionState: 'idle',
-      role,
-      metadata: {
-        collapsed: false,
-        trusted: true,
-        isNew: type === 'code',
-        role: role,
-        isEditing: false,
-        isCodeVisible: true,
-        parent: parent
-      }
-    };
-    
-    // Create a ref for the new cell
-    this.editorRefs.current[newCell.id] = React.createRef();
-    
-    this.setCells(prev => {
-      // If afterCellId is provided, insert after that cell
-      if (afterCellId) {
-        const insertIndex = prev.findIndex(cell => cell.id === afterCellId);
-        if (insertIndex !== -1) {
-          const newCells = [...prev];
-          newCells.splice(insertIndex + 1, 0, newCell);
-          return newCells;
-        }
-      }
-      // If no afterCellId or not found, use activeCellId
-      if (this.activeCellId) {
-        const activeIndex = prev.findIndex(cell => cell.id === this.activeCellId);
-        if (activeIndex !== -1) {
-          const newCells = [...prev];
-          newCells.splice(activeIndex + 1, 0, newCell);
-          return newCells;
-        }
-      }
-      // If no active cell or not found, append to the end
-      return [...prev, newCell];
-    });
-
-    // Set the new cell as the active cell
-    this.setActiveCellId(newCell.id);
-
-    return newCell.id;
-  }
-  
-  // Add a cell of specified type and content before a specific cell
-  addCellBefore(
-    type: CellType, 
-    content: string = '', 
-    role?: CellRole, 
-    beforeCellId?: string,
-    parent?: string
-  ): string {
-    const newCell: NotebookCell = {
-      id: this.generateId(),
-      type,
-      content: content || "",
-      executionState: 'idle',
-      role,
-      metadata: {
-        collapsed: false,
-        trusted: true,
-        isNew: type === 'code',
-        role: role,
-        isEditing: false,
-        isCodeVisible: true,
-        parent: parent
-      }
-    };
-    
-    // Create a ref for the new cell
-    this.editorRefs.current[newCell.id] = React.createRef();
-    
-    this.setCells(prev => {
-      // If beforeCellId is provided, insert before that cell
-      if (beforeCellId) {
-        const insertIndex = prev.findIndex(cell => cell.id === beforeCellId);
-        if (insertIndex !== -1) {
-          const newCells = [...prev];
-          newCells.splice(insertIndex, 0, newCell);
-          return newCells;
-        }
-      }
-      
-      // If beforeCellId not found or not provided, default to adding at the end
-      // This is a fallback behavior
-      return [...prev, newCell];
-    });
-
-    return newCell.id;
-  }
-  
-  // Delete a cell by ID
-  deleteCell(id: string): void {
-    this.setCells(prev => {
-      const index = prev.findIndex(cell => cell.id === id);
-      if (index === -1) return prev;
-
-      const newCells = prev.filter(cell => cell.id !== id);
-      
-      // Update active cell if needed
-      if (id === this.activeCellId) {
-        // Try to activate the next cell, or the previous if there is no next
-        const nextIndex = Math.min(index, newCells.length - 1);
-        if (nextIndex >= 0) {
-          const nextCell = newCells[nextIndex];
-          this.setActiveCellId(nextCell.id);
-          // Focus the newly activated cell
-          setTimeout(() => {
-            const editor = this.editorRefs.current[nextCell.id]?.current;
-            if (editor) {
-              if (nextCell.type === 'code') {
-                // For code cells, focus the Monaco editor
-                if (typeof editor.focus === 'function') {
-                  editor.focus();
-                } else if (editor.getContainerDomNode) {
-                  editor.getContainerDomNode()?.focus();
-                }
-              } else {
-                // For markdown cells, ensure it's in edit mode and focused
-                this.toggleCellEditing(nextCell.id, true);
-                if (typeof editor.focus === 'function') {
-                  editor.focus();
-                } else if (editor.getContainerDomNode) {
-                  editor.getContainerDomNode()?.focus();
-                }
-              }
-            }
-          }, 100);
-        } else {
-          this.setActiveCellId(null);
-        }
-      }
-
-      return newCells;
-    });
-  }
-  
-  // Clear all cells and reset references
-  clearAllCells(): void {
-    this.setCells([]);
-    this.setActiveCellId(null);
-    this.editorRefs.current = {};
-  }
-  
-  // Update cell content
-  updateCellContent(id: string, content: string): void {
-    this.setCells(prev => 
-      prev.map(cell => 
-        cell.id === id ? { ...cell, content } : cell
-      )
-    );
-  }
-  
-  // Update cell execution state
-  updateCellExecutionState(id: string, state: ExecutionState, output?: OutputItem[]): void {
-    this.setCells(prev => 
-      prev.map(cell => {
-        if (cell.id === id) {
-          // Only make code visible during execution
-          let isCodeVisible = cell.metadata?.isCodeVisible;
-          
-          // If in running state, always show the code (expanded)
-          if (state === 'running') {
-            isCodeVisible = true;
-          }
-          const updates: Partial<NotebookCell> = { 
-            executionState: state,
-            metadata: {
-              ...cell.metadata,
-              isCodeVisible
-            }
-          };
-          
-          if (state === 'success' && cell.type === 'code') {
-            updates.executionCount = this.executionCounter;
-            this.setExecutionCounter(prev => prev + 1);
-          }
-          
-          if (!output || output.length === 0) {
-            updates.output = undefined;
-          } else {
-            const processedOutput = this.processOutputItems(output);
-            updates.output = processedOutput;
-          }
-          
-          return { ...cell, ...updates };
-        }
-        return cell;
-      })
-    );
-  }
-  
-  // Process output items for ANSI codes
-  processOutputItems(output: OutputItem[]): OutputItem[] {
-    return output.map(item => {
-      if ((item.type === 'stderr' || item.type === 'error') && 
-          (item.content.includes('[0;') || item.content.includes('[1;'))) {
-        try {
-          const convert = new Convert({
-            fg: '#000',
-            bg: '#fff',
-            newline: true,
-            escapeXML: true,
-            stream: false
-          });
-          const htmlContent = convert.toHtml(item.content);
-          return {
-            ...item,
-            content: htmlContent,
-            attrs: {
-              ...item.attrs,
-              className: `output-area ${item.attrs?.className || ''}`,
-              isProcessedAnsi: true
-            }
-          };
-        } catch (error) {
-          console.error("Error converting ANSI:", error);
-        }
-      }
-      return {
-        ...item,
-        attrs: {
-          ...item.attrs,
-          className: `output-area ${item.attrs?.className || ''}`
-        }
-      };
-    });
-  }
-  
-  // Toggle cell editing mode (for markdown cells)
-  toggleCellEditing(id: string, isEditing: boolean): void {
-    this.setCells(prev => 
-      prev.map(cell => 
-        cell.id === id ? { 
-          ...cell, 
-          metadata: { 
-            ...cell.metadata, 
-            isEditing 
-          } 
-        } : cell
-      )
-    );
-  }
-  
-  // Toggle code visibility (for code cells)
-  toggleCodeVisibility(id: string): void {
-    this.setCells(prev => 
-      prev.map(cell => {
-        if (cell.id === id) {
-          const currentVisibility = cell.metadata?.isCodeVisible !== false; // if undefined, treat as visible
-          return {
-            ...cell,
-            metadata: {
-              ...cell.metadata,
-              isCodeVisible: !currentVisibility,
-              userModified: true // Mark that user has manually changed visibility
-            }
-          };
-        }
-        return cell;
-      })
-    );
-  }
-  
-  // Set cell role
-  updateCellRole(id: string, role: CellRole): void {
-    this.setCells(prev => 
-      prev.map(cell => 
-        cell.id === id ? { 
-          ...cell, 
-          role, 
-          metadata: { ...cell.metadata, role } 
-        } : cell
-      )
-    );
-  }
-  
-  // Change cell type
-  changeCellType(id: string, newType: CellType): void {
-    this.setCells(prev => 
-      prev.map(cell => 
-        cell.id === id ? { ...cell, type: newType } : cell
-      )
-    );
-  }
-  
-  // Set active cell ID
-  setActiveCell(id: string): void {
-    // First set the activeCellId in state
-    this.setActiveCellId(id);
-    
-    // No need to manually manipulate DOM classes as React will handle this
-    // through the className prop based on activeCellId
-  }
-  
-  // Move to next cell
-  moveToNextCell(currentCellId: string): void {
-    const currentIndex = this.cells.findIndex(c => c.id === currentCellId);
-    if (currentIndex === -1) return;
-
-    if (currentIndex < this.cells.length - 1) {
-      // Move to next existing cell
-      const nextCell = this.cells[currentIndex + 1];
-      this.setActiveCellId(nextCell.id);
-      
-      // Focus the cell with a small delay to ensure DOM is ready
-      setTimeout(() => {
-        const cellElement = document.querySelector(`[data-cell-id="${nextCell.id}"]`);
-        if (cellElement) {
-          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
-          const editor = this.editorRefs.current[nextCell.id]?.current;
-          if (editor) {
-            if (nextCell.type === 'code') {
-              // For code cells, focus the Monaco editor
-              if (typeof editor.focus === 'function') {
-                editor.focus();
-              } else if (editor.getContainerDomNode) {
-                const editorNode = editor.getContainerDomNode();
-                if (editorNode) {
-                  editorNode.focus();
-                  // Try to focus the actual editor input
-                  const inputElement = editorNode.querySelector('.monaco-editor textarea');
-                  if (inputElement) {
-                    (inputElement as HTMLTextAreaElement).focus();
-                  }
-                }
-              }
-            } else {
-              // For markdown cells, ensure it's in edit mode and focused
-              this.toggleCellEditing(nextCell.id, true);
-              if (typeof editor.focus === 'function') {
-                editor.focus();
-              } else if (editor.getContainerDomNode) {
-                const editorNode = editor.getContainerDomNode();
-                if (editorNode) {
-                  editorNode.focus();
-                  // Try to focus the actual editor input
-                  const inputElement = editorNode.querySelector('textarea');
-                  if (inputElement) {
-                    (inputElement as HTMLTextAreaElement).focus();
-                  }
-                }
-              }
-            }
-          }
-        }
-      }, 100);
-    } else {
-      // Create and focus new cell at the end
-      const newCellId = this.addCell('code', '', 'user');
-      this.setActiveCellId(newCellId);
-      
-      // Focus the new cell
-      setTimeout(() => {
-        const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
-        if (cellElement) {
-          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
-          const editor = this.editorRefs.current[newCellId]?.current;
-          if (editor) {
-            if (typeof editor.focus === 'function') {
-              editor.focus();
-            } else if (editor.getContainerDomNode) {
-              const editorNode = editor.getContainerDomNode();
-              if (editorNode) {
-                editorNode.focus();
-                // Try to focus the actual editor input
-                const inputElement = editorNode.querySelector('.monaco-editor textarea');
-                if (inputElement) {
-                  (inputElement as HTMLTextAreaElement).focus();
-                }
-              }
-            }
-          }
-        }
-      }, 100);
-    }
-  }
-  
-  // Execute a cell
-  async executeCell(id: string, shouldMoveFocus: boolean = false): Promise<void> {
-    const cell = this.cells.find(c => c.id === id);
-    if (!cell || cell.type !== 'code' || !this.executeCodeFn) return;
-
-    // Get the current code from the editor ref
-    const editorRef = this.editorRefs.current[id]?.current;
-    const currentCode = editorRef?.getValue?.() || cell.content;
-
-    // Update cell content first to ensure we're using the latest code
-    this.updateCellContent(id, currentCode);
-    
-    // Remember the current visibility state - only expand if collapsed
-    const wasVisible = cell.metadata?.isCodeVisible !== false;
-    
-    // Make code visible during execution if it's not already visible
-    if (!wasVisible) {
-      this.setCells(prev => prev.map(c => 
-        c.id === id 
-          ? { 
-              ...c, 
-              metadata: { 
-                ...c.metadata, 
-                isCodeVisible: true, // Make code visible during execution
-                userModified: true // Mark as user modified to prevent auto-collapse
-              } 
-            }
-          : c
-      ));
-    }
-    
-    // Update to running state
-    this.updateCellExecutionState(id, 'running');
-    
-    // If shouldMoveFocus is true, move to the next cell immediately before execution
-    if (shouldMoveFocus) {
-      this.moveToNextCell(id);
-    }
-    
-    try {
-      const outputs: OutputItem[] = [];
-      await this.executeCodeFn(currentCode, {
-        onOutput: (output: OutputItem) => {
-          outputs.push(output);
-          this.updateCellExecutionState(id, 'running', outputs);
-        },
-        onStatus: (status: string) => {
-          if (status === 'Completed') {
-            this.updateCellExecutionState(id, 'success', outputs);
-          } else if (status === 'Error') {
-            this.updateCellExecutionState(id, 'error', outputs);
-          }
-        }
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      let content = errorMessage;
-      let isProcessedAnsi = false;
-      
-      // Process ANSI codes in the error message
-      if (errorMessage.includes('[0;') || errorMessage.includes('[1;')) {
-        try {
-          const convert = new Convert({
-            fg: '#000',
-            bg: '#fff',
-            newline: true,
-            escapeXML: true,
-            stream: false
-          });
-          content = convert.toHtml(errorMessage);
-          isProcessedAnsi = true;
-        } catch (e) {
-          console.error("Error converting ANSI in error message:", e);
-        }
-      }
-      
-      this.updateCellExecutionState(id, 'error', [{
-        type: 'stderr',
-        content,
-        attrs: {
-          className: 'output-area error-output',
-          isProcessedAnsi
-        }
-      }]);
-    }
-  }
-  
-  // Find cell by condition
-  findCell(predicate: (cell: NotebookCell) => boolean): NotebookCell | undefined {
-    return this.cells.find(predicate);
-  }
-  
-  // Find last cell by condition
-  findLastCell(predicate: (cell: NotebookCell) => boolean): NotebookCell | undefined {
-    return this.cells.findLast(predicate);
-  }
-  
-  // Filter cells by specific criteria
-  filterCells(predicate: (cell: NotebookCell) => boolean): void {
-    this.setCells(prev => prev.filter(predicate));
-  }
-  
-  // Get current state of cells with editor content
-  getCurrentCellsContent(): NotebookCell[] {
-    return this.cells.map(cell => {
-      if (cell.type === 'code') {
-        // Get current content from editor ref if visible, otherwise use stored content
-        const editorRef = this.editorRefs.current[cell.id];
-        const currentContent = cell.metadata?.isCodeVisible === false 
-          ? cell.content  // Use stored content if code is hidden
-          : editorRef?.current?.getCurrentCode?.() || cell.content;
-        
-        return {
-          ...cell,
-          content: currentContent,
-          output: cell.output, // Preserve the output array
-          executionState: cell.executionState,
-          executionCount: cell.executionCount,
-          metadata: {
-            ...cell.metadata,
-            hasOutput: cell.output && cell.output.length > 0
-          }
-        };
-      }
-      return cell;
-    });
-  }
-  
-  // Save to localStorage
-  saveToLocalStorage(): void {
-    const currentCells = this.getCurrentCellsContent();
-    console.log('[DEBUG] Auto-saving notebook with cells:', currentCells.length);
-    saveToLocalStorage(currentCells, this.notebookMetadata);
-  }
-  
-  // Run all cells
-  async runAllCells(): Promise<void> {
-    for (const cell of this.cells) {
-      if (cell.type === 'code') {
-        await this.executeCell(cell.id);
-      }
-    }
-  }
-  
-  // Clear all outputs
-  clearAllOutputs(): void {
-    this.setCells(prev => prev.map(cell => ({
-      ...cell,
-      output: undefined,
-      executionState: 'idle'
-    })));
-  }
-  
-  // Collapse code cell - directly control visibility
-  collapseCodeCell(cellId: string): void {
-    this.setCells(prev => prev.map(cell => 
-      cell.id === cellId
-        ? { 
-            ...cell,
-            metadata: {
-              ...cell.metadata,
-              isCodeVisible: false // Directly hide code editor but show output
-            }
-          }
-        : cell
-    ));
-    console.log('[DEBUG] Collapsed code cell:', cellId);
-  }
-  
-  // Handle agent response for messages, function calls, etc.
-  handleAgentResponse(item: { 
-    type: string; 
-    role?: string; 
-    content?: any;
-    name?: string;  // Add name property for function calls
-  }): void {
-    console.log('[DEBUG] Handling agent response:', JSON.stringify(item, null, 2));
-    
-    try {
-      // Get the thinking cell ID for placing responses correctly
-      const thinkingCellId = this.lastAgentCellRef.current;
-      if (!thinkingCellId) {
-        console.log('[DEBUG] No thinking cell ID available for response placement');
-        return;
-      }
-      
-      // Get the parent cell ID (parent of the thinking cell)
-      const thinkingCell = this.findCell(c => c.id === thinkingCellId);
-      const parentId = thinkingCell?.metadata?.parent;
-      
-      // Handle function calls (code cells) - these are handled by handleExecuteCode
-      if (item.type === 'function_call') {
-        console.log('[DEBUG] Processing function call:', item.name);
-        return;
-      }
-      
-      // Handle function call outputs
-      if (item.type === 'function_call_output') {
-        console.log('[DEBUG] Processing function call output');
-        
-        // Get the thinking cell to find the parent user message
-        const thinkingCell = this.findCell((c: NotebookCell) => c.id === this.lastAgentCellRef.current);
-        const parentId = thinkingCell?.metadata?.parent;
-        
-        if (parentId) {
-          // Find all code cells that are children of the parent user message
-          const childrenCells = this.findChildrenCells(parentId);
-          const codeCells = childrenCells.filter((cell: NotebookCell) => 
-            cell.type === 'code' && 
-            cell.role === 'assistant' && 
-            cell.executionState === 'success'
-          );
-          
-          // Collapse all successfully executed code cells
-          if (codeCells.length > 0) {
-            setTimeout(() => {
-              codeCells.forEach((cell: NotebookCell) => {
-                if (cell.id) {
-                  console.log('[DEBUG] Collapsing code cell:', cell.id);
-                  this.collapseCodeCell(cell.id);
-                }
-              });
-            }, 500);
-          }
-        }
-        return;
-      }
-      
-      // Handle final assistant message (this is the last step in the response)
-      if (item.type === 'message' && item.role === 'assistant') {
-        if (item.content && item.content.length > 0) {
-          console.log('[DEBUG] Processing final assistant message with items:', item.content.length);
-          
-          // Find the thinking cell to verify it exists
-          const thinkingCell = this.findCell(c => c.id === thinkingCellId);
-          if (!thinkingCell) {
-            console.log('[DEBUG] Thinking cell no longer exists:', thinkingCellId);
-            return;
-          }
-          
-          // Create a new markdown cell for the response BEFORE the thinking cell
-          if (item.content[0]) {
-            const responseCellId = this.addCellBefore(
-              'markdown',
-              item.content[0].text || item.content[0].content,
-              'assistant',
-              thinkingCellId,
-              parentId // Pass the parent ID to link this response to the user message
-            );
-            
-            console.log('[DEBUG] Added final response cell before thinking cell:', responseCellId);
-            
-            // Scroll to the newly added response cell
-            setTimeout(() => {
-              const cellElement = document.querySelector(`[data-cell-id="${responseCellId}"]`);
-              if (cellElement) {
-                cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
-              
-              // Remove the thinking cell with a delay to ensure rendering completes
-              setTimeout(() => {
-                console.log('[DEBUG] Removing thinking cell after final response:', thinkingCellId);
-                // Double check the cell still exists before trying to remove it
-                const thinkingCellExists = this.findCell(c => c.id === thinkingCellId);
-                if (thinkingCellExists) {
-                  this.cleanupThinkingCell(thinkingCellId);
-                } else {
-                  console.log('[DEBUG] Thinking cell already removed:', thinkingCellId);
-                }
-              }, 300);
-            }, 100);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[DEBUG] Error processing agent response:', error);
-    }
-  }
-
-  // Remove the thinking cell after processing is complete
-  cleanupThinkingCell(thinkingCellId: string): void {
-    if (!thinkingCellId) return;
-    
-    console.log('[DEBUG] Cleaning up thinking cell:', thinkingCellId);
-    
-    // Only remove the specific thinking cell, leaving other cells intact
-    this.setCells((prev: NotebookCell[]) => prev.filter(cell => cell.id !== thinkingCellId));
-    
-    // Clear the reference to this cell in editorRefs if it exists
-    if (this.editorRefs.current[thinkingCellId]) {
-      delete this.editorRefs.current[thinkingCellId];
-    }
-    
-    // If this was the active cell, reset active cell to null
-    if (this.activeCellId === thinkingCellId) {
-      this.setActiveCellId(null);
-    }
-    
-    // Reset lastAgentCellRef if it points to the thinking cell
-    if (this.lastAgentCellRef.current === thinkingCellId) {
-      this.lastAgentCellRef.current = null;
-    }
-  }
-  
-  // Find all children cells of a given cell ID
-  findChildrenCells(parentId: string): NotebookCell[] {
-    return this.cells.filter(cell => cell.metadata?.parent === parentId);
-  }
-  
-  // Delete a cell and all its children cells
-  deleteWithChildren(id: string): void {
-    // First find all children cells
-    const childrenCells = this.findChildrenCells(id);
-    const childrenIds = childrenCells.map(cell => cell.id);
-    
-    // Add the parent cell ID to the list of cells to delete
-    const allIdsToDelete = [id, ...childrenIds];
-    
-    // Delete all cells at once
-    this.setCells(prev => {
-      const newCells = prev.filter(cell => !allIdsToDelete.includes(cell.id));
-      
-      // Update active cell if needed
-      if (allIdsToDelete.includes(this.activeCellId || '')) {
-        // Try to activate the cell after the last deleted cell, or previous if there is no next
-        const lastDeletedIndex = prev.findIndex(cell => cell.id === id);
-        if (lastDeletedIndex !== -1) {
-          const nextIndex = Math.min(lastDeletedIndex, newCells.length - 1);
-          if (nextIndex >= 0) {
-            const nextCell = newCells[nextIndex];
-            this.setActiveCellId(nextCell.id);
-            // Focus the newly activated cell
-            setTimeout(() => {
-              const editor = this.editorRefs.current[nextCell.id]?.current;
-              if (editor) {
-                if (nextCell.type === 'code') {
-                  // For code cells, focus the Monaco editor
-                  if (typeof editor.focus === 'function') {
-                    editor.focus();
-                  } else if (editor.getContainerDomNode) {
-                    editor.getContainerDomNode()?.focus();
-                  }
-                } else {
-                  // For markdown cells, ensure it's in edit mode and focused
-                  this.toggleCellEditing(nextCell.id, true);
-                  if (typeof editor.focus === 'function') {
-                    editor.focus();
-                  } else if (editor.getContainerDomNode) {
-                    editor.getContainerDomNode()?.focus();
-                  }
-                }
-              }
-            }, 100);
-          } else {
-            this.setActiveCellId(null);
-          }
-        }
-      }
-
-      // Clean up editor refs for deleted cells
-      allIdsToDelete.forEach(cellId => {
-        if (this.editorRefs.current[cellId]) {
-          delete this.editorRefs.current[cellId];
-        }
-      });
-      
-      return newCells;
-    });
-  }
-
-  // Regenerate agent responses for a user message cell
-  regenerateResponses(userCellId: string): { messageToRegenerate: string, thinkingCellId: string } | void {
-    // Find the user message cell
-    const userCell = this.findCell(cell => cell.id === userCellId);
-    if (!userCell || userCell.role !== 'user') {
-      console.error('[DEBUG] Cannot regenerate responses for a non-user cell or cell not found');
-      return;
-    }
-    
-    // Get the message content
-    const messageContent = userCell.content;
-    
-    // Find all children cells (responses from the agent for this user message)
-    const childrenCells = this.findChildrenCells(userCellId);
-    const childrenIds = childrenCells.map(cell => cell.id);
-    
-    // Remove all children cells first
-    this.setCells(prev => prev.filter(cell => !childrenIds.includes(cell.id)));
-    
-    // Clean up editor refs for deleted cells
-    childrenIds.forEach(cellId => {
-      if (this.editorRefs.current[cellId]) {
-        delete this.editorRefs.current[cellId];
-      }
-    });
-    
-    // Add a thinking cell right after the user's message
-    const thinkingCellId = this.addCell('markdown', '🤔 Thinking...', 'assistant', userCellId, userCellId);
-    
-    // Set the thinking cell reference for anchoring responses
-    this.lastAgentCellRef.current = thinkingCellId;
-    
-    // Scroll to the thinking message
-    setTimeout(() => {
-      const cellElement = document.querySelector(`[data-cell-id="${thinkingCellId}"]`);
-      if (cellElement) {
-        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 50);
-    
-    // Signal that we want to regenerate a response
-    return { 
-      messageToRegenerate: messageContent, 
-      thinkingCellId
-    };
-  }
-
-  // Add helper method to find the last cell of a conversation group
-  findLastCellOfConversation(cellId: string): string {
-    // If cell has no parent
-    const activeCell = this.findCell(c => c.id === cellId);
-    if (!activeCell) return cellId;
-    
-    // If cell has a parent, find all cells with the same parent
-    if (activeCell.metadata?.parent) {
-      const parentId = activeCell.metadata.parent;
-      const allSiblings = this.findChildrenCells(parentId);
-      
-      // Include the parent cell in consideration
-      const parentCell = this.findCell(c => c.id === parentId);
-      const conversationCells = [
-        parentCell,
-        ...allSiblings
-      ].filter((cell): cell is NotebookCell => cell !== undefined);
-      
-      // Sort cells by their position in the notebook
-      const sortedCells = conversationCells.sort((a, b) => {
-        const indexA = this.cells.findIndex(c => c.id === a.id);
-        const indexB = this.cells.findIndex(c => c.id === b.id);
-        return indexA - indexB;
-      });
-      
-      // Return the ID of the last cell
-      if (sortedCells.length > 0) {
-        return sortedCells[sortedCells.length - 1].id;
-      }
-    }
-    
-    // If no parent or no siblings found, return the original cell ID
-    return cellId;
-  }
-}
 
 // Hook to use cell manager
 function useCellManager(
@@ -1327,24 +441,16 @@ const NotebookPage: React.FC = () => {
   const [notebookMetadata, setNotebookMetadata] = useState<NotebookMetadata>(defaultNotebookMetadata);
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
   const editorRefs = useRef<{ [key: string]: React.RefObject<any> }>({});
+  const lastUserCellRef = useRef<string | null>(null);
+  const lastAgentCellRef = useRef<string | null>(null);
   
   // Add chat agent state
   const { server, isLoggedIn, user } = useHyphaStore();
   const [schemaAgents, setSchemaAgents] = useState<any>(null);
   const [isProcessingAgentResponse, setIsProcessingAgentResponse] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
-  const { 
-    startChat, 
-    stopChat, 
-    sendText, 
-    isChatRunning
-  } = useTextMode();
-
-  const [isExecuting, setIsExecuting] = useState(false); // Track global execution state
-  const [executingCells, setExecutingCells] = useState<Set<string>>(new Set()); // Track cells that are executing
-
-  // Add a ref to track the last cell ID for agent responses
-  const lastAgentCellRef = useRef<string | null>(null);
+  const [isAIReady, setIsAIReady] = useState(false);
+  const [executingCells, setExecutingCells] = useState<Set<string>>(new Set());
 
   // Initialize the cell manager
   const cellManager = useCellManager(
@@ -1409,11 +515,9 @@ const NotebookPage: React.FC = () => {
 
   // Execute a cell with management of execution states
   const executeCell = async (id: string, shouldMoveFocus: boolean = false) => {
-    // Update global execution state
-    setIsExecuting(true);
+    setIsProcessingAgentResponse(true);
     
-    // Add cell to executing cells set
-    setExecutingCells(prev => {
+    setExecutingCells((prev: Set<string>) => {
       const newSet = new Set(prev);
       newSet.add(id);
       return newSet;
@@ -1421,72 +525,48 @@ const NotebookPage: React.FC = () => {
 
     await cellManager.executeCell(id, shouldMoveFocus);
     
-    // Remove cell from executing cells set
-    setExecutingCells(prev => {
+    setExecutingCells((prev: Set<string>) => {
       const newSet = new Set(prev);
       newSet.delete(id);
-      // If no more cells are executing, update global state
       if (newSet.size === 0) {
-        setIsExecuting(false);
+        setIsProcessingAgentResponse(false);
       }
       return newSet;
     });
   };
 
-  // Update handleExecuteCode to properly handle parent property
+  // Update handleExecuteCode to use lastUserCellRef
   const handleExecuteCode = useCallback(async (code: string, cellId?: string): Promise<string> => {
     try {
       let actualCellId = cellId;
-      let parentId: string | undefined;
       
       if (actualCellId) {
         // Update the existing code cell with the new code
+        const existingCell = cellManager.findCell(c => c.id === actualCellId);
+        if (!existingCell) {
+          console.error('[DEBUG] Cell not found:', actualCellId);
+          return `[Cell Id: ${actualCellId}]\n Runtime Error: cell not found`;
+        }
         cellManager.updateCellContent(actualCellId, code);
         console.log('[DEBUG] Updated code cell:', actualCellId);
       }
       else {
-        // Get the thinking cell ID for proper placement
-        const thinkingCellId = lastAgentCellRef.current;
+        // Insert code cell after the agent cell with proper parent reference
+        actualCellId = cellManager.addCell(
+          'code', 
+          code, 
+          'assistant', 
+          lastAgentCellRef.current || undefined,
+          lastUserCellRef.current || undefined
+        );
+        console.log('[DEBUG] Added code cell:', actualCellId, 'with parent:', lastUserCellRef.current);
         
-        if (thinkingCellId) {
-          // Verify the thinking cell still exists
-          const thinkingCell = cellManager.findCell(c => c.id === thinkingCellId);
-          
-          if (thinkingCell) {
-            // Get the parent ID of the thinking cell (the user message that triggered this)
-            parentId = thinkingCell.metadata?.parent;
-            
-            // Insert code cell BEFORE the thinking cell
-            actualCellId = cellManager.addCellBefore('code', code, 'assistant', thinkingCellId, parentId);
-            console.log('[DEBUG] Added code cell before thinking cell:', actualCellId, 'with parent:', parentId);
-          } else {
-            // Fallback: find the last user message and add after it
-            const lastUserCell = cellManager.findLastCell(c => c.role === 'user');
-            if (lastUserCell) {
-              parentId = lastUserCell.id;
-              actualCellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id, parentId);
-              console.log('[DEBUG] Added code cell after last user message:', actualCellId, 'with parent:', parentId);
-            } else {
-              // Last resort: add to the end
-              actualCellId = cellManager.addCell('code', code, 'assistant');
-              console.log('[DEBUG] No reference points found, added code cell at end:', actualCellId);
-            }
-          }
-        } else {
-          // Try to find the last user message and add after it
-          const lastUserCell = cellManager.findLastCell(c => c.role === 'user');
-          if (lastUserCell) {
-            parentId = lastUserCell.id;
-            actualCellId = cellManager.addCell('code', code, 'assistant', lastUserCell.id, parentId);
-            console.log('[DEBUG] No thinking cell, added code after last user message:', actualCellId, 'with parent:', parentId);
-          } else {
-            // No user message found, add to the end
-            actualCellId = cellManager.addCell('code', code, 'assistant');
-            console.log('[DEBUG] No user message found, added code cell at end:', actualCellId);
-          }
-        }
+        // Set the active cell to the new code cell
+        cellManager.setActiveCell(actualCellId);
+        // Update the lastAgentCellRef to the new code cell
+        lastAgentCellRef.current = actualCellId;
       }
-    
+
       // Update cell state to running and execute the code
       cellManager.updateCellExecutionState(actualCellId, 'running');
       
@@ -1557,9 +637,6 @@ const NotebookPage: React.FC = () => {
             }
           }
         });
-        // Collapse the code cell
-        
-
         return `[Cell Id: ${actualCellId}]\n${shortOutput.trim() || "Code executed successfully. No output generated."}`;
       } catch (error) {
         console.error("[DEBUG] executeCode error:", error);
@@ -1582,187 +659,72 @@ const NotebookPage: React.FC = () => {
       console.error("[DEBUG] Fatal error in handleExecuteCode:", error);
       return `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
     }
-  }, [cellManager, executeCode, lastAgentCellRef]);
+  }, [cellManager, executeCode, lastAgentCellRef, lastUserCellRef]);
 
   // Use the proper custom hook to register tools
   const { tools, isToolRegistered } = useNotebookTools(isReady, handleExecuteCode);
 
-  // Handle agent responses
-  const handleAgentResponse = useCallback((item: any) => {
-    // Forward to cell manager
-    cellManager.handleAgentResponse(item);
-    
-    // Check if this is the final response from the assistant
-    const isFinalResponse = item.type === 'message' && item.role === 'assistant';
-    
-    // When we get the final response, we should set isProcessingAgentResponse to false
-    if (isFinalResponse) {
-      setIsProcessingAgentResponse(false);
-    } else {
-      setIsProcessingAgentResponse(item.type === 'function_call' || 
-                                 (item.type === 'message' && item.role === 'assistant'));
-    }
-  }, [cellManager]);
-
-  // Initialize schema-agents
+  // Update initialization effect to just check for server and login
   useEffect(() => {
     let isMounted = true;
-    let retryCount = 0;
-    const MAX_RETRIES = 3;
     
-    const initSchemaAgents = async () => {
-      if (!server || !isMounted) return;
-      
-      // Check if user is logged in and server is connected
-      if (!isLoggedIn || !server) {
-        console.log('[DEBUG] Waiting for login and server connection before initializing AI assistant');
-        setInitializationError(null); // Clear any previous error
+    const initializeAgent = async () => {
+      if (!server || !isLoggedIn) {
+        setIsAIReady(false);
+        setInitializationError(!isLoggedIn ? "Please log in to use the AI assistant." : "Waiting for server connection...");
         return;
       }
-      
+
       try {
-        console.log('[DEBUG] Attempting to initialize schema-agents service...');
         const service = await server.getService("schema-agents");
-        
-        if (isMounted) {
-          if (service) {
-            console.log('[DEBUG] Schema-agents service initialized successfully');
-            setSchemaAgents(service);
-            setInitializationError(null);
-          } else {
-            console.error('[DEBUG] Schema-agents service returned null');
-            setInitializationError("Could not connect to the AI service. Please check your connection.");
-            retryIfNeeded();
-          }
+        if (!isMounted) return;
+
+        if (service) {
+          setSchemaAgents(service);
+          setInitializationError(null);
+          setIsAIReady(true);
+        } else {
+          setIsAIReady(false);
+          setInitializationError("Could not connect to the AI service. Please check your connection.");
         }
       } catch (error) {
-        if (isMounted) {
-          console.error('[DEBUG] Failed to initialize schema-agents:', error);
-          setInitializationError("Error connecting to AI service: " + 
-            (error instanceof Error ? error.message : "Unknown error"));
-          retryIfNeeded();
-        }
-      }
-    };
-    
-    const retryIfNeeded = () => {
-      if (retryCount < MAX_RETRIES && isMounted && isLoggedIn && server) {
-        retryCount++;
-        console.log(`[DEBUG] Retrying schema-agents initialization (attempt ${retryCount}/${MAX_RETRIES})...`);
-        setTimeout(initSchemaAgents, 2000); // Wait 2 seconds before retrying
-      } else if (isMounted) {
-        // Max retries reached or prerequisites not met
-        if (!isLoggedIn) {
-          setInitializationError("Please log in to use the AI assistant.");
-        } else if (!server) {
-          setInitializationError("Waiting for server connection...");
-        } else {
-          setInitializationError("Failed to connect to AI service after multiple attempts. Please refresh the page to try again.");
-        }
+        if (!isMounted) return;
+        console.error('[DEBUG] Failed to initialize schema-agents:', error);
+        setIsAIReady(false);
+        setInitializationError("Error connecting to AI service: " + 
+          (error instanceof Error ? error.message : "Unknown error"));
       }
     };
 
-    // Only initialize if logged in and server is connected
-    if (isLoggedIn && server) {
-      initSchemaAgents();
-    } else {
-      console.log('[DEBUG] Waiting for login and server connection...', { isLoggedIn, hasServer: !!server });
-      setInitializationError(
-        !isLoggedIn ? "Please log in to use the AI assistant." :
-        !server ? "Waiting for server connection..." :
-        "Waiting for prerequisites..."
-      );
-    }
+    initializeAgent();
     
     return () => {
       isMounted = false;
     };
   }, [server, isLoggedIn]);
 
-  // Auto start chat when ready
-  useEffect(() => {
-    // Keep track of whether component is mounted
-    let isMounted = true;
-    
-    const startAgentChat = async () => {
-      // Skip if already running or missing dependencies
-      if (!isReady || !schemaAgents || isChatRunning || !isMounted || !isLoggedIn || !server) {
-        console.log('[DEBUG] Skipping chat initialization:', {
-          isReady,
-          hasSchemaAgents: !!schemaAgents,
-          isChatRunning,
-          isMounted,
-          isLoggedIn,
-          hasServer: !!server
-        });
-        return;
+  // Function to get conversation history up to a specific cell
+  const getConversationHistory = useCallback((upToCellId?: string): ChatMessage[] => {
+    let relevantCells = cells;
+    if (upToCellId) {
+      const cellIndex = cells.findIndex(cell => cell.id === upToCellId);
+      if (cellIndex !== -1) {
+        relevantCells = cells.slice(0, cellIndex + 1);
       }
-      
-      // Make sure tools are available
-      if (!tools || tools.length === 0) {
-        console.log('[DEBUG] No tools available yet, waiting for tools to be registered...');
-        setInitializationError("Waiting for code tools to be registered...");
-        return;
-      }
-      
-      // Ensure the runCode tool is registered
-      const hasRunCodeTool = tools.some(tool => tool.name === 'runCode');
-      if (!hasRunCodeTool) {
-        console.warn('[DEBUG] runCode tool not found in registered tools. Available tools:', 
-          tools.map(t => t.name)
-        );
-        setInitializationError("Code execution tool not available. Please try refreshing the page.");
-        return;
-      }
-      
-      try {
-        console.log('[DEBUG] Starting notebook agent chat with config:', {
-          model: defaultAgentConfig.model,
-          temperature: defaultAgentConfig.temperature,
-          toolCount: tools.length,
-          toolNames: tools.map(t => t.name)
-        });
-        
-        // Clear any previous error
-        if (initializationError) {
-          setInitializationError(null);
-        }
-        
-        await startChat({
-          onItemCreated: handleAgentResponse,
-          instructions: defaultAgentConfig.instructions,
-          temperature: defaultAgentConfig.temperature,
-          tools: tools,
-          model: defaultAgentConfig.model
-        });
-        
-        console.log('[DEBUG] Chat initialization completed successfully');
-      } catch (error) {
-        // Only log error if component is still mounted
-        if (isMounted) {
-          console.error('[DEBUG] Failed to start agent chat:', error);
-          setInitializationError("Could not connect to the AI assistant. Will retry automatically.");
-        }
-      }
-    };
-
-    // Only start chat if we have all dependencies
-    if (!isChatRunning && isReady && schemaAgents && isLoggedIn && server && tools?.length > 0) {
-      console.log('[DEBUG] Starting chat initialization...');
-      startAgentChat();
     }
-    
-    // Clean up when component unmounts
-    return () => {
-      isMounted = false;
-    };
-  }, [isReady, schemaAgents, isLoggedIn, server, tools, isChatRunning, handleAgentResponse]);
+    return convertCellsToHistory(relevantCells).map(msg => ({
+      ...msg,
+      role: msg.role as ChatRole
+    }));
+  }, [cells]);
 
-  // Handle user input from the chat input component
+  // Update handleSendMessage to properly handle parent IDs
   const handleSendMessage = useCallback(async (message: string) => {
-    // If not logged in, show error
-    if (!isLoggedIn) {
-      setInitializationError("You must be logged in to use the AI assistant. Please log in and try again.");
+    // If not logged in or not ready, show error
+    if (!isLoggedIn || !isReady) {
+      setInitializationError(!isLoggedIn ? 
+        "You must be logged in to use the AI assistant." : 
+        "AI assistant is not ready. Please wait.");
       return;
     }
 
@@ -1772,52 +734,83 @@ const NotebookPage: React.FC = () => {
       return;
     }
 
-    // Determine where to add the new user message
-    let targetCellId = activeCellId;
-    
-    if (targetCellId) {
-      // Find the last cell of the conversation if active cell is part of a conversation
-      targetCellId = cellManager.findLastCellOfConversation(targetCellId);
-    }
+    try {
+      setIsProcessingAgentResponse(true);
 
-    // Add user message after the target cell (or at the end if no target)
-    const userCellId = targetCellId 
-      ? cellManager.addCell('markdown', message, 'user', targetCellId)
-      : cellManager.addCell('markdown', message, 'user');
-    
-    // Make user message the active cell
-    cellManager.setActiveCell(userCellId);
-    
-    // Add a thinking cell right after the user's message
-    // Set the parent of the thinking cell to be the user message cell
-    const thinkingCellId = cellManager.addCell('markdown', '🤔 Thinking...', 'assistant', userCellId, userCellId);
-    
-    // Set the thinking cell reference for anchoring responses
-    lastAgentCellRef.current = thinkingCellId;
-    
-    // Scroll to the thinking message
-    setTimeout(() => {
-      const cellElement = document.querySelector(`[data-cell-id="${thinkingCellId}"]`);
-      if (cellElement) {
-        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Get conversation history up to the user's message
+      const history = getConversationHistory(activeCellId || undefined);
+      history.push({
+        role: 'user',
+        content: message,
+      });
+
+      // Add a markdown cell with the user's message, after the active cell
+      const userCellId = cellManager.addCell('markdown', message, 'user', activeCellId || undefined);
+      cellManager.setActiveCell(userCellId);
+      
+      // Update refs to track the new user message
+      lastUserCellRef.current = userCellId;
+      lastAgentCellRef.current = userCellId;
+
+      // Start chat completion
+      const completion = chatCompletion({
+        messages: history,
+        systemPrompt: defaultAgentConfig.instructions,
+        tools,
+        model: defaultAgentConfig.model,
+        temperature: defaultAgentConfig.temperature,
+        server,
+        maxSteps: 15,
+        onToolCall: async (toolCall) => {
+          if (toolCall.name === 'runCode') {
+            return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
+          }
+          return `Tool ${toolCall.name} not implemented`;
+        }
+      });
+
+      // Process the completion stream
+      for await (const item of completion) {
+        cellManager.handleAgentResponse(item, lastUserCellRef.current);
       }
-    }, 50);
-    
-    // Send to agent
-    if (isChatRunning) {
-      try {
-        setIsProcessingAgentResponse(true);
-        await sendText(message);
-      } catch (error) {
-        console.error('Error sending message to AI:', error);
-        // Remove the thinking cell
-        cellManager.deleteCell(thinkingCellId);
-        setInitializationError("Error communicating with AI assistant. Please try again or refresh the page.");
-      } finally {
-        setIsProcessingAgentResponse(false);
-      }
+    } catch (error) {
+      console.error('Error in chat completion:', error);
+      setInitializationError("Error communicating with AI assistant. Please try again.");
+    } finally {
+      setIsProcessingAgentResponse(false);
     }
-  }, [activeCellId, cellManager, isChatRunning, isLoggedIn, lastAgentCellRef, sendText]);
+  }, [activeCellId, cellManager, isReady, isLoggedIn, server, tools, getConversationHistory, handleExecuteCode]);
+
+  // Update handleRegenerateClick to use deleteCellWithChildren and handleSendMessage
+  const handleRegenerateClick = async (cellId: string) => {
+    if (!isReady || isProcessingAgentResponse) {
+      console.log('[DEBUG] Cannot regenerate while processing another response or not ready', 
+        { isReady, isProcessingAgentResponse });
+      return;
+    }
+    
+    try {
+      // Find the user message cell
+      const userCell = cellManager.findCell(cell => cell.id === cellId);
+      if (!userCell || userCell.role !== 'user') {
+        console.error('[DEBUG] Cannot regenerate responses for a non-user cell or cell not found');
+        return;
+      }
+      
+      // Get the message content before deletion
+      const messageContent = userCell.content;
+      
+      // Delete the user cell and all its responses
+      cellManager.deleteCellWithChildren(cellId);
+      
+      // Send the message again to generate new responses
+      await handleSendMessage(messageContent);
+      
+    } catch (error) {
+      console.error('[DEBUG] Error regenerating responses:', error);
+      setInitializationError("Error regenerating response. Please try again.");
+    }
+  };
 
   // Handle special commands
   const handleCommand = useCallback((command: string) => {
@@ -1983,7 +976,7 @@ const NotebookPage: React.FC = () => {
       if (activeCell) {
         const cellId = activeCell.getAttribute('data-cell-id');
         if (cellId) {
-          const newCellId = cellManager.addCell('code', '', 'user');
+          const newCellId = cellManager.addCell('code', '', 'user', cellId);
           cellManager.setActiveCell(newCellId);
           const editor = editorRefs.current[newCellId]?.current;
           if (editor) {
@@ -2218,34 +1211,6 @@ const NotebookPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cells, notebookMetadata, cellManager]);
 
-  // Handle regeneration of agent responses
-  const handleRegenerateClick = async (cellId: string) => {
-    if (!isChatRunning || !isReady || isProcessingAgentResponse) {
-      console.log('[DEBUG] Cannot regenerate while processing another response or not ready', 
-        { isChatRunning, isReady, isProcessingAgentResponse });
-      return;
-    }
-    
-    try {
-      // Use cellManager to regenerate responses
-      const result = cellManager.regenerateResponses(cellId);
-      
-      if (!result) {
-        console.error('[DEBUG] Failed to prepare for regeneration');
-        return;
-      }
-      
-      setIsProcessingAgentResponse(true);
-      
-      // Send the original message back to the agent
-      await sendText(result.messageToRegenerate);
-    } catch (error) {
-      console.error('[DEBUG] Error regenerating responses:', error);
-      setInitializationError("Error regenerating response. Please try again.");
-      setIsProcessingAgentResponse(false);
-    }
-  };
-
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
@@ -2322,9 +1287,9 @@ const NotebookPage: React.FC = () => {
                   onClick={() => cellManager.runAllCells()}
                   className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
                   title="Run all cells (Ctrl/Cmd + Shift + Enter)"
-                  disabled={isExecuting}
+                  disabled={isProcessingAgentResponse}
                 >
-                  {isExecuting ? (
+                  {isProcessingAgentResponse ? (
                     <FaSpinner className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <FaPlay className="w-3.5 h-3.5" />
@@ -2334,7 +1299,7 @@ const NotebookPage: React.FC = () => {
                   onClick={() => cellManager.clearAllOutputs()}
                   className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
                   title="Clear all outputs"
-                  disabled={isExecuting}
+                  disabled={isProcessingAgentResponse}
                 >
                   <FaTrash className="w-3.5 h-3.5" />
                 </button>
@@ -2342,9 +1307,9 @@ const NotebookPage: React.FC = () => {
                   onClick={restartKernel}
                   className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition group relative"
                   title="Restart kernel and clear outputs"
-                  disabled={!isReady || isExecuting}
+                  disabled={!isReady || isProcessingAgentResponse}
                 >
-                  <FaRedo className={`w-3.5 h-3.5 ${(!isReady || isExecuting) ? 'opacity-50' : ''}`} />
+                  <FaRedo className={`w-3.5 h-3.5 ${(!isReady || isProcessingAgentResponse) ? 'opacity-50' : ''}`} />
                 </button>
               </div>
 
@@ -2352,7 +1317,7 @@ const NotebookPage: React.FC = () => {
                 <button 
                   onClick={() => {
                     const afterId = activeCellId ? activeCellId : undefined;
-                    const newCellId = cellManager.addCell('code', '', undefined, afterId);
+                    const newCellId = cellManager.addCell('code', '', 'user', afterId);
                     // Focus the new cell
                     setTimeout(() => {
                       const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
@@ -2370,7 +1335,7 @@ const NotebookPage: React.FC = () => {
                 <button 
                   onClick={() => {
                     const afterId = activeCellId ? activeCellId : undefined;
-                    const newCellId = cellManager.addCell('markdown', '', undefined, afterId);
+                    const newCellId = cellManager.addCell('markdown', '', 'user', afterId);
                     // Focus the new cell
                     setTimeout(() => {
                       const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
@@ -2441,6 +1406,7 @@ const NotebookPage: React.FC = () => {
                         onChange={(newCode) => cellManager.updateCellContent(cell.id, newCode)}
                         hideCode={cell.metadata?.isCodeVisible === false}
                         onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
+                        parent={cell.metadata?.parent}
                       />
                     </div>
                   ) : (
@@ -2460,7 +1426,7 @@ const NotebookPage: React.FC = () => {
                   
                   {/* Output Area */}
                   {cell.type === 'code' && cell.output && cell.output.length > 0 && (
-                    <div className="jupyter-cell-flex-container">
+                    <div className={`jupyter-cell-flex-container mt-1 ${cell.metadata?.parent ? 'child-cell' : 'parent-cell'}`}>
                       {/* Empty execution count to align with code */}
                       <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
                         {cell.executionState === 'running' ? (
@@ -2608,7 +1574,7 @@ const NotebookPage: React.FC = () => {
                   {cell.role === 'user' && (
                     <button
                       onClick={() => handleRegenerateClick(cell.id)}
-                      disabled={!isChatRunning || !isReady || isProcessingAgentResponse}
+                      disabled={!isReady || isProcessingAgentResponse}
                       className="p-1 hover:bg-green-100 rounded text-green-600 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Regenerate AI response"
                     >
@@ -2653,7 +1619,7 @@ const NotebookPage: React.FC = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              cellManager.deleteWithChildren(cell.id);
+                              cellManager.deleteCellWithChildren(cell.id);
                             }}
                             className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
                           >
@@ -2696,48 +1662,29 @@ const NotebookPage: React.FC = () => {
               <p className="text-gray-500">
                 {isProcessingAgentResponse ? "AI is thinking..." : 
                 initializationError ? initializationError :
-                !isChatRunning ? "Initializing AI assistant..." :
+                !isAIReady ? "Initializing AI assistant..." :
                 "Ask a question or use commands like /code or /markdown to add specific cell types"}
               </p>
             )}
-            {initializationError && !isChatRunning && isLoggedIn && (
+            {initializationError && !isAIReady && isLoggedIn && (
               <button 
-                onClick={() => {
-                  setInitializationError(null);
-                  if (schemaAgents && isReady) {
-                    // Check if tools are available 
-                    if (!tools || tools.length === 0) {
-                      setInitializationError("Code tools not available. Please wait or refresh the page.");
-                      return;
+                onClick={async () => {
+                  try {
+                    setInitializationError(null);
+                    const service = await server.getService("schema-agents");
+                    if (service) {
+                      setSchemaAgents(service);
+                      setInitializationError(null);
+                      setIsAIReady(true);
+                    } else {
+                      setIsAIReady(false);
+                      setInitializationError("Could not connect to the AI service. Please check your connection.");
                     }
-                    
-                    // Ensure runCode tool is registered
-                    const hasRunCodeTool = tools.some(tool => tool.name === 'runCode');
-                    if (!hasRunCodeTool) {
-                      console.warn('runCode tool not found in registered tools');
-                      setInitializationError("Code execution tool not available. Please refresh the page.");
-                      return;
-                    }
-                    
-                    console.log('Manual retry - starting chat with tools:', tools.map(t => t.name));
-                    startChat({
-                      onItemCreated: handleAgentResponse,
-                      instructions: defaultAgentConfig.instructions,
-                      temperature: defaultAgentConfig.temperature,
-                      tools: tools,
-                      model: defaultAgentConfig.model
-                    }).catch(err => {
-                      console.error("Manual retry failed:", err);
-                      setInitializationError("Retry failed. Please refresh the page.");
-                    });
-                  } else {
-                    setInitializationError(
-                      !isReady 
-                        ? "Code execution environment not ready. Please wait..." 
-                        : !schemaAgents 
-                          ? "AI service not available. Please refresh the page."
-                          : "Cannot retry at this time. Please refresh the page."
-                    );
+                  } catch (error: unknown) {
+                    console.error('[DEBUG] Failed to initialize schema-agents:', error);
+                    setIsAIReady(false);
+                    setInitializationError("Error connecting to AI service: " + 
+                      (error instanceof Error ? error.message : "Unknown error"));
                   }
                 }}
                 className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition"
@@ -2748,13 +1695,12 @@ const NotebookPage: React.FC = () => {
           </div>
           <ChatInput 
             onSend={handleSendMessage} 
-            disabled={!isReady || !isChatRunning || isProcessingAgentResponse || !isLoggedIn}
+            disabled={!isAIReady || isProcessingAgentResponse || !isLoggedIn}
             isThebeReady={isReady}
             placeholder={
               !isLoggedIn ? "Please log in to use the AI assistant" :
-              !isReady ? "Initializing code execution environment..." : 
+              !isAIReady ? "Initializing AI assistant..." : 
               initializationError ? "AI assistant connection failed..." :
-              !isChatRunning ? "Connecting to AI assistant..." :
               isProcessingAgentResponse ? "AI is thinking..." :
               "Enter text or command (e.g., /code, /markdown, /clear)"
             }
@@ -2775,9 +1721,7 @@ const NotebookPage: React.FC = () => {
 const NotebookPageWithThebe: React.FC = () => (
   <ThebeProvider>
     <ToolProvider>
-      <TextModeProvider>
-        <NotebookPage />
-      </TextModeProvider>
+      <NotebookPage />
     </ToolProvider>
   </ThebeProvider>
 );

@@ -56,17 +56,19 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
 
   // Update effect to handle edit mode based on active state and empty content
   useEffect(() => {
-    // Enter edit mode if this is the active cell and either:
-    // 1. It's a new cell (empty content)
-    // 2. It's explicitly set to initialEditMode
-    if (isActive && (initialEditMode || !content.trim())) {
+    // Only enter edit mode if:
+    // 1. The cell is active AND either:
+    //    a. It's a new cell (empty content)
+    //    b. It's explicitly set to initialEditMode
+    // 2. We're not already in the desired state
+    if (isActive && (initialEditMode || !content.trim()) && !isEditing) {
       onEditingChange?.(true);
     }
-    // Exit edit mode when cell becomes inactive
+    // Exit edit mode when cell becomes inactive, but only if we're currently editing
     else if (!isActive && isEditing) {
       onEditingChange?.(false);
     }
-  }, [isActive, initialEditMode, content, isEditing, onEditingChange]);
+  }, [isActive, initialEditMode]); // Only depend on active state and initial mode
 
   // Update editor height when content changes
   const updateEditorHeight = useCallback(() => {
@@ -217,7 +219,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
 
   return (
     <div 
-      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''} ${parent ? 'child-cell' : ''}`}
+      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''} ${parent ? 'child-cell' : 'parent-cell'}`}
       tabIndex={-1} // Make the container focusable
       data-parent={parent || undefined}
     >

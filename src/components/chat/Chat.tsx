@@ -10,6 +10,7 @@ import { ToolProvider, useTools } from './ToolProvider';
 export interface OutputItem {
   type: string;
   content: string;
+  short_content?: string;
   attrs?: any;
 }
 

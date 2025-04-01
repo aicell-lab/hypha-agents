@@ -31,7 +31,6 @@
 
 /* Editor Container Styling */
 .editor-container {
-  padding-bottom: 3px;
   flex-grow: 1;
   min-width: 0;
   max-width: calc(100% - 64px); /* Account for execution count width */
@@ -76,28 +75,31 @@
 }
 
 /* Child Cell Relationships */
-
+.child-cell {
+  background-color: rgb(139 139 139 / 6%);
+}
 .child-cell::before {
   content: '';
   position: absolute;
   left: 8px;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  border-top: 2px solid rgb(156 163 175); /* Tailwind gray-400 for better visibility */
-  border-right: 2px solid rgb(156 163 175);
-  transform: translateY(-50%) rotate(45deg);
-  transition: border-color 0.2s ease;
+  top: 0;
+  height: 100%;
+  width: 1px;
+  background-color: rgba(156, 163, 175, 0.261); /* Tailwind gray-400 */
+  transition: background-color 0.2s ease;
 }
 
-.child-cell:hover::before {
-  border-color: rgba(59, 130, 246, 0.5); /* Tailwind blue-500 at 50% opacity */
+.parent-cell::after {
+  content: '';
+  position: absolute;
+  left: 0px;
+  top: 0;
+  height: 100%;
+  width: 1px;
+  background-color: rgba(79, 118, 187, 0.261); /* Tailwind gray-400 */
+  transition: background-color 0.2s ease;
 }
 
-.notebook-cell-active .child-cell::before,
-.child-cell:focus-within::before {
-  border-color: rgb(59, 130, 246); /* Tailwind blue-500 */
-}
 
 /* Remove old styles */
 .child-cell:first-of-type::before {
@@ -189,6 +191,7 @@
   text-align: right;
   padding-right: 8px;
   padding-top: 9px;
+  margin-top: 5px;
   -webkit-user-select: none;
   user-select: none;
   font-weight: bold;
