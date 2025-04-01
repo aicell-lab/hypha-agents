@@ -1126,4 +1126,26 @@ export class CellManager {
     }
     return null;
   }
+
+  // Get the active cell ID or its last child cell ID
+  getActiveCellWithChildren(): string | null {
+    if (!this.activeCellId) return null;
+    
+    // Get all children cells of the active cell
+    const childrenCells = this.findChildrenCells(this.activeCellId);
+    
+    if (childrenCells.length === 0) {
+      // If no children, return the active cell ID
+      return this.activeCellId;
+    }
+    
+    // Find the last child by its position in the cells array
+    const lastChild = childrenCells.reduce((latest, current) => {
+      const latestIndex = this.cells.findIndex(cell => cell.id === latest.id);
+      const currentIndex = this.cells.findIndex(cell => cell.id === current.id);
+      return currentIndex > latestIndex ? current : latest;
+    });
+    
+    return lastChild.id;
+  }
 }

@@ -738,14 +738,15 @@ const NotebookPage: React.FC = () => {
       setIsProcessingAgentResponse(true);
 
       // Get conversation history up to the user's message
-      const history = getConversationHistory(activeCellId || undefined);
+      const normalizedActiveCellId = cellManager.getActiveCellWithChildren();
+      const history = getConversationHistory(normalizedActiveCellId || undefined);
       history.push({
         role: 'user',
         content: message,
       });
 
       // Add a markdown cell with the user's message, after the active cell
-      const userCellId = cellManager.addCell('markdown', message, 'user', activeCellId || undefined);
+      const userCellId = cellManager.addCell('markdown', message, 'user', normalizedActiveCellId || undefined);
       cellManager.setActiveCell(userCellId);
       
       // Update refs to track the new user message
