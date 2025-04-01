@@ -76,7 +76,7 @@
 
 /* Child Cell Relationships */
 .child-cell {
-  background-color: rgb(139 139 139 / 6%);
+  background-color: rgba(139, 139, 139, 0.019);
 }
 .child-cell::before {
   content: '';

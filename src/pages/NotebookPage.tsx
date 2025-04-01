@@ -709,7 +709,7 @@ const NotebookPage: React.FC = () => {
     if (upToCellId) {
       const cellIndex = cells.findIndex(cell => cell.id === upToCellId);
       if (cellIndex !== -1) {
-        relevantCells = cells.slice(0, cellIndex + 1);
+        relevantCells = cells.slice(0, cellIndex);
       }
     }
     return convertCellsToHistory(relevantCells).map(msg => ({
@@ -750,7 +750,6 @@ const NotebookPage: React.FC = () => {
       
       // Update refs to track the new user message
       lastUserCellRef.current = userCellId;
-      lastAgentCellRef.current = userCellId;
 
       // Start chat completion
       const completion = chatCompletion({
@@ -788,27 +787,74 @@ const NotebookPage: React.FC = () => {
         { isReady, isProcessingAgentResponse });
       return;
     }
-    
+
+    // Find the user message cell
+    const userCell = cellManager.findCell(cell => cell.id === cellId);
+    if (!userCell || userCell.role !== 'user') {
+      console.error('[DEBUG] Cannot regenerate responses for a non-user cell or cell not found');
+      return;
+    }
     try {
-      // Find the user message cell
-      const userCell = cellManager.findCell(cell => cell.id === cellId);
-      if (!userCell || userCell.role !== 'user') {
-        console.error('[DEBUG] Cannot regenerate responses for a non-user cell or cell not found');
-        return;
-      }
-      
-      // Get the message content before deletion
+      setIsProcessingAgentResponse(true);
+      // Get the message content and position info before deletion
       const messageContent = userCell.content;
       
-      // Delete the user cell and all its responses
+      // Find the cell's current index before deletion
+      const currentIndex = cells.findIndex(cell => cell.id === cellId);
+      const previousCellId = currentIndex > 0 ? cells[currentIndex - 1].id : undefined;
+      
+      // Delete the cell and its responses first
       cellManager.deleteCellWithChildren(cellId);
       
-      // Send the message again to generate new responses
-      await handleSendMessage(messageContent);
+      // Wait a small tick to ensure deletion is complete
+      await new Promise(resolve => setTimeout(resolve, 0));
       
+      // Add the new cell at the same position as the old one
+      const newCellId = cellManager.addCell(
+        'markdown', 
+        messageContent, 
+        'user', 
+        undefined, 
+        undefined, 
+        currentIndex
+      );
+      
+      lastUserCellRef.current = newCellId;
+      cellManager.setActiveCell(newCellId);
+      
+      await new Promise(resolve => setTimeout(resolve, 0));
+      
+      const history = getConversationHistory(cellId || undefined);
+      history.push({
+        role: 'user',
+        content: messageContent,
+      });
+      // Start chat completion
+      const completion = chatCompletion({
+        messages: history,
+        systemPrompt: defaultAgentConfig.instructions,
+        tools,
+        model: defaultAgentConfig.model,
+        temperature: defaultAgentConfig.temperature,
+        server,
+        maxSteps: 15,
+        onToolCall: async (toolCall) => {
+          if (toolCall.name === 'runCode') {
+            return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
+          }
+          return `Tool ${toolCall.name} not implemented`;
+        }
+      });
+
+      // Process the completion stream
+      for await (const item of completion) {
+        cellManager.handleAgentResponse(item, lastUserCellRef.current);
+      }
     } catch (error) {
       console.error('[DEBUG] Error regenerating responses:', error);
       setInitializationError("Error regenerating response. Please try again.");
+    } finally {
+      setIsProcessingAgentResponse(false);
     }
   };
 

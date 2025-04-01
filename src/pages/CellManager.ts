@@ -138,7 +138,8 @@ export class CellManager {
     content: string = '', 
     role?: CellRole | undefined, 
     afterCellId?: string | undefined,
-    parent?: string | undefined
+    parent?: string | undefined,
+    insertIndex?: number
   ): string {
     const newCell: NotebookCell = {
       id: this.generateId(),
@@ -161,6 +162,13 @@ export class CellManager {
     this.editorRefs.current[newCell.id] = React.createRef();
     
     this.setCells(prev => {
+      // If insertIndex is provided, use it
+      if (typeof insertIndex === 'number' && insertIndex >= 0 && insertIndex <= prev.length) {
+        const newCells = [...prev];
+        newCells.splice(insertIndex, 0, newCell);
+        return newCells;
+      }
+      
       // If afterCellId is provided and exists, insert after that cell
       if (afterCellId) {
         const insertIndex = prev.findIndex(cell => cell.id === afterCellId);
@@ -197,7 +205,8 @@ export class CellManager {
     content: string = '', 
     role?: CellRole | undefined, 
     beforeCellId?: string | undefined,
-    parent?: string | undefined
+    parent?: string | undefined,
+    insertIndex?: number
   ): string {
     const newCell: NotebookCell = {
       id: this.generateId(),
@@ -220,6 +229,13 @@ export class CellManager {
     this.editorRefs.current[newCell.id] = React.createRef();
     
     this.setCells(prev => {
+      // If insertIndex is provided, use it
+      if (typeof insertIndex === 'number' && insertIndex >= 0 && insertIndex <= prev.length) {
+        const newCells = [...prev];
+        newCells.splice(insertIndex, 0, newCell);
+        return newCells;
+      }
+      
       // If beforeCellId is provided and exists, insert before that cell
       if (beforeCellId) {
         const insertIndex = prev.findIndex(cell => cell.id === beforeCellId);
@@ -265,7 +281,7 @@ export class CellManager {
                 }
               } else {
                 // For markdown cells, ensure it's in edit mode and focused
-                this.toggleCellEditing(nextCell.id, true);
+                this.toggleCellEditing(nextCell.id, false);
                 if (typeof editor.focus === 'function') {
                   editor.focus();
                 } else if (editor.getContainerDomNode) {
@@ -477,7 +493,7 @@ export class CellManager {
               }
             } else {
               // For markdown cells, ensure it's in edit mode and focused
-              this.toggleCellEditing(nextCell.id, true);
+              this.toggleCellEditing(nextCell.id, false);
               if (typeof editor.focus === 'function') {
                 editor.focus();
               } else if (editor.getContainerDomNode) {
@@ -734,13 +750,21 @@ export class CellManager {
     const referenceCellId = this.getCurrentAgentCell();
     let parentId = lastUserCellId || undefined;
 
-    // Only pass defined values to addCell
+    // Find the user cell and its position
+    const userCell = lastUserCellId ? this.findCell(cell => cell.id === lastUserCellId) : null;
+    const userCellIndex = userCell ? this.cells.findIndex(cell => cell.id === lastUserCellId) : -1;
+    
+    // Calculate insert position - right after the user cell
+    const insertIndex = userCellIndex >= 0 ? userCellIndex + 1 : undefined;
+
+    // Add the new cell at the calculated position
     const newCellId = this.addCell(
       type, 
       content, 
       role, 
       referenceCellId || undefined,
-      parentId
+      parentId,
+      insertIndex
     );
     this.setCurrentAgentCell(newCellId);
     return newCellId;
@@ -751,34 +775,52 @@ export class CellManager {
     const cellId = this.getCurrentAgentCell();
     if (!cellId) {
       // If no current cell exists, create one
-      const referenceCellId = this.lastAgentCellRef.current;
-      const parentId = lastUserCellId || undefined;
+      const userCell = lastUserCellId ? this.findCell(cell => cell.id === lastUserCellId) : null;
+      const userCellIndex = userCell ? this.cells.findIndex(cell => cell.id === lastUserCellId) : -1;
+      
+      // Calculate insert position - right after the user cell
+      const insertIndex = userCellIndex >= 0 ? userCellIndex + 1 : undefined;
 
-      // Create new markdown cell
+      // Create new markdown cell at the correct position
       const newCellId = this.addCell(
         'markdown',
         content,
         'assistant',
-        referenceCellId || undefined,
-        parentId
+        undefined,
+        lastUserCellId || undefined,
+        insertIndex
       );
       this.setCurrentAgentCell(newCellId);
       return;
     }
 
     // Update existing cell
-    this.setCells(prev => prev.map(cell => 
-      cell.id === cellId
-        ? { 
-            ...cell, 
-            content,
-            metadata: {
-              ...cell.metadata,
-              isEditing: false // Ensure we're not in editing mode while streaming
-            }
-          }
-        : cell
-    ));
+    this.setCells(prev => {
+      // Find the cell's current index
+      const cellIndex = prev.findIndex(cell => cell.id === cellId);
+      if (cellIndex === -1) return prev;
+
+      // Find the target user cell's index
+      const userCellIndex = lastUserCellId ? prev.findIndex(cell => cell.id === lastUserCellId) : -1;
+      const targetIndex = userCellIndex >= 0 ? userCellIndex + 1 : cellIndex;
+
+      // Create the updated cell
+      const updatedCell = {
+        ...prev[cellIndex],
+        content,
+        metadata: {
+          ...prev[cellIndex].metadata,
+          isEditing: false,
+          parent: lastUserCellId || undefined
+        }
+      };
+
+      // Remove the cell from its current position and insert it at the target position
+      const newCells = [...prev];
+      newCells.splice(cellIndex, 1); // Remove from current position
+      newCells.splice(targetIndex, 0, updatedCell); // Insert at target position
+      return newCells;
+    });
   }
 
   // Handle agent response for messages, function calls, etc.
@@ -791,6 +833,11 @@ export class CellManager {
     console.log('[DEBUG] Handling agent response:', JSON.stringify(item, null, 2));
     
     try {
+      // Find the user cell and its position once, as we'll need it multiple times
+      const userCell = lastUserCellId ? this.findCell(cell => cell.id === lastUserCellId) : null;
+      const userCellIndex = userCell ? this.cells.findIndex(cell => cell.id === lastUserCellId) : -1;
+      const insertIndex = userCellIndex >= 0 ? userCellIndex + 1 : undefined;
+
       if (item.type === 'new_completion') {
         // Only clear the current agent cell reference if it's not a function call response
         if (!this.getCurrentAgentCell()?.startsWith('thinking_')) {
@@ -802,20 +849,27 @@ export class CellManager {
       // Handle streaming text updates
       if (item.type === 'text' && item.content) {
         console.log('[DEBUG] Streaming text update:', item.content);
-        this.updateAgentResponseCell(item.content, lastUserCellId);
+        const currentAgentCell = this.getCurrentAgentCell();
+        
+        if (!currentAgentCell) {
+          const newCellId = this.addCell(
+            'markdown',
+            item.content,
+            'assistant',
+            undefined,
+            lastUserCellId || undefined,
+            insertIndex
+          );
+          this.setCurrentAgentCell(newCellId);
+        } else {
+          this.updateAgentResponseCell(item.content, lastUserCellId);
+        }
         return;
       }
 
       // Handle function calls (code cells)
       if (item.type === 'function_call') {
         console.log('[DEBUG] Processing function call:', item.name);
-        // Only create a new agent cell if we don't have one or if the current one isn't a thinking cell
-        const currentAgentCell = this.getCurrentAgentCell();
-        if (!currentAgentCell || !currentAgentCell.startsWith('thinking_')) {
-          // Create a temporary thinking cell
-          const thinkingCellId = `thinking_${this.generateId()}`;
-          this.setCurrentAgentCell(thinkingCellId);
-        }
         return;
       }
 
@@ -825,20 +879,17 @@ export class CellManager {
         
         const currentAgentCell = this.getCurrentAgentCell();
         if (currentAgentCell?.startsWith('thinking_')) {
-          // If we have a temporary thinking cell ID, clear it
           this.clearCurrentAgentCell();
         }
         
         const lastCodeCell = this.findLastCell(c => c.type === 'code' && c.role === 'assistant');
         if (lastCodeCell?.id) {
-          // Find all code cells that are children of the parent user message
           const codeCells = this.findChildrenCells(lastUserCellId || undefined).filter(cell => 
             cell.type === 'code' && 
             cell.role === 'assistant' && 
             cell.executionState === 'success'
           );
           
-          // Collapse all successfully executed code cells
           if (codeCells.length > 0) {
             setTimeout(() => {
               codeCells.forEach(cell => {
@@ -867,12 +918,12 @@ export class CellManager {
               finalContent,
               'assistant',
               undefined,
-              lastUserCellId || undefined
+              lastUserCellId || undefined,
+              insertIndex
             );
             
             console.log('[DEBUG] Added final response cell:', responseCellId);
             
-            // Scroll to the newly added response cell
             setTimeout(() => {
               const cellElement = document.querySelector(`[data-cell-id="${responseCellId}"]`);
               if (cellElement) {
@@ -881,7 +932,6 @@ export class CellManager {
             }, 100);
           }
           
-          // Clear the reference cell
           this.clearCurrentAgentCell();
         }
       }
@@ -896,14 +946,47 @@ export class CellManager {
     return this.cells.filter(cell => cell.metadata?.parent === parentId);
   }
   
-  // Delete a cell and all its children cells
-  deleteWithChildren(id: string): void {
-    // First find all children cells
-    const childrenCells = this.findChildrenCells(id);
+  // Helper method to focus a cell
+  private focusCell(cellId: string): void {
+    setTimeout(() => {
+      const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
+      if (cellElement) {
+        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        const editor = this.editorRefs.current[cellId]?.current;
+        if (editor) {
+          if (typeof editor.focus === 'function') {
+            editor.focus();
+          } else if (editor.getContainerDomNode) {
+            const editorNode = editor.getContainerDomNode();
+            if (editorNode) {
+              editorNode.focus();
+              // Try to focus the actual editor input
+              const cell = this.findCell(c => c.id === cellId);
+              const inputSelector = cell?.type === 'code' ? '.monaco-editor textarea' : 'textarea';
+              const inputElement = editorNode.querySelector(inputSelector);
+              if (inputElement) {
+                (inputElement as HTMLTextAreaElement).focus();
+              }
+            }
+          }
+        }
+      }
+    }, 100);
+  }
+
+  // Delete a cell and its children
+  deleteCellWithChildren(cellId: string): void {
+    // Find the cell and its children
+    const cell = this.findCell(c => c.id === cellId);
+    if (!cell) return;
+
+    // Get all cells that have this cell as their parent
+    const childrenCells = this.findChildrenCells(cellId);
     const childrenIds = childrenCells.map(cell => cell.id);
     
     // Add the parent cell ID to the list of cells to delete
-    const allIdsToDelete = [id, ...childrenIds];
+    const allIdsToDelete = [cellId, ...childrenIds];
     
     // Delete all cells at once
     this.setCells(prev => {
@@ -911,35 +994,22 @@ export class CellManager {
       
       // Update active cell if needed
       if (allIdsToDelete.includes(this.activeCellId || '')) {
-        // Try to activate the cell after the last deleted cell, or previous if there is no next
-        const lastDeletedIndex = prev.findIndex(cell => cell.id === id);
+        // Find the index of the last deleted cell
+        const lastDeletedIndex = prev.findIndex(cell => cell.id === cellId);
         if (lastDeletedIndex !== -1) {
+          // Try to get the next cell after deletion, or the previous if at the end
           const nextIndex = Math.min(lastDeletedIndex, newCells.length - 1);
           if (nextIndex >= 0) {
             const nextCell = newCells[nextIndex];
             this.setActiveCellId(nextCell.id);
+            
+            // If it's a markdown cell, ensure it's in edit mode
+            if (nextCell.type === 'markdown') {
+              this.toggleCellEditing(nextCell.id, false);
+            }
+            
             // Focus the newly activated cell
-            setTimeout(() => {
-              const editor = this.editorRefs.current[nextCell.id]?.current;
-              if (editor) {
-                if (nextCell.type === 'code') {
-                  // For code cells, focus the Monaco editor
-                  if (typeof editor.focus === 'function') {
-                    editor.focus();
-                  } else if (editor.getContainerDomNode) {
-                    editor.getContainerDomNode()?.focus();
-                  }
-                } else {
-                  // For markdown cells, ensure it's in edit mode and focused
-                  this.toggleCellEditing(nextCell.id, true);
-                  if (typeof editor.focus === 'function') {
-                    editor.focus();
-                  } else if (editor.getContainerDomNode) {
-                    editor.getContainerDomNode()?.focus();
-                  }
-                }
-              }
-            }, 100);
+            this.focusCell(nextCell.id);
           } else {
             this.setActiveCellId(null);
           }
@@ -1039,66 +1109,21 @@ export class CellManager {
     return cellId;
   }
 
-  // In CellManager class, add the deleteCellWithChildren method
-  deleteCellWithChildren(cellId: string): void {
-    // Find the cell and its children
-    const cell = this.findCell(c => c.id === cellId);
-    if (!cell) return;
+  // Find the cell ID before a reference cell
+  findCellIdBefore(referenceCellId: string): string | null {
+    const cellIndex = this.cells.findIndex(cell => cell.id === referenceCellId);
+    if (cellIndex > 0) {
+      return this.cells[cellIndex - 1].id;
+    }
+    return null;
+  }
 
-    // Get all cells that have this cell as their parent
-    const childrenCells = this.findChildrenCells(cellId);
-    const childrenIds = childrenCells.map(cell => cell.id);
-    
-    // Add the parent cell ID to the list of cells to delete
-    const allIdsToDelete = [cellId, ...childrenIds];
-    
-    // Delete all cells at once
-    this.setCells(prev => {
-      const newCells = prev.filter(cell => !allIdsToDelete.includes(cell.id));
-      
-      // Update active cell if needed
-      if (allIdsToDelete.includes(this.activeCellId || '')) {
-        // Try to activate the cell after the last deleted cell, or previous if there is no next
-        const lastDeletedIndex = prev.findIndex(cell => cell.id === cellId);
-        if (lastDeletedIndex !== -1) {
-          const nextIndex = Math.min(lastDeletedIndex, newCells.length - 1);
-          if (nextIndex >= 0) {
-            const nextCell = newCells[nextIndex];
-            this.setActiveCellId(nextCell.id);
-            // Focus the newly activated cell
-            setTimeout(() => {
-              const editor = this.editorRefs.current[nextCell.id]?.current;
-              if (editor) {
-                if (nextCell.type === 'code') {
-                  if (typeof editor.focus === 'function') {
-                    editor.focus();
-                  } else if (editor.getContainerDomNode) {
-                    editor.getContainerDomNode()?.focus();
-                  }
-                } else {
-                  this.toggleCellEditing(nextCell.id, true);
-                  if (typeof editor.focus === 'function') {
-                    editor.focus();
-                  } else if (editor.getContainerDomNode) {
-                    editor.getContainerDomNode()?.focus();
-                  }
-                }
-              }
-            }, 100);
-          } else {
-            this.setActiveCellId(null);
-          }
-        }
-      }
-
-      // Clean up editor refs for deleted cells
-      allIdsToDelete.forEach(cellId => {
-        if (this.editorRefs.current[cellId]) {
-          delete this.editorRefs.current[cellId];
-        }
-      });
-      
-      return newCells;
-    });
+  // Find the cell ID after a reference cell
+  findCellIdAfter(referenceCellId: string): string | null {
+    const cellIndex = this.cells.findIndex(cell => cell.id === referenceCellId);
+    if (cellIndex !== -1 && cellIndex < this.cells.length - 1) {
+      return this.cells[cellIndex + 1].id;
+    }
+    return null;
   }
 }
