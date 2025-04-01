@@ -24,6 +24,8 @@ export interface ChatCompletionOptions {
   server: any;
   onToolCall?: (toolCall: any) => Promise<string>;
   maxSteps?: number; // Maximum number of tool call steps before stopping
+  baseURL?: string; // Base URL for the API
+  apiKey?: string; // API key for authentication
 }
 
 export async function* chatCompletion({
@@ -35,6 +37,8 @@ export async function* chatCompletion({
   server,
   onToolCall,
   maxSteps = 10, // Default to 10 loops
+  baseURL = 'http://localhost:11434/v1/',
+  apiKey = 'ollama',
 }: ChatCompletionOptions): AsyncGenerator<{
   type: 'text' | 'function_call' | 'function_call_output' | 'new_completion';
   content?: string;
@@ -44,13 +48,15 @@ export async function* chatCompletion({
 }, void, unknown> {
   try {
     // Get OpenAI API key from schema-agents service
-    const schemaAgents = await server.getService("schema-agents");
-    const session = await schemaAgents?.get_openai_token();
-    const API_KEY = session.client_secret.value;
+    // const schemaAgents = await server.getService("schema-agents");
+    // const session = await schemaAgents?.get_openai_token();
+    // const API_KEY = session.client_secret.value;
 
-    // Initialize OpenAI client
+    // Initialize OpenAI client with provided settings
     const openai = new OpenAI({
-      apiKey: API_KEY,
+    //   apiKey: API_KEY,
+        baseURL,
+        apiKey,
       dangerouslyAllowBrowser: true
     });
 

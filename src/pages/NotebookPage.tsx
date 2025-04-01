@@ -22,6 +22,7 @@ import { CellManager } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
 import LoginButton from '../components/LoginButton';
+import { AgentSettingsPanel, AgentSettings } from '../components/chat/AgentSettingsPanel';
 
 // Add type imports from chatCompletion
 import { ChatRole, ChatMessage } from '../utils/chatCompletion';
@@ -170,21 +171,19 @@ const loadFromLocalStorage = (): { cells: NotebookCell[]; metadata: NotebookMeta
   };
 };
 
-// Default agent configuration for notebook code generation
-const defaultAgentConfig = {
-  name: 'Notebook Code Agent',
-  profile: 'Expert Python code generator for Jupyter notebooks',
-  goal: 'Help users generate and explain Python code in a notebook environment',
-  model: 'gpt-4o-mini', // Using the mini model for faster responses
-  stream: true,
+// Update defaultAgentConfig to use the AgentSettings interface
+const defaultAgentConfig: AgentSettings = {
+  baseURL: 'http://localhost:11434/v1/',
+  apiKey: 'ollama',
+  model: 'llama3.1:latest',
+  temperature: 0.7,
   instructions: `You are a code assistant specialized in generating Python code for notebooks. Follow these guidelines:
   1. When asked to generate code, write clean, well-documented Python
   2. In case of errors, use the runCode tool to update the code cell with the new code and try again
   3. When the user asks for explanations, provide clear markdown with concepts and code examples
   4. If the user asks you to execute code, always use the runCode tool rather than suggesting manual execution
   5. Always consider the previous cells and their outputs when generating new code
-  6. Prefer using visualizations and examples when explaining concepts`,
-  temperature: 0.7
+  6. Prefer using visualizations and examples when explaining concepts`
 };
 
 const KeyboardShortcutsDialog: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -452,6 +451,24 @@ const NotebookPage: React.FC = () => {
   const [isAIReady, setIsAIReady] = useState(false);
   const [executingCells, setExecutingCells] = useState<Set<string>>(new Set());
 
+  // Add state for agent settings with proper initialization from localStorage
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => {
+    const savedSettings = localStorage.getItem('agent_settings');
+    if (savedSettings) {
+      try {
+        return JSON.parse(savedSettings);
+      } catch (e) {
+        console.error('Error parsing saved agent settings:', e);
+      }
+    }
+    return defaultAgentConfig;
+  });
+
+  // Add effect to save settings to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('agent_settings', JSON.stringify(agentSettings));
+  }, [agentSettings]);
+
   // Initialize the cell manager
   const cellManager = useCellManager(
     cells,
@@ -718,7 +735,7 @@ const NotebookPage: React.FC = () => {
     }));
   }, [cells]);
 
-  // Update handleSendMessage to properly handle parent IDs
+  // Update handleSendMessage to use agent settings
   const handleSendMessage = useCallback(async (message: string) => {
     // If not logged in or not ready, show error
     if (!isLoggedIn || !isReady) {
@@ -737,7 +754,6 @@ const NotebookPage: React.FC = () => {
     try {
       setIsProcessingAgentResponse(true);
 
-      // Get conversation history up to the user's message
       const normalizedActiveCellId = cellManager.getActiveCellWithChildren();
       const history = getConversationHistory(normalizedActiveCellId || undefined);
       history.push({
@@ -745,22 +761,22 @@ const NotebookPage: React.FC = () => {
         content: message,
       });
 
-      // Add a markdown cell with the user's message, after the active cell
       const userCellId = cellManager.addCell('markdown', message, 'user', normalizedActiveCellId || undefined);
       cellManager.setActiveCell(userCellId);
       
-      // Update refs to track the new user message
       lastUserCellRef.current = userCellId;
 
-      // Start chat completion
+      // Use agent settings in chat completion
       const completion = chatCompletion({
         messages: history,
-        systemPrompt: defaultAgentConfig.instructions,
+        systemPrompt: agentSettings.instructions,
         tools,
-        model: defaultAgentConfig.model,
-        temperature: defaultAgentConfig.temperature,
+        model: agentSettings.model,
+        temperature: agentSettings.temperature,
         server,
         maxSteps: 15,
+        baseURL: agentSettings.baseURL,
+        apiKey: agentSettings.apiKey,
         onToolCall: async (toolCall) => {
           if (toolCall.name === 'runCode') {
             return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
@@ -779,7 +795,7 @@ const NotebookPage: React.FC = () => {
     } finally {
       setIsProcessingAgentResponse(false);
     }
-  }, [activeCellId, cellManager, isReady, isLoggedIn, server, tools, getConversationHistory, handleExecuteCode]);
+  }, [activeCellId, cellManager, isReady, isLoggedIn, server, tools, getConversationHistory, handleExecuteCode, agentSettings]);
 
   // Update handleRegenerateClick to use deleteCellWithChildren and handleSendMessage
   const handleRegenerateClick = async (cellId: string) => {
@@ -833,12 +849,14 @@ const NotebookPage: React.FC = () => {
       // Start chat completion
       const completion = chatCompletion({
         messages: history,
-        systemPrompt: defaultAgentConfig.instructions,
+        systemPrompt: agentSettings.instructions,
         tools,
-        model: defaultAgentConfig.model,
-        temperature: defaultAgentConfig.temperature,
+        model: agentSettings.model,
+        temperature: agentSettings.temperature,
         server,
         maxSteps: 15,
+        baseURL: agentSettings.baseURL,
+        apiKey: agentSettings.apiKey,
         onToolCall: async (toolCall) => {
           if (toolCall.name === 'runCode') {
             return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
@@ -1408,6 +1426,15 @@ const NotebookPage: React.FC = () => {
 
               {/* Add login button section */}
               <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
+                <AgentSettingsPanel
+                  settings={agentSettings}
+                  onSettingsChange={(newSettings) => {
+                    setAgentSettings(newSettings);
+                    // Save to localStorage
+                    localStorage.setItem('agent_settings', JSON.stringify(newSettings));
+                  }}
+                  className="scale-75"
+                />
                 <LoginButton className="scale-75 z-100" />
               </div>
             </div>
@@ -1751,7 +1778,7 @@ const NotebookPage: React.FC = () => {
               isProcessingAgentResponse ? "AI is thinking..." :
               "Enter text or command (e.g., /code, /markdown, /clear)"
             }
-            agentInstructions={defaultAgentConfig.instructions}
+            agentInstructions={agentSettings.instructions}
           />
         </div>
       </div>

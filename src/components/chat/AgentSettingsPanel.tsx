@@ -1,13 +1,47 @@
 import React, { useState, useRef, useEffect } from 'react';
 
+// Define interfaces for our settings
+export interface AgentSettings {
+  baseURL: string;
+  apiKey: string;
+  model: string;
+  temperature: number;
+  instructions: string;
+}
+
 interface AgentSettingsProps {
-  instructions?: string;
+  settings?: AgentSettings;
+  onSettingsChange?: (settings: AgentSettings) => void;
   className?: string;
 }
 
-export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({ instructions, className }) => {
+const DEFAULT_SETTINGS: AgentSettings = {
+  baseURL: 'http://localhost:11434/v1/',
+  apiKey: 'ollama',
+  model: 'llama3.1:latest',
+  temperature: 0.7,
+  instructions: `You are a code assistant specialized in generating Python code for notebooks. Follow these guidelines:
+  1. When asked to generate code, write clean, well-documented Python
+  2. In case of errors, use the runCode tool to update the code cell with the new code and try again
+  3. When the user asks for explanations, provide clear markdown with concepts and code examples
+  4. If the user asks you to execute code, always use the runCode tool rather than suggesting manual execution
+  5. Always consider the previous cells and their outputs when generating new code
+  6. Prefer using visualizations and examples when explaining concepts`
+};
+
+export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({ 
+  settings = DEFAULT_SETTINGS,
+  onSettingsChange = () => {},
+  className 
+}) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [localSettings, setLocalSettings] = useState<AgentSettings>(settings);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -23,20 +57,45 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({ instructions,
     };
   }, []);
 
-  // Toggle dropdown
-  const toggleDropdown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsOpen(!isOpen);
+  // Handle form submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      onSettingsChange(localSettings);
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  };
+
+  // Handle input changes
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setLocalSettings(prev => ({
+      ...prev,
+      [name]: name === 'temperature' ? parseFloat(value) : value
+    }));
+  };
+
+  // Reset to defaults
+  const handleReset = () => {
+    const newSettings = { ...DEFAULT_SETTINGS };
+    setLocalSettings(newSettings);
+    try {
+      onSettingsChange(newSettings);
+    } catch (error) {
+      console.error('Error resetting settings:', error);
+    }
   };
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       {/* Settings button */}
       <button
-        onClick={toggleDropdown}
+        onClick={() => setIsOpen(!isOpen)}
         className="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-        title="Agent Instructions"
-        aria-label="View agent instructions"
+        title="Agent Settings"
+        aria-label="Configure agent settings"
       >
         <svg 
           className="w-5 h-5 text-gray-600" 
@@ -49,31 +108,133 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({ instructions,
             strokeLinecap="round" 
             strokeLinejoin="round" 
             strokeWidth={2} 
-            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+          />
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2} 
+            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
           />
         </svg>
       </button>
 
-      {/* Dropdown panel */}
+      {/* Settings panel */}
       {isOpen && (
-        <div className="absolute right-0 bottom-full mb-2 w-96 bg-white rounded-md shadow-lg z-[100] overflow-hidden border border-gray-200">
-          <div className="py-2 max-h-96 overflow-y-auto">
-            <div className="px-4 py-2 text-sm font-medium text-gray-700 border-b border-gray-200">
-              Agent Instructions
+        <div className="absolute right-0 bottom-full mb-2 w-[500px] bg-white rounded-lg shadow-xl z-[100] border border-gray-200">
+          <form ref={formRef} onSubmit={handleSubmit} className="divide-y divide-gray-200">
+            <div className="px-4 py-3 bg-gray-50 rounded-t-lg flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Agent Settings</h3>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                Reset to defaults
+              </button>
             </div>
-            
-            <div className="p-4">
-              {instructions ? (
-                <div className="text-sm text-gray-700 whitespace-pre-wrap">
-                  {instructions}
+
+            <div className="p-4 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+              {/* Model Settings Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-gray-900">Model Configuration</h4>
+                
+                <div className="space-y-2">
+                  <label className="block text-sm text-gray-700">Base URL</label>
+                  <input
+                    type="text"
+                    name="baseURL"
+                    value={localSettings.baseURL}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    placeholder="Enter API base URL"
+                  />
                 </div>
-              ) : (
-                <div className="text-sm text-gray-500 italic">
-                  No specific instructions defined for this agent.
+
+                <div className="space-y-2">
+                  <label className="block text-sm text-gray-700">API Key</label>
+                  <input
+                    type="password"
+                    name="apiKey"
+                    value={localSettings.apiKey}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    placeholder="Enter API key"
+                  />
                 </div>
-              )}
+
+                <div className="space-y-2">
+                  <label className="block text-sm text-gray-700">Model</label>
+                  <select
+                    name="model"
+                    value={localSettings.model}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    title="Select AI model"
+                    aria-label="Select AI model"
+                  >
+                    <option value="llama3.1:latest">Llama 3.1</option>
+                    <option value="gpt-4o-mini">GPT-4 Mini</option>
+                    <option value="mistral">Mistral</option>
+                    <option value="codellama">Code Llama</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm text-gray-700">
+                    Temperature ({localSettings.temperature})
+                  </label>
+                  <input
+                    type="range"
+                    name="temperature"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={localSettings.temperature}
+                    onChange={handleChange}
+                    className="w-full"
+                    title="Adjust temperature"
+                    aria-label="Adjust temperature"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Precise (0)</span>
+                    <span>Balanced (1)</span>
+                    <span>Creative (2)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Instructions Section */}
+              <div className="space-y-2 pt-4">
+                <h4 className="text-sm font-medium text-gray-900">Agent Instructions</h4>
+                <textarea
+                  name="instructions"
+                  value={localSettings.instructions}
+                  onChange={handleChange}
+                  rows={6}
+                  className="w-full px-3 py-2 border rounded-md text-sm font-mono"
+                  placeholder="Enter agent instructions..."
+                />
+              </div>
             </div>
-          </div>
+
+            {/* Footer */}
+            <div className="px-4 py-3 bg-gray-50 rounded-b-lg flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
