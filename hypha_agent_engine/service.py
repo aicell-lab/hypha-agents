@@ -1,10 +1,17 @@
+"""Service module for Hypha Agent Platform.
+
+This module provides functionality to connect to a Hypha server and
+register agent services for the Hypha Agent Platform.
+"""
+
 import os
+import logging
+
+from dotenv import load_dotenv
 from hypha_rpc import connect_to_server, login
 from hypha_agent_engine.hypha_service import register_agent_service
 
 # from hypha_agent_engine.services.plotting import register_plotting_service
-import logging
-from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -37,12 +44,12 @@ async def start_service(server_url: str = "https://hypha.aicell.io") -> None:
         # Register agent service
         agent_svc = await register_agent_service(server)
         logger.info(
-            f"Hypha service started successfully. Agent service ID: {agent_svc.id}"
+            "Hypha service started successfully. Agent service ID: %s", agent_svc.id
         )
 
         # Register plotting service
         # plotting_svc = await register_plotting_service(server)
-        # logger.info(f"Plotting service started successfully. Service ID: {plotting_svc.id}")
+        # logger.info("Plotting service started successfully. Service ID: %s", plotting_svc.id)
 
         # Run the service
         await server.serve()
@@ -50,7 +57,7 @@ async def start_service(server_url: str = "https://hypha.aicell.io") -> None:
     except KeyboardInterrupt:
         logger.info("Received shutdown signal")
     except Exception as e:
-        logger.error(f"Error running service: {str(e)}")
+        logger.error("Error running service: %s", str(e))
         raise
     finally:
         if server:
