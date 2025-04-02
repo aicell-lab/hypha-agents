@@ -32,11 +32,12 @@ export interface ChatCompletionOptions {
 }
 
 // Define the response schema for the code agent
+// Note: it seems better to use nullable for optional fields https://github.com/Klimatbyran/garbo/issues/473
 const CodeAgentResponse = z.object({
-  thoughts: z.string().optional().describe('Brief reasoning for the current response or script'),
+  thoughts: z.string().nullable().describe('Brief reasoning for the current response or script'),
   response: z.string().describe('Response to be displayed to the user'),
-  script: z.string().optional().describe('Optional: The python script to be executed to fulfill the request'),
-//   cell_id: z.string().optional().describe('Optional: used to update an existing cell for error recovery; if not provided, a new cell will be created'),
+  script: z.string().nullable().describe('Optional: The python script to be executed to fulfill the request'),
+//   cell_id: z.string().nullable().describe('Optional: used to update an existing cell for error recovery; if not provided, a new cell will be created'),
 //   is_final: z.boolean().describe('Whether the response is final'),
 });
 
@@ -145,7 +146,7 @@ export async function* structuredChatCompletion({
         ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
         : messages;
       const completionId = generateId();
-
+      console.log('DEBUG: new completion', completionId, 'fullMessages:', fullMessages);
       // Create streaming completion with structured output
       const stream = await openai.beta.chat.completions.stream({
         model,

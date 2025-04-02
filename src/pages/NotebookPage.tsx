@@ -23,6 +23,7 @@ import { CellManager } from './CellManager';
 import '../styles/notebook.css';
 import LoginButton from '../components/LoginButton';
 import { AgentSettings, DefaultAgentConfig } from '../utils/chatCompletion';
+import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
 
 // Add type imports from chatCompletion
 import { ChatRole, ChatMessage } from '../utils/chatCompletion';
@@ -438,7 +439,7 @@ const NotebookPage: React.FC = () => {
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [isAIReady, setIsAIReady] = useState(false);
   // Add state for agent settings with proper initialization from localStorage
-  const [agentSettings, setAgentSettings] = useState<AgentSettings>(DefaultAgentConfig);
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => loadSavedAgentSettings());
 
   // Initialize the cell manager
   const cellManager = useCellManager(
@@ -720,7 +721,7 @@ const NotebookPage: React.FC = () => {
           return `Tool ${toolCall.name} not implemented`;
         },
         onMessage: (completionId: string, message: string) => {
-          console.log('[DEBUG] New Message:', message);
+          console.log('[DEBUG] New Message:', completionId, message);
           cellManager.updateCellById(
             completionId,
             message,
@@ -788,10 +789,7 @@ const NotebookPage: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       
       const history = getConversationHistory(cellId || undefined);
-      history.push({
-        role: 'user',
-        content: messageContent,
-      });
+     
       // Start chat completion
       const completion = structuredChatCompletion({
         messages: history,

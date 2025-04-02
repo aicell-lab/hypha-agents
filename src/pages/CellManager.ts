@@ -469,78 +469,18 @@ export class CellManager {
       const nextCell = this.cells[currentIndex + 1];
       this.setActiveCellId(nextCell.id);
       
-      // Focus the cell with a small delay to ensure DOM is ready
-      setTimeout(() => {
-        const cellElement = document.querySelector(`[data-cell-id="${nextCell.id}"]`);
-        if (cellElement) {
-          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
-          const editor = this.editorRefs.current[nextCell.id]?.current;
-          if (editor) {
-            if (nextCell.type === 'code') {
-              // For code cells, focus the Monaco editor
-              if (typeof editor.focus === 'function') {
-                editor.focus();
-              } else if (editor.getContainerDomNode) {
-                const editorNode = editor.getContainerDomNode();
-                if (editorNode) {
-                  editorNode.focus();
-                  // Try to focus the actual editor input
-                  const inputElement = editorNode.querySelector('.monaco-editor textarea');
-                  if (inputElement) {
-                    (inputElement as HTMLTextAreaElement).focus();
-                  }
-                }
-              }
-            } else {
-              // For markdown cells, ensure it's in edit mode and focused
-              this.toggleCellEditing(nextCell.id, false);
-              if (typeof editor.focus === 'function') {
-                editor.focus();
-              } else if (editor.getContainerDomNode) {
-                const editorNode = editor.getContainerDomNode();
-                if (editorNode) {
-                  editorNode.focus();
-                  // Try to focus the actual editor input
-                  const inputElement = editorNode.querySelector('textarea');
-                  if (inputElement) {
-                    (inputElement as HTMLTextAreaElement).focus();
-                  }
-                }
-              }
-            }
-          }
-        }
-      }, 100);
+      // Focus the cell
+      this.focusCell(nextCell.id);
+      
+      // If it's a markdown cell, ensure it's not in edit mode
+      if (nextCell.type === 'markdown') {
+        this.toggleCellEditing(nextCell.id, false);
+      }
     } else {
       // Create and focus new cell at the end
       const newCellId = this.addCell('code', '', 'user');
       this.setActiveCellId(newCellId);
-      
-      // Focus the new cell
-      setTimeout(() => {
-        const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
-        if (cellElement) {
-          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
-          const editor = this.editorRefs.current[newCellId]?.current;
-          if (editor) {
-            if (typeof editor.focus === 'function') {
-              editor.focus();
-            } else if (editor.getContainerDomNode) {
-              const editorNode = editor.getContainerDomNode();
-              if (editorNode) {
-                editorNode.focus();
-                // Try to focus the actual editor input
-                const inputElement = editorNode.querySelector('.monaco-editor textarea');
-                if (inputElement) {
-                  (inputElement as HTMLTextAreaElement).focus();
-                }
-              }
-            }
-          }
-        }
-      }, 100);
+      this.focusCell(newCellId);
     }
   }
   
@@ -749,31 +689,29 @@ export class CellManager {
   
   // Helper method to focus a cell
   private focusCell(cellId: string): void {
-    setTimeout(() => {
-      const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
-      if (cellElement) {
-        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        const editor = this.editorRefs.current[cellId]?.current;
-        if (editor) {
-          if (typeof editor.focus === 'function') {
-            editor.focus();
-          } else if (editor.getContainerDomNode) {
-            const editorNode = editor.getContainerDomNode();
-            if (editorNode) {
-              editorNode.focus();
-              // Try to focus the actual editor input
-              const cell = this.findCell(c => c.id === cellId);
-              const inputSelector = cell?.type === 'code' ? '.monaco-editor textarea' : 'textarea';
-              const inputElement = editorNode.querySelector(inputSelector);
-              if (inputElement) {
-                (inputElement as HTMLTextAreaElement).focus();
-              }
+    const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
+    if (cellElement) {
+      cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      const editor = this.editorRefs.current[cellId]?.current;
+      if (editor) {
+        if (typeof editor.focus === 'function') {
+          editor.focus();
+        } else if (editor.getContainerDomNode) {
+          const editorNode = editor.getContainerDomNode();
+          if (editorNode) {
+            editorNode.focus();
+            // Try to focus the actual editor input
+            const cell = this.findCell(c => c.id === cellId);
+            const inputSelector = cell?.type === 'code' ? '.monaco-editor textarea' : 'textarea';
+            const inputElement = editorNode.querySelector(inputSelector);
+            if (inputElement) {
+              (inputElement as HTMLTextAreaElement).focus();
             }
           }
         }
       }
-    }, 100);
+    }
   }
 
   // Delete a cell and its children
@@ -861,12 +799,10 @@ export class CellManager {
     this.setCurrentAgentCell(thinkingCellId);
     
     // Scroll to the thinking message
-    setTimeout(() => {
-      const cellElement = document.querySelector(`[data-cell-id="${thinkingCellId}"]`);
-      if (cellElement) {
-        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 50);
+    const cellElement = document.querySelector(`[data-cell-id="${thinkingCellId}"]`);
+    if (cellElement) {
+      cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     
     // Signal that we want to regenerate a response
     return { 
@@ -958,37 +894,98 @@ export class CellManager {
     role: CellRole = 'assistant',
     parent?: string
   ): void {
-    // Check if cell exists
-    const existingCell = this.findCell(c => c.id === cellId);
-    
-    if (existingCell) {
-      // Update existing cell
-      this.setCells(prev => prev.map(cell => 
-        cell.id === cellId ? {
-          ...cell,
-          content,
-          metadata: {
-            ...cell.metadata,
-            isEditing: false,
-            parent
+    // Use a single setCells call to make the update atomic
+    this.setCells(prev => {
+      // Check if cell exists in the current state
+      const existingCell = prev.find(c => c.id === cellId);
+      
+      if (existingCell) {
+        // Update existing cell
+        return prev.map(cell => 
+          cell.id === cellId ? {
+            ...cell,
+            content,
+            metadata: {
+              ...cell.metadata,
+              isEditing: false,
+              parent
+            }
+          } : cell
+        );
+      } else {
+        // Check if we're already in the process of creating this cell
+        const isBeingCreated = prev.some(cell => cell.id === cellId);
+        if (isBeingCreated) {
+          // If the cell is being created, just update its content
+          return prev.map(cell => 
+            cell.id === cellId ? {
+              ...cell,
+              content,
+              metadata: {
+                ...cell.metadata,
+                isEditing: false,
+                parent
+              }
+            } : cell
+          );
+        }
+        
+        // Get current agent cell and parent cell for positioning
+        const currentAgentCell = this.getCurrentAgentCell();
+        const parentCell = parent ? prev.find(cell => cell.id === parent) : null;
+        
+        // Find the index where we should insert the new cell
+        let insertIndex;
+        if (parentCell) {
+          // Find all cells that share the same parent
+          const siblingCells = prev.filter(cell => cell.metadata?.parent === parent);
+          if (siblingCells.length > 0) {
+            // Find the last sibling cell's index
+            const lastSiblingId = siblingCells[siblingCells.length - 1].id;
+            insertIndex = prev.findIndex(cell => cell.id === lastSiblingId) + 1;
+          } else {
+            // If no siblings, insert after the parent
+            insertIndex = prev.findIndex(cell => cell.id === parent) + 1;
           }
-        } : cell
-      ));
-    } else {
-      // Create new cell after current agent cell
-      const currentAgentCell = this.getCurrentAgentCell();
-      const newCellId = this.addCell(
-        type,
-        content,
-        role,
-        currentAgentCell,
-        parent,
-        undefined,
-        cellId
-      );
-      // Update current agent cell reference
-      this.setCurrentAgentCell(newCellId);
-    }
+        } else if (currentAgentCell) {
+          // If no parent but we have a current agent cell, insert after it
+          insertIndex = prev.findIndex(cell => cell.id === currentAgentCell) + 1;
+        } else {
+          // If no parent and no current agent cell, append to the end
+          insertIndex = prev.length;
+        }
+        
+        // Create new cell
+        const newCell: NotebookCell = {
+          id: cellId,
+          type,
+          content,
+          executionState: 'idle',
+          role,
+          metadata: {
+            collapsed: false,
+            trusted: true,
+            isNew: type === 'code',
+            role: role,
+            isEditing: false,
+            isCodeVisible: true,
+            parent: parent
+          }
+        };
+        
+        // Create a ref for the new cell
+        this.editorRefs.current[cellId] = React.createRef();
+        
+        // Insert the new cell at the correct position
+        const newCells = [...prev];
+        newCells.splice(insertIndex, 0, newCell);
+        
+        // Update the current agent cell reference
+        this.lastAgentCellRef.current = cellId;
+        
+        return newCells;
+      }
+    });
   }
 
   // Update cell metadata
