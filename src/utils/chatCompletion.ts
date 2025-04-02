@@ -147,13 +147,6 @@ export async function* structuredChatCompletion({
         : messages;
       const completionId = generateId();
       console.log('DEBUG: new completion', completionId, 'fullMessages:', fullMessages);
-      // Create streaming completion with structured output
-      const stream = await openai.beta.chat.completions.stream({
-        model,
-        messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
-        temperature,
-        response_format: zodResponseFormat(CodeAgentResponse, "code_agent_response"),
-      });
 
       yield {
         type: 'new_completion',
@@ -161,114 +154,134 @@ export async function* structuredChatCompletion({
       };
 
       let accumulatedResponse = '';
+      let accumulatedJson = '';
+      let isInJsonBlock = false;
 
-      // Process the stream
+      // Create standard completion stream
+      const stream = await openai.chat.completions.create({
+        model,
+        messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
+        temperature,
+        response_format: zodResponseFormat(CodeAgentResponse, "code_agent_response"),
+        stream: true,
+      });
+
+      // Process the stream and accumulate JSON
       for await (const chunk of stream) {
-        const choice = chunk.choices[0];
+        const content = chunk.choices[0]?.delta?.content || '';
+        accumulatedResponse += content;
         
-        if (choice?.delta?.content) {
-          accumulatedResponse += choice.delta.content;
-          if(onMessage){
-            onMessage(completionId, accumulatedResponse);
-          }
-          yield {
-            type: 'text',
-            content: accumulatedResponse
-          };
+        if (content.includes('{') && !isInJsonBlock) {
+          isInJsonBlock = true;
         }
-      }
+        
+        if (isInJsonBlock) {
+          accumulatedJson += content;
+        }
 
-      // Get the final parsed response
-      const finalCompletion = await stream.finalChatCompletion();
-      const parsedResponse = finalCompletion.choices[0].message.parsed;
-      // trim the script
-      parsedResponse.script = parsedResponse.script.trim();
-      // sometimes the script is in markdown format, so we need to convert it to code
-      // ``` or ```python quotes are not allowed in the script
-      // use regex to strip the outter most quotes and the python prefix
-      parsedResponse.script = parsedResponse.script.replace(/^```python\s*|\s*```$/g, '').trim();
-      // trim the response
-      parsedResponse.response = parsedResponse.response.trim();
-      
-      
-      // If there's a script to execute, handle it as a tool call
-      if (parsedResponse.script) {
         if(onMessage){
-            onMessage(completionId, parsedResponse.response);
+          onMessage(completionId, accumulatedResponse);
         }
         yield {
           type: 'text',
-          content: parsedResponse.response
+          content: accumulatedResponse
         };
-        if(!onToolCall){
-          throw new Error('onToolCall is not defined');
-        }
-        const toolCallId = `tool_${Date.now()}`;
+      }
 
-        yield {
-          type: 'function_call',
-          name: 'runCode',
-          arguments: {
-            code: parsedResponse.script,
-            // cell_id: parsedResponse.cell_id
-          },
-          call_id: toolCallId
-        };
+      // Parse and validate the accumulated JSON
+      try {
+        const jsonResponse = JSON.parse(accumulatedJson);
+        const parsedResponse = CodeAgentResponse.parse(jsonResponse);
 
-        // add the tool call to the messages
-        messages.push({
-          role: 'assistant',
-          content: `${parsedResponse.response}\n\nTo help me complete your request, please execute the following code:\n\`\`\`\n${parsedResponse.script}\n\`\`\``
-        });
-
-        // Execute the tool call
-        const result = await onToolCall({
-          name: 'runCode',
-          arguments: {
-            code: parsedResponse.script,
-            // cell_id: parsedResponse.cell_id
-          },
-          call_id: toolCallId
-        });
-
-        // Yield the tool call output
-        yield {
-          type: 'function_call_output',
-          content: result,
-          call_id: toolCallId
-        };
-
-        // Add tool response to messages
-        messages.push({
-          role: 'user',
-          content: `I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.`
-        });
-
-        // Check if we've hit the loop limit
-        if (loopCount >= maxSteps) {
-          console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
+        // trim the script
+        parsedResponse.script = (parsedResponse.script || '').trim();
+        // sometimes the script is in markdown format, so we need to convert it to code
+        // ``` or ```python quotes are not allowed in the script
+        // use regex to strip the outter most quotes and the python prefix
+        parsedResponse.script = parsedResponse.script.replace(/^```python\s*|\s*```$/g, '').trim();
+        // trim the response
+        parsedResponse.response = parsedResponse.response.trim();
+        
+        // If there's a script to execute, handle it as a tool call
+        if (parsedResponse.script) {
           if(onMessage){
-            onMessage(completionId, `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`);
+              onMessage(completionId, parsedResponse.response);
           }
           yield {
             type: 'text',
-            content: `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`
+            content: parsedResponse.response
+          };
+          if(!onToolCall){
+            throw new Error('onToolCall is not defined');
+          }
+          const toolCallId = `tool_${Date.now()}`;
+
+          yield {
+            type: 'function_call',
+            name: 'runCode',
+            arguments: {
+              code: parsedResponse.script,
+            },
+            call_id: toolCallId
+          };
+
+          // add the tool call to the messages
+          messages.push({
+            role: 'assistant',
+            content: `${parsedResponse.response}\n\nTo help me complete your request, please execute the following code:\n\`\`\`\n${parsedResponse.script}\n\`\`\``
+          });
+
+          // Execute the tool call
+          const result = await onToolCall({
+            name: 'runCode',
+            arguments: {
+              code: parsedResponse.script,
+            },
+            call_id: toolCallId
+          });
+
+          // Yield the tool call output
+          yield {
+            type: 'function_call_output',
+            content: result,
+            call_id: toolCallId
+          };
+
+          // Add tool response to messages
+          messages.push({
+            role: 'user',
+            content: `I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.`
+          });
+
+          // Check if we've hit the loop limit
+          if (loopCount >= maxSteps) {
+            console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
+            if(onMessage){
+              onMessage(completionId, `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`);
+            }
+            yield {
+              type: 'text',
+              content: `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`
+            };
+            break;
+          }
+        } else {
+          if(onMessage){
+              onMessage(completionId, parsedResponse.response);
+          }
+          yield {
+              type: 'text',
+              content: parsedResponse.response
           };
           break;
         }
-      }
-      else{
-        if(onMessage){
-            onMessage(completionId, parsedResponse.response);
+      } catch (error: unknown) {
+        console.error('Error parsing JSON response:', error);
+        if (error instanceof Error) {
+          throw new Error(`Failed to parse LLM response as valid JSON: ${error.message}`);
         }
-        yield {
-            type: 'text',
-            content: parsedResponse.response
-        };
-  
-        break;
+        throw new Error('Failed to parse LLM response as valid JSON');
       }
-      
     }
   } catch (err) {
     console.error('Error in structured chat completion:', err);
