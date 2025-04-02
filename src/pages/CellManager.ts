@@ -990,4 +990,17 @@ export class CellManager {
       this.setCurrentAgentCell(newCellId);
     }
   }
+
+  // Update cell metadata
+  updateCellMetadata(cellId: string, metadata: NotebookCell['metadata']): void {
+    this.setCells(prev => prev.map(cell => 
+      cell.id === cellId ? {
+        ...cell,
+        metadata: {
+          ...cell.metadata,
+          ...metadata
+        }
+      } : cell
+    ));
+  }
 }

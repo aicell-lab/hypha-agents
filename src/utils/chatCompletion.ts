@@ -33,7 +33,7 @@ export interface ChatCompletionOptions {
 
 // Define the response schema for the code agent
 const CodeAgentResponse = z.object({
-  thoughts: z.string().describe('Brief reasoning for the current response or script'),
+  thoughts: z.string().optional().describe('Brief reasoning for the current response or script'),
   response: z.string().describe('Response to be displayed to the user'),
   script: z.string().optional().describe('Optional: The python script to be executed to fulfill the request'),
 //   cell_id: z.string().optional().describe('Optional: used to update an existing cell for error recovery; if not provided, a new cell will be created'),
