@@ -139,10 +139,11 @@ export class CellManager {
     role?: CellRole | undefined, 
     afterCellId?: string | undefined,
     parent?: string | undefined,
-    insertIndex?: number
+    insertIndex?: number,
+    cellId?: string
   ): string {
     const newCell: NotebookCell = {
-      id: this.generateId(),
+      id: cellId || this.generateId(),
       type,
       content: content || "",
       executionState: 'idle',
@@ -740,206 +741,6 @@ export class CellManager {
     return this.findCell(c => c.id === parentId);
   }
 
-  // Add a cell in the agent response context
-  addAgentResponseCell(
-    type: CellType,
-    content: string = '',
-    role: CellRole = 'assistant',
-    lastUserCellId: string | null
-  ): string {
-    const referenceCellId = this.getCurrentAgentCell();
-    let parentId = lastUserCellId || undefined;
-
-    // Find the user cell and its position
-    const userCell = lastUserCellId ? this.findCell(cell => cell.id === lastUserCellId) : null;
-    const userCellIndex = userCell ? this.cells.findIndex(cell => cell.id === lastUserCellId) : -1;
-    
-    // Calculate insert position - right after the user cell
-    const insertIndex = userCellIndex >= 0 ? userCellIndex + 1 : undefined;
-
-    // Add the new cell at the calculated position
-    const newCellId = this.addCell(
-      type, 
-      content, 
-      role, 
-      referenceCellId || undefined,
-      parentId,
-      insertIndex
-    );
-    this.setCurrentAgentCell(newCellId);
-    return newCellId;
-  }
-
-  // Update agent response cell content
-  updateAgentResponseCell(content: string, lastUserCellId: string | null) {
-    const cellId = this.getCurrentAgentCell();
-    if (!cellId) {
-      // If no current cell exists, create one
-      const userCell = lastUserCellId ? this.findCell(cell => cell.id === lastUserCellId) : null;
-      const userCellIndex = userCell ? this.cells.findIndex(cell => cell.id === lastUserCellId) : -1;
-      
-      // Calculate insert position - right after the user cell
-      const insertIndex = userCellIndex >= 0 ? userCellIndex + 1 : undefined;
-
-      // Create new markdown cell at the correct position
-      const newCellId = this.addCell(
-        'markdown',
-        content,
-        'assistant',
-        undefined,
-        lastUserCellId || undefined,
-        insertIndex
-      );
-      this.setCurrentAgentCell(newCellId);
-      return;
-    }
-
-    // Update existing cell
-    this.setCells(prev => {
-      // Find the cell's current index
-      const cellIndex = prev.findIndex(cell => cell.id === cellId);
-      if (cellIndex === -1) return prev;
-
-      // Find the target user cell's index
-      const userCellIndex = lastUserCellId ? prev.findIndex(cell => cell.id === lastUserCellId) : -1;
-      const targetIndex = userCellIndex >= 0 ? userCellIndex + 1 : cellIndex;
-
-      // Create the updated cell
-      const updatedCell = {
-        ...prev[cellIndex],
-        content,
-        metadata: {
-          ...prev[cellIndex].metadata,
-          isEditing: false,
-          parent: lastUserCellId || undefined
-        }
-      };
-
-      // Remove the cell from its current position and insert it at the target position
-      const newCells = [...prev];
-      newCells.splice(cellIndex, 1); // Remove from current position
-      newCells.splice(targetIndex, 0, updatedCell); // Insert at target position
-      return newCells;
-    });
-  }
-
-  // Handle agent response for messages, function calls, etc.
-  handleAgentResponse(item: { 
-    type: string; 
-    role?: string; 
-    content?: any;
-    name?: string;
-  }, lastUserCellId: string | null): void {
-    console.log('[DEBUG] Handling agent response:', JSON.stringify(item, null, 2));
-    
-    try {
-      // Find the user cell and its position once, as we'll need it multiple times
-      const userCell = lastUserCellId ? this.findCell(cell => cell.id === lastUserCellId) : null;
-      const userCellIndex = userCell ? this.cells.findIndex(cell => cell.id === lastUserCellId) : -1;
-      const insertIndex = userCellIndex >= 0 ? userCellIndex + 1 : undefined;
-
-      if (item.type === 'new_completion') {
-        // Only clear the current agent cell reference if it's not a function call response
-        if (!this.getCurrentAgentCell()?.startsWith('thinking_')) {
-          this.clearCurrentAgentCell();
-        }
-        return;
-      }
-
-      // Handle streaming text updates
-      if (item.type === 'text' && item.content) {
-        console.log('[DEBUG] Streaming text update:', item.content);
-        const currentAgentCell = this.getCurrentAgentCell();
-        
-        if (!currentAgentCell) {
-          const newCellId = this.addCell(
-            'markdown',
-            item.content,
-            'assistant',
-            undefined,
-            lastUserCellId || undefined,
-            insertIndex
-          );
-          this.setCurrentAgentCell(newCellId);
-        } else {
-          this.updateAgentResponseCell(item.content, lastUserCellId);
-        }
-        return;
-      }
-
-      // Handle function calls (code cells)
-      if (item.type === 'function_call') {
-        console.log('[DEBUG] Processing function call:', item.name);
-        return;
-      }
-
-      // Handle function call outputs
-      if (item.type === 'function_call_output') {
-        console.log('[DEBUG] Processing function call output');
-        
-        const currentAgentCell = this.getCurrentAgentCell();
-        if (currentAgentCell?.startsWith('thinking_')) {
-          this.clearCurrentAgentCell();
-        }
-        
-        const lastCodeCell = this.findLastCell(c => c.type === 'code' && c.role === 'assistant');
-        if (lastCodeCell?.id) {
-          const codeCells = this.findChildrenCells(lastUserCellId || undefined).filter(cell => 
-            cell.type === 'code' && 
-            cell.role === 'assistant' && 
-            cell.executionState === 'success'
-          );
-          
-          if (codeCells.length > 0) {
-            setTimeout(() => {
-              codeCells.forEach(cell => {
-                if (cell.id) {
-                  console.log('[DEBUG] Collapsing code cell:', cell.id);
-                  this.collapseCodeCell(cell.id);
-                }
-              });
-            }, 500);
-          }
-        }
-        return;
-      }
-
-      // Handle final assistant message
-      if (item.type === 'message' && item.role === 'assistant') {
-        if (item.content && item.content.length > 0) {
-          console.log('[DEBUG] Processing final assistant message with items:', item.content.length);
-          
-          const referenceCellId = this.getCurrentAgentCell();
-          if (referenceCellId?.startsWith('thinking_')) {
-            const finalContent = item.content[0].text || item.content[0].content;
-            
-            const responseCellId = this.addCell(
-              'markdown',
-              finalContent,
-              'assistant',
-              undefined,
-              lastUserCellId || undefined,
-              insertIndex
-            );
-            
-            console.log('[DEBUG] Added final response cell:', responseCellId);
-            
-            setTimeout(() => {
-              const cellElement = document.querySelector(`[data-cell-id="${responseCellId}"]`);
-              if (cellElement) {
-                cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
-            }, 100);
-          }
-          
-          this.clearCurrentAgentCell();
-        }
-      }
-    } catch (error) {
-      console.error('[DEBUG] Error processing agent response:', error);
-    }
-  }
-
   // Find all children cells of a given cell ID
   findChildrenCells(parentId: string | undefined): NotebookCell[] {
     if (!parentId) return [];
@@ -1147,5 +948,46 @@ export class CellManager {
     });
     
     return lastChild.id;
+  }
+
+  // Update or create a cell by ID
+  updateCellById(
+    cellId: string,
+    content: string,
+    type: CellType = 'markdown',
+    role: CellRole = 'assistant',
+    parent?: string
+  ): void {
+    // Check if cell exists
+    const existingCell = this.findCell(c => c.id === cellId);
+    
+    if (existingCell) {
+      // Update existing cell
+      this.setCells(prev => prev.map(cell => 
+        cell.id === cellId ? {
+          ...cell,
+          content,
+          metadata: {
+            ...cell.metadata,
+            isEditing: false,
+            parent
+          }
+        } : cell
+      ));
+    } else {
+      // Create new cell after current agent cell
+      const currentAgentCell = this.getCurrentAgentCell();
+      const newCellId = this.addCell(
+        type,
+        content,
+        role,
+        currentAgentCell,
+        parent,
+        undefined,
+        cellId
+      );
+      // Update current agent cell reference
+      this.setCurrentAgentCell(newCellId);
+    }
   }
 }

@@ -1,13 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-
+import { DefaultAgentConfig, AgentSettings } from '../../utils/chatCompletion';
 // Define interfaces for our settings
-export interface AgentSettings {
-  baseURL: string;
-  apiKey: string;
-  model: string;
-  temperature: number;
-  instructions: string;
-}
 
 interface AgentSettingsProps {
   settings?: AgentSettings;
@@ -15,32 +8,20 @@ interface AgentSettingsProps {
   className?: string;
 }
 
-const DEFAULT_SETTINGS: AgentSettings = {
-  baseURL: 'http://localhost:11434/v1/',
-  apiKey: 'ollama',
-  model: 'llama3.1:latest',
-  temperature: 0.7,
-  instructions: `You are a code assistant specialized in generating Python code for notebooks. Follow these guidelines:
-  1. When asked to generate code, write clean, well-documented Python
-  2. In case of errors, use the runCode tool to update the code cell with the new code and try again
-  3. When the user asks for explanations, provide clear markdown with concepts and code examples
-  4. If the user asks you to execute code, always use the runCode tool rather than suggesting manual execution
-  5. Always consider the previous cells and their outputs when generating new code
-  6. Prefer using visualizations and examples when explaining concepts`
-};
 
 export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({ 
-  settings = DEFAULT_SETTINGS,
+  settings = DefaultAgentConfig,
   onSettingsChange = () => {},
   className 
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [localSettings, setLocalSettings] = useState<AgentSettings>(settings);
+  const [localSettings, setLocalSettings] = useState<AgentSettings>(settings || DefaultAgentConfig);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    setLocalSettings(settings);
+    setLocalSettings(settings || DefaultAgentConfig);
+    onSettingsChange(settings || DefaultAgentConfig);
   }, [settings]);
 
   // Close dropdown when clicking outside
@@ -79,7 +60,7 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
 
   // Reset to defaults
   const handleReset = () => {
-    const newSettings = { ...DEFAULT_SETTINGS };
+    const newSettings = { ...DefaultAgentConfig };
     setLocalSettings(newSettings);
     try {
       onSettingsChange(newSettings);

@@ -4,6 +4,7 @@ import { ThebeStatus } from './ThebeStatus';
 import { ToolSelector } from './ToolSelector';
 import { Tool } from './ToolProvider';
 import { AgentSettingsPanel } from './AgentSettingsPanel';
+import { AgentSettings } from '../../utils/chatCompletion';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -12,7 +13,8 @@ interface ChatInputProps {
   isTyping?: boolean;
   isThebeReady?: boolean;
   onSelectTool?: (tool: Tool) => void;
-  agentInstructions?: string;
+  agentSettings?: AgentSettings;
+  onSettingsChange?: (settings: AgentSettings) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -22,7 +24,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isTyping = false,
   isThebeReady = false,
   onSelectTool,
-  agentInstructions
+  agentSettings,
+  onSettingsChange,
 }) => {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -80,7 +83,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         style={{ height: '36px' }}
       />
       <div className="flex items-center gap-2">
-        <AgentSettingsPanel instructions={agentInstructions} className="mx-1" />
+        <AgentSettingsPanel settings={agentSettings} onSettingsChange={onSettingsChange} className="mx-1" />
         {onSelectTool && <ToolSelector onSelectTool={onSelectTool} className="mx-1" />}
         <ThebeStatus />
         <button

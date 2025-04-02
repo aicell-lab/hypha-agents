@@ -12,9 +12,9 @@ import '../styles/notebook.css';
 import { useHyphaStore } from '../store/hyphaStore';
 import { ToolProvider, useTools } from '../components/chat/ToolProvider';
 import { JupyterOutput } from '../components/JupyterOutput';
-import { chatCompletion } from '../utils/chatCompletion';
+import { structuredChatCompletion } from '../utils/chatCompletion';
 // Import icons
-import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner } from 'react-icons/fa';
+import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaCopy } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -22,7 +22,7 @@ import { CellManager } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
 import LoginButton from '../components/LoginButton';
-import { AgentSettingsPanel, AgentSettings } from '../components/chat/AgentSettingsPanel';
+import { AgentSettings, DefaultAgentConfig } from '../utils/chatCompletion';
 
 // Add type imports from chatCompletion
 import { ChatRole, ChatMessage } from '../utils/chatCompletion';
@@ -171,20 +171,6 @@ const loadFromLocalStorage = (): { cells: NotebookCell[]; metadata: NotebookMeta
   };
 };
 
-// Update defaultAgentConfig to use the AgentSettings interface
-const defaultAgentConfig: AgentSettings = {
-  baseURL: 'http://localhost:11434/v1/',
-  apiKey: 'ollama',
-  model: 'llama3.1:latest',
-  temperature: 0.7,
-  instructions: `You are a code assistant specialized in generating Python code for notebooks. Follow these guidelines:
-  1. When asked to generate code, write clean, well-documented Python
-  2. In case of errors, use the runCode tool to update the code cell with the new code and try again
-  3. When the user asks for explanations, provide clear markdown with concepts and code examples
-  4. If the user asks you to execute code, always use the runCode tool rather than suggesting manual execution
-  5. Always consider the previous cells and their outputs when generating new code
-  6. Prefer using visualizations and examples when explaining concepts`
-};
 
 const KeyboardShortcutsDialog: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const shortcuts = [
@@ -294,11 +280,12 @@ With the cell_id, you can update the cell content in the subsequent tool call, e
   return { tools, isToolRegistered };
 };
 
+const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
+
 // Function to create a short version of output content
 const createShortContent = (content: string, type: string): string => {
   const maxLength = 4096;
-  const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
-  
+
   if (content.length <= maxLength) return content;
   
   switch (type) {
@@ -387,6 +374,8 @@ const defaultNotebookMetadata: NotebookMetadata = {
   modified: new Date().toISOString()
 };
 
+// Add default agent configuration
+
 
 // Hook to use cell manager
 function useCellManager(
@@ -444,30 +433,12 @@ const NotebookPage: React.FC = () => {
   const lastAgentCellRef = useRef<string | null>(null);
   
   // Add chat agent state
-  const { server, isLoggedIn, user } = useHyphaStore();
-  const [schemaAgents, setSchemaAgents] = useState<any>(null);
+  const { server, isLoggedIn } = useHyphaStore();
   const [isProcessingAgentResponse, setIsProcessingAgentResponse] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [isAIReady, setIsAIReady] = useState(false);
-  const [executingCells, setExecutingCells] = useState<Set<string>>(new Set());
-
   // Add state for agent settings with proper initialization from localStorage
-  const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => {
-    const savedSettings = localStorage.getItem('agent_settings');
-    if (savedSettings) {
-      try {
-        return JSON.parse(savedSettings);
-      } catch (e) {
-        console.error('Error parsing saved agent settings:', e);
-      }
-    }
-    return defaultAgentConfig;
-  });
-
-  // Add effect to save settings to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem('agent_settings', JSON.stringify(agentSettings));
-  }, [agentSettings]);
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(DefaultAgentConfig);
 
   // Initialize the cell manager
   const cellManager = useCellManager(
@@ -533,23 +504,16 @@ const NotebookPage: React.FC = () => {
   // Execute a cell with management of execution states
   const executeCell = async (id: string, shouldMoveFocus: boolean = false) => {
     setIsProcessingAgentResponse(true);
-    
-    setExecutingCells((prev: Set<string>) => {
-      const newSet = new Set(prev);
-      newSet.add(id);
-      return newSet;
-    });
-
-    await cellManager.executeCell(id, shouldMoveFocus);
-    
-    setExecutingCells((prev: Set<string>) => {
-      const newSet = new Set(prev);
-      newSet.delete(id);
-      if (newSet.size === 0) {
-        setIsProcessingAgentResponse(false);
-      }
-      return newSet;
-    });
+    try {
+      await cellManager.executeCell(id, shouldMoveFocus);
+    }
+    catch (error) {
+      console.error('[DEBUG] Error in executeCell:', error);
+      throw error;
+    }
+    finally {
+      setIsProcessingAgentResponse(false);
+    }
   };
 
   // Update handleExecuteCode to use lastUserCellRef
@@ -573,15 +537,15 @@ const NotebookPage: React.FC = () => {
           'code', 
           code, 
           'assistant', 
-          lastAgentCellRef.current || undefined,
+          cellManager.getCurrentAgentCell() || undefined,
           lastUserCellRef.current || undefined
         );
         console.log('[DEBUG] Added code cell:', actualCellId, 'with parent:', lastUserCellRef.current);
         
         // Set the active cell to the new code cell
         cellManager.setActiveCell(actualCellId);
-        // Update the lastAgentCellRef to the new code cell
-        lastAgentCellRef.current = actualCellId;
+        cellManager.setCurrentAgentCell(actualCellId);
+ 
       }
 
       // Update cell state to running and execute the code
@@ -654,7 +618,7 @@ const NotebookPage: React.FC = () => {
             }
           }
         });
-        return `[Cell Id: ${actualCellId}]\n${shortOutput.trim() || "Code executed successfully. No output generated."}`;
+        return `[Cell Id: ${actualCellId}]\n${stripAnsi(shortOutput.trim()) || "Code executed successfully."}`;
       } catch (error) {
         console.error("[DEBUG] executeCode error:", error);
         
@@ -684,36 +648,8 @@ const NotebookPage: React.FC = () => {
   // Update initialization effect to just check for server and login
   useEffect(() => {
     let isMounted = true;
-    
-    const initializeAgent = async () => {
-      if (!server || !isLoggedIn) {
-        setIsAIReady(false);
-        setInitializationError(!isLoggedIn ? "Please log in to use the AI assistant." : "Waiting for server connection...");
-        return;
-      }
-
-      try {
-        const service = await server.getService("schema-agents");
-        if (!isMounted) return;
-
-        if (service) {
-          setSchemaAgents(service);
-          setInitializationError(null);
-          setIsAIReady(true);
-        } else {
-          setIsAIReady(false);
-          setInitializationError("Could not connect to the AI service. Please check your connection.");
-        }
-      } catch (error) {
-        if (!isMounted) return;
-        console.error('[DEBUG] Failed to initialize schema-agents:', error);
-        setIsAIReady(false);
-        setInitializationError("Error connecting to AI service: " + 
-          (error instanceof Error ? error.message : "Unknown error"));
-      }
-    };
-
-    initializeAgent();
+    setInitializationError(null);
+    setIsAIReady(true);
     
     return () => {
       isMounted = false;
@@ -726,7 +662,7 @@ const NotebookPage: React.FC = () => {
     if (upToCellId) {
       const cellIndex = cells.findIndex(cell => cell.id === upToCellId);
       if (cellIndex !== -1) {
-        relevantCells = cells.slice(0, cellIndex);
+        relevantCells = cells.slice(0, cellIndex+1);
       }
     }
     return convertCellsToHistory(relevantCells).map(msg => ({
@@ -763,11 +699,11 @@ const NotebookPage: React.FC = () => {
 
       const userCellId = cellManager.addCell('markdown', message, 'user', normalizedActiveCellId || undefined);
       cellManager.setActiveCell(userCellId);
-      
+      cellManager.setCurrentAgentCell(userCellId);
       lastUserCellRef.current = userCellId;
 
       // Use agent settings in chat completion
-      const completion = chatCompletion({
+      const completion = structuredChatCompletion({
         messages: history,
         systemPrompt: agentSettings.instructions,
         tools,
@@ -782,12 +718,22 @@ const NotebookPage: React.FC = () => {
             return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
           }
           return `Tool ${toolCall.name} not implemented`;
+        },
+        onMessage: (completionId: string, message: string) => {
+          console.log('[DEBUG] New Message:', message);
+          cellManager.updateCellById(
+            completionId,
+            message,
+            'markdown',
+            'assistant',
+            lastUserCellRef.current || undefined
+          );
         }
       });
 
       // Process the completion stream
       for await (const item of completion) {
-        cellManager.handleAgentResponse(item, lastUserCellRef.current);
+        console.log('[DEBUG] New Response Item:', item);
       }
     } catch (error) {
       console.error('Error in chat completion:', error);
@@ -818,8 +764,7 @@ const NotebookPage: React.FC = () => {
       
       // Find the cell's current index before deletion
       const currentIndex = cells.findIndex(cell => cell.id === cellId);
-      const previousCellId = currentIndex > 0 ? cells[currentIndex - 1].id : undefined;
-      
+
       // Delete the cell and its responses first
       cellManager.deleteCellWithChildren(cellId);
       
@@ -838,6 +783,7 @@ const NotebookPage: React.FC = () => {
       
       lastUserCellRef.current = newCellId;
       cellManager.setActiveCell(newCellId);
+      cellManager.setCurrentAgentCell(newCellId);
       
       await new Promise(resolve => setTimeout(resolve, 0));
       
@@ -847,7 +793,7 @@ const NotebookPage: React.FC = () => {
         content: messageContent,
       });
       // Start chat completion
-      const completion = chatCompletion({
+      const completion = structuredChatCompletion({
         messages: history,
         systemPrompt: agentSettings.instructions,
         tools,
@@ -862,12 +808,22 @@ const NotebookPage: React.FC = () => {
             return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
           }
           return `Tool ${toolCall.name} not implemented`;
+        },
+        onMessage: (completionId: string, message: string) => {
+          console.log('[DEBUG] New Message:', message);
+          cellManager.updateCellById(
+            completionId,
+            message,
+            'markdown',
+            'assistant',
+            lastUserCellRef.current || undefined
+          );
         }
       });
 
       // Process the completion stream
       for await (const item of completion) {
-        cellManager.handleAgentResponse(item, lastUserCellRef.current);
+        console.log('[DEBUG] New Response Item:', item);
       }
     } catch (error) {
       console.error('[DEBUG] Error regenerating responses:', error);
@@ -1276,6 +1232,24 @@ const NotebookPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cells, notebookMetadata, cellManager]);
 
+  // Add copy to clipboard function
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Show a brief success message
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
+      messageDiv.textContent = 'Copied to clipboard';
+      document.body.appendChild(messageDiv);
+      setTimeout(() => {
+        messageDiv.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(messageDiv), 500);
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
@@ -1426,15 +1400,7 @@ const NotebookPage: React.FC = () => {
 
               {/* Add login button section */}
               <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
-                <AgentSettingsPanel
-                  settings={agentSettings}
-                  onSettingsChange={(newSettings) => {
-                    setAgentSettings(newSettings);
-                    // Save to localStorage
-                    localStorage.setItem('agent_settings', JSON.stringify(newSettings));
-                  }}
-                  className="scale-75"
-                />
+                
                 <LoginButton className="scale-75 z-100" />
               </div>
             </div>
@@ -1544,6 +1510,19 @@ const NotebookPage: React.FC = () => {
 
                   {cell.type === 'code' && (
                     <>
+                      {/* Add Copy Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(cell.content);
+                        }}
+                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                        title="Copy code"
+                      >
+                        <FaCopy className="w-3.5 h-3.5" />
+                        <span className="text-xs">Copy</span>
+                      </button>
+
                       {/* Hide/Show Code Button - Moved before Run button */}
                       <button
                         onClick={(e: React.MouseEvent) => {
@@ -1619,16 +1598,32 @@ const NotebookPage: React.FC = () => {
                           <span className="text-xs">Render</span>
                         </button>
                       ) : (
-                        <button
-                          onClick={() => cellManager.toggleCellEditing(cell.id, true)}
-                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                          title="Edit markdown"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                          </svg>
-                          <span className="text-xs">Edit</span>
-                        </button>
+                        <>
+                         
+                          {/* Add Copy Button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(cell.content);
+                            }}
+                            className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                            title="Copy markdown"
+                          >
+                            <FaCopy className="w-3.5 h-3.5" />
+                            <span className="text-xs">Copy</span>
+                          </button>
+                          <button
+                            onClick={() => cellManager.toggleCellEditing(cell.id, true)}
+                            className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                            title="Edit markdown"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                            </svg>
+                            <span className="text-xs">Edit</span>
+                          </button>
+                         
+                        </>
                       )}
                       
                       <button
@@ -1740,32 +1735,6 @@ const NotebookPage: React.FC = () => {
                 "Ask a question or use commands like /code or /markdown to add specific cell types"}
               </p>
             )}
-            {initializationError && !isAIReady && isLoggedIn && (
-              <button 
-                onClick={async () => {
-                  try {
-                    setInitializationError(null);
-                    const service = await server.getService("schema-agents");
-                    if (service) {
-                      setSchemaAgents(service);
-                      setInitializationError(null);
-                      setIsAIReady(true);
-                    } else {
-                      setIsAIReady(false);
-                      setInitializationError("Could not connect to the AI service. Please check your connection.");
-                    }
-                  } catch (error: unknown) {
-                    console.error('[DEBUG] Failed to initialize schema-agents:', error);
-                    setIsAIReady(false);
-                    setInitializationError("Error connecting to AI service: " + 
-                      (error instanceof Error ? error.message : "Unknown error"));
-                  }
-                }}
-                className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition"
-              >
-                Retry Connection
-              </button>
-            )}
           </div>
           <ChatInput 
             onSend={handleSendMessage} 
@@ -1778,7 +1747,8 @@ const NotebookPage: React.FC = () => {
               isProcessingAgentResponse ? "AI is thinking..." :
               "Enter text or command (e.g., /code, /markdown, /clear)"
             }
-            agentInstructions={agentSettings.instructions}
+            agentSettings={agentSettings}
+            onSettingsChange={setAgentSettings}
           />
         </div>
       </div>
