@@ -37,7 +37,7 @@ const CodeAgentResponse = z.object({
   response: z.string().describe('Response to be displayed to the user'),
   script: z.string().optional().describe('Optional: The python script to be executed to fulfill the request'),
 //   cell_id: z.string().optional().describe('Optional: used to update an existing cell for error recovery; if not provided, a new cell will be created'),
-  is_final: z.boolean().describe('Whether the response is final'),
+//   is_final: z.boolean().describe('Whether the response is final'),
 });
 
 
@@ -61,8 +61,7 @@ export const DefaultAgentConfig: AgentSettings = {
      You must respond in a structured format with the following fields:
      - thoughts (required): Your reasoning process and analysis of the situation
      - response (required): Your main response to the user, explaining what you're doing or your findings
-     - script (optional): Python code to execute to gather information or perform actions; Must be a valid python script
-     - is_final (required): Whether the response is final
+     - script (optional): Python code to execute to gather information or perform actions; Must be a valid multi-line python script
   
   2. INTERACTION FLOW
      - If you need information: Include a script to gather it, then wait for results
@@ -265,17 +264,8 @@ export async function* structuredChatCompletion({
             type: 'text',
             content: parsedResponse.response
         };
-        messages.push({
-          role: 'assistant',
-          content: parsedResponse.response
-        });
-        messages.push({
-          role: 'user',
-          content: `Please continue with the next step.`
-        });
-        if(parsedResponse.is_final){
-            break;
-        }
+  
+        break;
       }
       
     }
