@@ -1156,18 +1156,37 @@ const NotebookPage: React.FC = () => {
         // Clear existing cells using cellManager
         cellManager.clearAllCells();
         
+        // Create a mapping of old cell IDs to new cell IDs
+        const idMapping: { [oldId: string]: string } = {};
+        
         // Add a small delay to ensure cells are cleared before adding new ones
         setTimeout(() => {
-          // Create new cells using cellManager
-          notebookData.cells.forEach((cell, index) => {
-            // Create the cell with the appropriate type, content and role
-            const cellId = cellManager.addCell(
+          // First pass: Create all cells and build ID mapping
+          notebookData.cells.forEach((cell) => {
+            const oldId = cell.id;
+            const newCellId = cellManager.addCell(
               cell.type, 
               cell.content || '',
-              cell.role || (cell.metadata?.role as CellRole | undefined),
-              undefined, // afterCellId
-              cell.metadata?.parent // Pass the parent ID from metadata
+              cell.role || (cell.metadata?.role as CellRole | undefined)
             );
+            idMapping[oldId] = newCellId;
+          });
+          
+          // Second pass: Update parent references and other cell properties
+          notebookData.cells.forEach((cell, index) => {
+            const newCellId = idMapping[cell.id];
+            if (!newCellId) return;
+            
+            // Update parent reference if it exists
+            if (cell.metadata?.parent) {
+              const newParentId = idMapping[cell.metadata.parent];
+              if (newParentId) {
+                cellManager.updateCellMetadata(newCellId, {
+                  ...cell.metadata,
+                  parent: newParentId
+                });
+              }
+            }
             
             // Update cell with execution state and outputs if they exist
             if (cell.executionCount) {
@@ -1181,17 +1200,17 @@ const NotebookPage: React.FC = () => {
                   }
                 })) : undefined;
                 
-              cellManager.updateCellExecutionState(cellId, executionState, outputs);
+              cellManager.updateCellExecutionState(newCellId, executionState, outputs);
             }
             
             // Set code visibility based on metadata
             if (cell.type === 'code' && cell.metadata?.isCodeVisible === false) {
-              cellManager.toggleCodeVisibility(cellId);
+              cellManager.toggleCodeVisibility(newCellId);
             }
             
             // If it's the last cell, make it active
             if (index === notebookData.cells.length - 1) {
-              cellManager.setActiveCell(cellId);
+              cellManager.setActiveCell(newCellId);
             }
           });
 
