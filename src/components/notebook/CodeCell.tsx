@@ -443,7 +443,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               ? <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
               : executionCount
               ? `[${executionCount}]:`
-              : ''}
+              : '[*]:'}
           </div>
         </div>
         
@@ -537,7 +537,11 @@ export const CodeCell: React.FC<CodeCellProps> = ({
         <div className={`jupyter-cell-flex-container mt-1 ${parent ? 'child-cell' : 'parent-cell'}`}>
           {/* Empty execution count to align with code */}
           <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-            {executionCount ? `[${executionCount}]:` : '[*]:'}
+          {isExecuting 
+              ? <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
+              : executionCount
+              ? `[${executionCount}]:`
+              : '[*]:'}
           </div>
           <div className="editor-container w-full overflow-hidden">
             <div className="bg-gray-50 p-2 rounded-b-md border-none">
