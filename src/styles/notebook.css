@@ -33,7 +33,7 @@
 .editor-container {
   flex-grow: 1;
   min-width: 0;
-  max-width: calc(100% - 64px); /* Account for execution count width */
+  max-width: calc(100% - 74px); /* Account for execution count width */
   overflow: hidden;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
@@ -90,14 +90,7 @@
 }
 
 .parent-cell::after {
-  content: '';
-  position: absolute;
-  left: 0px;
-  top: 0;
-  height: 100%;
-  width: 1px;
-  background-color: rgba(79, 118, 187, 0.261); /* Tailwind gray-400 */
-  transition: background-color 0.2s ease;
+
 }
 
 
