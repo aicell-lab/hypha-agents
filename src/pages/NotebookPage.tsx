@@ -265,6 +265,8 @@ const NotebookPage: React.FC = () => {
   const editorRefs = useRef<{ [key: string]: React.RefObject<any> }>({});
   const lastUserCellRef = useRef<string | null>(null);
   const lastAgentCellRef = useRef<string | null>(null);
+  // Add state for system prompts visibility
+  const [showSystemPrompts, setShowSystemPrompts] = useState(false);
 
   // Add chat agent state
   const { server, isLoggedIn } = useHyphaStore();
@@ -1144,6 +1146,25 @@ const NotebookPage: React.FC = () => {
     );
   };
 
+  // Add function to toggle system prompts visibility
+  const toggleSystemPrompts = useCallback(() => {
+    setShowSystemPrompts(prev => !prev);
+    // Update visibility of all system cells
+    setCells(prev => prev.map(cell => {
+      if (cell.role === 'system') {
+        return {
+          ...cell,
+          metadata: {
+            ...cell.metadata,
+            isCodeVisible: !showSystemPrompts,
+            isOutputVisible: !showSystemPrompts
+          }
+        };
+      }
+      return cell;
+    }));
+  }, [showSystemPrompts]);
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
@@ -1212,6 +1233,8 @@ const NotebookPage: React.FC = () => {
                 }, 100);
               }}
               onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
+              onToggleSystemPrompts={toggleSystemPrompts}
+              showSystemPrompts={showSystemPrompts}
               isProcessing={isProcessingAgentResponse}
               isReady={isReady}
             />
@@ -1220,7 +1243,7 @@ const NotebookPage: React.FC = () => {
       </div>
 
       {/* Notebook Content Area - Add more bottom padding */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 pb-48">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-1 pb-48">
         <div className="max-w-5xl mx-auto px-4 notebook-cells-container bg-gray-100">
           {cells.map((cell, index) => (
             <div

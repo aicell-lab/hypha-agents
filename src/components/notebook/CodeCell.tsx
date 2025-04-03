@@ -16,6 +16,7 @@ import { MdOutlineTextFields } from 'react-icons/md';
 import { FaSpinner } from 'react-icons/fa';
 import { JupyterOutput } from '../JupyterOutput';
 import { OutputItem } from '../chat/Chat';
+import { RiRobot2Line } from 'react-icons/ri';
 
 const convert = new Convert({
   fg: '#000',
@@ -412,126 +413,162 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     return firstLine.length > 50 ? firstLine.slice(0, 47) + '...' : firstLine;
   };
 
+  // Add a check for fully collapsed system cell
+  const isFullyCollapsed = role === 'system' && hideCode;
+
   return (
     <div 
       ref={editorDivRef}
-      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${parent ? 'child-cell' : 'parent-cell'} ${role === 'system' ? 'bg-gray-100' : ''}`}
+      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${parent ? 'child-cell' : 'parent-cell'} ${role === 'system' ? 'bg-gray-50' : ''}`}
       onClick={handleEditorClick}
       data-parent={parent || undefined}
     >
-      <div className="jupyter-cell-flex-container items-start w-full max-w-full">
-        {/* Execution count with role icon */}
-        <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-          {role !== undefined && onRoleChange && (
-            <div className="pr-2">
-              <RoleSelector role={role} onChange={onRoleChange} />
-            </div>
-          )}
-          <div className="text-gray-500">
-            {isExecuting 
-              ? <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
-              : executionCount
-              ? `[${executionCount}]:`
-              : '[*]:'}
+      {isFullyCollapsed ? (
+        // Minimal icon view for collapsed system cells
+        <div 
+          className="flex items-center justify-center py-0.5 cursor-pointer hover:bg-gray-100 rounded transition-colors min-h-[24px] mx-2 my-0.5"
+          onClick={(e) => {
+            e.stopPropagation();
+            onVisibilityChange?.(!hideCode);
+            onOutputVisibilityChange?.(!hideOutput);
+          }}
+          role="button"
+          tabIndex={0}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onVisibilityChange?.(!hideCode);
+              onOutputVisibilityChange?.(!hideOutput);
+            }
+          }}
+          title="System Configuration"
+        >
+          <div className="flex items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
+            <RiRobot2Line className="w-3 h-3 text-gray-500" />
+            <span className="text-xs text-gray-500">Agent System Configuration</span>
           </div>
         </div>
-        
-        {/* Editor */}
-        <div className={`editor-container mt-2 w-full overflow-hidden ${isActive ? 'editor-container-active' : ''}`}>
-          {/* Collapsed Code Cell Header */}
-          {hideCode && (
-            <div 
-              className="flex items-center gap-2 p-2 bg-gray-50 rounded-t-md cursor-pointer hover:bg-gray-100 transition-colors relative"
-              onClick={handleVisibilityToggle}
-              role="button"
-              tabIndex={0}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleVisibilityToggle(e as any);
-                }
-              }}
-            >
-              <svg 
-                className={`w-4 h-4 text-gray-500 transform transition-transform ${hideCode ? 'rotate-0' : 'rotate-90'}`}
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
+      ) : (
+        <div className="jupyter-cell-flex-container items-start w-full max-w-full">
+          {/* Execution count with role icon */}
+          <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
+            {role !== undefined && onRoleChange && (
+              <div className="pr-1">
+                <RoleSelector role={role} onChange={onRoleChange} />
+              </div>
+            )}
+            {isExecuting ? (
+              <div className="text-gray-500 pr-1">
+                <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
+              </div>
+            ) : (
+              <div className="text-gray-500">
+                {executionCount ? `[${executionCount}]:` : '[*]:'}
+              </div>
+            )}
+          </div>
+          
+          {/* Editor */}
+          <div className={`editor-container mt-2 w-full overflow-hidden ${isActive ? 'editor-container-active' : ''}`}>
+            {/* Collapsed Code Cell Header */}
+            {hideCode && (
+              <div 
+                className="flex items-center gap-2 p-2 bg-gray-50 rounded-t-md cursor-pointer hover:bg-gray-100 transition-colors relative"
+                onClick={handleVisibilityToggle}
+                role="button"
+                tabIndex={0}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleVisibilityToggle(e as any);
+                  }
+                }}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              <span className="text-sm text-gray-600 font-mono">
-                {language === 'python' ? 'Python Code' : language}
-                {getCodePreview() && ` • ${getCodePreview()}`}
-              </span>
-            </div>
-          )}
+                <svg 
+                  className={`w-4 h-4 text-gray-500 transform transition-transform ${hideCode ? 'rotate-0' : 'rotate-90'}`}
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="text-sm text-gray-600 font-mono">
+                  {language === 'python' ? 'Python Code' : language}
+                  {getCodePreview() && ` • ${getCodePreview()}`}
+                </span>
+              </div>
+            )}
 
-          {/* Expandable Code Editor */}
-          {!hideCode && (
-            <div className="relative">
-              <Editor
-                height={editorHeight}
-                language={language}
-                value={codeValue}
-                onChange={(value) => {
-                  const newValue = value || '';
-                  setCodeValue(newValue);
-                  onChange?.(newValue);
-                  setTimeout(updateEditorHeight, 10);
-                }}
-                onMount={handleEditorDidMount}
-                beforeMount={handleBeforeMount}
-                options={{
-                  minimap: { enabled: false },
-                  scrollBeyondLastLine: false,
-                  wordWrap: 'on',
-                  lineNumbers: 'on',
-                  renderWhitespace: 'selection',
-                  folding: true,
-                  fontSize: 13,
-                  fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-                  lineHeight: 1.5,
-                  padding: { top: 8, bottom: 8 },
-                  glyphMargin: false,
-                  lineDecorationsWidth: 0,
-                  lineNumbersMinChars: 2,
-                  renderLineHighlight: 'none',
-                  overviewRulerBorder: false,
-                  scrollbar: {
-                    vertical: 'auto',
-                    horizontalSliderSize: 4,
-                    verticalSliderSize: 4,
-                    horizontal: 'hidden',
-                    useShadows: false,
-                    verticalHasArrows: false,
-                    horizontalHasArrows: false,
-                    alwaysConsumeMouseWheel: false
-                  },
-                  overviewRulerLanes: 0,
-                  hideCursorInOverviewRuler: true,
-                  contextmenu: false,
-                  fixedOverflowWidgets: true,
-                  automaticLayout: true
-                }}
-                className="jupyter-editor w-full max-w-full overflow-x-hidden"
-              />
-            </div>
-          )}
+            {/* Expandable Code Editor */}
+            {!hideCode && (
+              <div className="relative">
+                <Editor
+                  height={editorHeight}
+                  language={language}
+                  value={codeValue}
+                  onChange={(value) => {
+                    const newValue = value || '';
+                    setCodeValue(newValue);
+                    onChange?.(newValue);
+                    setTimeout(updateEditorHeight, 10);
+                  }}
+                  onMount={handleEditorDidMount}
+                  beforeMount={handleBeforeMount}
+                  options={{
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'on',
+                    lineNumbers: 'on',
+                    renderWhitespace: 'selection',
+                    folding: true,
+                    fontSize: 13,
+                    fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+                    lineHeight: 1.5,
+                    padding: { top: 8, bottom: 8 },
+                    glyphMargin: false,
+                    lineDecorationsWidth: 0,
+                    lineNumbersMinChars: 2,
+                    renderLineHighlight: 'none',
+                    overviewRulerBorder: false,
+                    scrollbar: {
+                      vertical: 'auto',
+                      horizontalSliderSize: 4,
+                      verticalSliderSize: 4,
+                      horizontal: 'hidden',
+                      useShadows: false,
+                      verticalHasArrows: false,
+                      horizontalHasArrows: false,
+                      alwaysConsumeMouseWheel: false
+                    },
+                    overviewRulerLanes: 0,
+                    hideCursorInOverviewRuler: true,
+                    contextmenu: false,
+                    fixedOverflowWidgets: true,
+                    automaticLayout: true
+                  }}
+                  className="jupyter-editor w-full max-w-full overflow-x-hidden"
+                />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Output Area */}
-      {output && output.length > 0 && (
+      {/* Output Area - only show if not fully collapsed */}
+      {!isFullyCollapsed && output && output.length > 0 && (
         <div className={`jupyter-cell-flex-container mt-1 ${parent ? 'child-cell' : 'parent-cell'}`}>
           {/* Empty execution count to align with code - only shown when output is visible */}
           {!hideOutput && (
             <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-              {isExecuting 
-                ? <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
-                : executionCount
-                ? `[${executionCount}]:`
-                : '[*]:'}
+              {isExecuting ? (
+                <div className="text-gray-500 pr-1">
+                  <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
+                </div>
+              ) : (
+                <div className="text-gray-500">
+                  {executionCount ? `[${executionCount}]:` : '[*]:'}
+                </div>
+              )}
             </div>
           )}
           <div className="w-full overflow-visible relative group">

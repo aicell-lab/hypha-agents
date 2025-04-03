@@ -3,6 +3,7 @@ import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSp
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
+import { RiRobot2Line } from 'react-icons/ri';
 import LoginButton from '../LoginButton';
 
 interface FileOperationsProps {
@@ -96,12 +97,16 @@ interface CellControlsProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
+  onToggleSystemPrompts: () => void;
+  showSystemPrompts: boolean;
 }
 
 export const CellControls: React.FC<CellControlsProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
-  onShowKeyboardShortcuts
+  onShowKeyboardShortcuts,
+  onToggleSystemPrompts,
+  showSystemPrompts
 }) => (
   <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
     <button 
@@ -119,6 +124,13 @@ export const CellControls: React.FC<CellControlsProps> = ({
     >
       <MdOutlineTextFields className="w-3.5 h-3.5" />
       <AiOutlinePlus className="w-2.5 h-2.5 ml-0.5" />
+    </button>
+    <button
+      onClick={onToggleSystemPrompts}
+      className={`p-1.5 hover:bg-gray-100 rounded transition flex items-center ${showSystemPrompts ? 'text-blue-600' : 'text-gray-500'}`}
+      title={`${showSystemPrompts ? 'Hide' : 'Show'} system prompts`}
+    >
+      <RiRobot2Line className="w-3.5 h-3.5" />
     </button>
     <button
       onClick={onShowKeyboardShortcuts}
@@ -146,6 +158,8 @@ interface NotebookToolbarProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
+  onToggleSystemPrompts: () => void;
+  showSystemPrompts: boolean;
   isProcessing: boolean;
   isReady: boolean;
 }
@@ -160,6 +174,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
+  onToggleSystemPrompts,
+  showSystemPrompts,
   isProcessing,
   isReady
 }) => (
@@ -176,6 +192,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       onAddCodeCell={onAddCodeCell}
       onAddMarkdownCell={onAddMarkdownCell}
       onShowKeyboardShortcuts={onShowKeyboardShortcuts}
+      onToggleSystemPrompts={onToggleSystemPrompts}
+      showSystemPrompts={showSystemPrompts}
     />
     <LoginSection />
   </div>
