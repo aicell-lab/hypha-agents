@@ -445,7 +445,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
         >
           <div className="flex items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
             <RiRobot2Line className="w-3 h-3 text-gray-500" />
-            <span className="text-xs text-gray-500">Agent System Configuration</span>
+            <span className="text-xs text-gray-500">System Configuration</span>
           </div>
         </div>
       ) : (
