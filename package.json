@@ -35,7 +35,6 @@
     "jszip": "^3.10.1",
     "katex": "^0.16.21",
     "lib0": "^0.2.101",
-
     "openai": "^4.86.0",
     "path-browserify": "^1.0.1",
     "prismjs": "^1.29.0",
@@ -53,6 +52,7 @@
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "strip-ansi": "^7.1.0",
     "styled-components": "^6.1.15",
     "tailwindcss": "^3.4.1",
     "terminal-in-react": "^4.3.1",
@@ -94,7 +94,6 @@
     ]
   },
   "devDependencies": {
-    "monaco-editor": "^0.52.2",
     "@tailwindcss/forms": "^0.5.10",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.3",
@@ -109,6 +108,7 @@
     "autoprefixer": "^10.0.0",
     "buffer": "^6.0.3",
     "fs-extra": "^11.3.0",
+    "monaco-editor": "^0.52.2",
     "postcss": "^8.0.0",
     "process": "^0.11.10",
     "react-app-rewired": "^2.2.1",

@@ -11,7 +11,6 @@ import '../styles/ansi.css';
 import '../styles/notebook.css';
 import { useHyphaStore } from '../store/hyphaStore';
 import { ToolProvider, useTools } from '../components/chat/ToolProvider';
-import { JupyterOutput } from '../components/JupyterOutput';
 import { structuredChatCompletion } from '../utils/chatCompletion';
 import { NotebookToolbar } from '../components/notebook/NotebookToolbar';
 // Import icons
@@ -22,7 +21,6 @@ import { MdOutlineTextFields } from 'react-icons/md';
 import { CellManager } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
-import LoginButton from '../components/LoginButton';
 import { AgentSettings, DefaultAgentConfig } from '../utils/chatCompletion';
 import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
 
@@ -58,6 +56,7 @@ interface NotebookCell {
     role?: CellRole;
     isEditing?: boolean;
     isCodeVisible?: boolean;
+    isOutputVisible?: boolean;
     hasOutput?: boolean;
     userModified?: boolean;
     parent?: string; // ID of the parent cell (for tracking agent responses to user messages)
@@ -83,97 +82,6 @@ interface NotebookData {
   cells: NotebookCell[];
 }
 
-// Add localStorage constants and helpers
-const STORAGE_KEY = 'notebook_state';
-const AUTO_SAVE_DELAY = 1000; // 1 second delay for auto-save
-
-// Helper to safely stringify notebook state
-const safeStringify = (data: any) => {
-  try {
-    return JSON.stringify(data);
-  } catch (error) {
-    console.error('Error stringifying notebook data:', error);
-    return null;
-  }
-};
-
-// Helper to safely parse notebook state
-const safeParse = (str: string | null) => {
-  if (!str) return null;
-  try {
-    return JSON.parse(str);
-  } catch (error) {
-    console.error('Error parsing notebook data:', error);
-    return null;
-  }
-};
-
-// Helper to save notebook state to localStorage
-const saveToLocalStorage = (cells: NotebookCell[], metadata: NotebookMetadata) => {
-  const data = safeStringify({
-    cells: cells.map(cell => ({
-      ...cell,
-      output: cell.output ? cell.output.map(output => ({
-        ...output,
-        attrs: {
-          ...output.attrs,
-          className: undefined // Remove className as it's UI-specific
-        }
-      })) : undefined,
-      metadata: {
-        ...cell.metadata,
-        hasOutput: cell.output && cell.output.length > 0,
-        parent: cell.metadata?.parent // Explicitly preserve parent key
-      }
-    })),
-    metadata: {
-      ...metadata,
-      modified: new Date().toISOString()
-    }
-  });
-  
-  if (data) {
-    try {
-      localStorage.setItem(STORAGE_KEY, data);
-      console.log('[DEBUG] Saved notebook with cells:', cells.length);
-    } catch (error) {
-      console.error('Error saving to localStorage:', error);
-    }
-  }
-};
-
-// Helper to load notebook state from localStorage
-const loadFromLocalStorage = (): { cells: NotebookCell[]; metadata: NotebookMetadata } | null => {
-  const data = safeParse(localStorage.getItem(STORAGE_KEY));
-  if (!data) return null;
-  
-  // Ensure we have valid cells array and metadata
-  if (!Array.isArray(data.cells)) return null;
-  if (!data.metadata || typeof data.metadata !== 'object') return null;
-  
-  return {
-    cells: data.cells.map((cell: NotebookCell) => ({
-      ...cell,
-      id: Date.now().toString(36) + Math.random().toString(36).substring(2), // Generate new ID
-      executionState: 'idle',
-      output: cell.output ? cell.output.map((output: OutputItem) => ({
-        ...output,
-        attrs: {
-          ...output.attrs,
-          className: `output-area ${output.type === 'stderr' ? 'error-output' : ''}`
-        }
-      })) : undefined,
-      metadata: {
-        ...cell.metadata,
-        isNew: false,
-        parent: cell.metadata?.parent // Explicitly preserve parent key
-      }
-    })),
-    metadata: data.metadata
-  };
-};
-
-
 const KeyboardShortcutsDialog: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const shortcuts = [
     { key: 'Ctrl/Cmd + Enter', description: 'Run the current cell' },
@@ -188,11 +96,11 @@ const KeyboardShortcutsDialog: React.FC<{ isOpen: boolean; onClose: () => void }
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-      
+
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel className="mx-auto max-w-lg rounded bg-white p-6 shadow-xl">
           <Dialog.Title className="text-lg font-medium mb-4">Keyboard Shortcuts</Dialog.Title>
-          
+
           <div className="space-y-2">
             {shortcuts.map((shortcut, index) => (
               <div key={index} className="flex justify-between gap-4 py-1">
@@ -201,7 +109,7 @@ const KeyboardShortcutsDialog: React.FC<{ isOpen: boolean; onClose: () => void }
               </div>
             ))}
           </div>
-          
+
           <div className="mt-6 flex justify-end">
             <button
               onClick={onClose}
@@ -223,11 +131,11 @@ const useNotebookTools = (
 ) => {
   const { tools, registerTools } = useTools();
   const [isToolRegistered, setIsToolRegistered] = useState(false);
-  
+
   // Register the code execution tool
   useEffect(() => {
     if (!isReady || isToolRegistered) return;
-    
+
     // Check if tool is already registered to prevent duplicate registrations
     const existingTool = tools.find(tool => tool.name === 'runCode');
     if (existingTool) {
@@ -235,7 +143,7 @@ const useNotebookTools = (
       setIsToolRegistered(true);
       return;
     }
-    
+
     // Register the runCode tool for the agent to use
     console.log('[DEBUG] Registering runCode tool for notebook agent');
     const runCodeTool = {
@@ -278,88 +186,12 @@ With the cell_id, you can update the cell content in the subsequent tool call, e
     console.log('[DEBUG] Successfully registered notebook tools');
     setIsToolRegistered(true);
   }, [isReady, tools, registerTools, handleExecuteCode, isToolRegistered]);
-  
+
   return { tools, isToolRegistered };
 };
 
 const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
 
-// Function to create a short version of output content
-const createShortContent = (content: string, type: string): string => {
-  const maxLength = 4096;
-
-  if (content.length <= maxLength) return content;
-  
-  switch (type) {
-    case 'stdout':
-    case 'stderr':
-      return `${stripAnsi(content.substring(0, maxLength))}...`;
-    case 'html':
-      return `[HTML content truncated...]`;
-    case 'img':
-      return `[Image content truncated...]`;
-    case 'svg':
-      return `[SVG content truncated...]`;
-    default:
-      return `${content.substring(0, maxLength)}...`;
-  }
-};
-
-// Function to convert notebook cells to chat history
-const convertCellsToHistory = (cells: NotebookCell[]): Array<{role: string; content: string;}> => {
-  const history: Array<{role: string; content: string;}> = [];
-  
-  for (const cell of cells) {
-    // Skip cells without a role (they're not part of the conversation)
-    if (!cell.role) continue;
-    
-    if (cell.type === 'markdown') {
-      history.push({
-        role: cell.role,
-        content: cell.content
-      });
-    } else if (cell.type === 'code') {
-      // Start with the code content
-      let content = `\`\`\`python\n${cell.content}\n\`\`\`\n`;
-      
-      // Add outputs if they exist
-      if (cell.output && cell.output.length > 0) {
-        content += '\nOutput:\n';
-        for (const output of cell.output) {
-          switch (output.type) {
-            case 'stdout':
-            case 'stderr':
-              // Use createShortContent for long outputs
-              const shortContent = createShortContent(output.content, output.type);
-              content += `${output.type === 'stderr' ? 'Error: ' : ''}${shortContent}\n`;
-              break;
-            case 'html':
-              content += '[HTML Output]\n';
-              break;
-            case 'img':
-              content += '[Image Output]\n';
-              break;
-            case 'svg':
-              content += '[SVG Output]\n';
-              break;
-            default:
-              if (output.content) {
-                const shortContent = createShortContent(output.content, 'text');
-                content += `${shortContent}\n`;
-              }
-          }
-        }
-      }
-      
-      history.push({
-        role: cell.role,
-        content: content.trim()
-      });
-    }
-  }
-  
-  return history;
-};
 
 // Add default notebook metadata at the top of the file, after interfaces
 const defaultNotebookMetadata: NotebookMetadata = {
@@ -393,7 +225,7 @@ function useCellManager(
   executeCodeFn: any
 ) {
   const cellManagerRef = useRef<CellManager | null>(null);
-  
+
   if (!cellManagerRef.current) {
     cellManagerRef.current = new CellManager(
       cells,
@@ -415,7 +247,7 @@ function useCellManager(
     cellManagerRef.current.notebookMetadata = notebookMetadata;
     cellManagerRef.current.executeCodeFn = executeCodeFn;
   }
-  
+
   return cellManagerRef.current;
 }
 
@@ -433,7 +265,7 @@ const NotebookPage: React.FC = () => {
   const editorRefs = useRef<{ [key: string]: React.RefObject<any> }>({});
   const lastUserCellRef = useRef<string | null>(null);
   const lastAgentCellRef = useRef<string | null>(null);
-  
+
   // Add chat agent state
   const { server, isLoggedIn } = useHyphaStore();
   const [isProcessingAgentResponse, setIsProcessingAgentResponse] = useState(false);
@@ -459,12 +291,12 @@ const NotebookPage: React.FC = () => {
   // Load saved state on mount
   useEffect(() => {
     if (!hasInitialized.current) {
-      const savedState = loadFromLocalStorage();
+      const savedState = cellManager.loadFromLocalStorage();
       if (savedState) {
         console.log('Restored notebook state from localStorage');
         cellManager.setCells(savedState.cells);
         setNotebookMetadata(savedState.metadata);
-        
+
         // Find the highest execution count to continue from
         let maxExecutionCount = 0;
         savedState.cells.forEach(cell => {
@@ -473,6 +305,7 @@ const NotebookPage: React.FC = () => {
           }
         });
         setExecutionCounter(maxExecutionCount + 1);
+
       } else {
         // No saved state, add welcome cells
         console.log('No saved state found, adding welcome cells');
@@ -489,12 +322,12 @@ const NotebookPage: React.FC = () => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
-    
+
     // Set new auto-save timer with longer delay
     autoSaveTimerRef.current = setTimeout(() => {
       cellManager.saveToLocalStorage();
     }, 2000); // Increased delay to 2 seconds
-    
+
     // Cleanup timer on unmount
     return () => {
       if (autoSaveTimerRef.current) {
@@ -522,7 +355,7 @@ const NotebookPage: React.FC = () => {
   const handleExecuteCode = useCallback(async (code: string, cellId?: string): Promise<string> => {
     try {
       let actualCellId = cellId;
-      
+
       if (actualCellId) {
         // Update the existing code cell with the new code
         const existingCell = cellManager.findCell(c => c.id === actualCellId);
@@ -536,33 +369,34 @@ const NotebookPage: React.FC = () => {
       else {
         // Insert code cell after the agent cell with proper parent reference
         actualCellId = cellManager.addCell(
-          'code', 
-          code, 
-          'assistant', 
+          'code',
+          code,
+          'assistant',
           cellManager.getCurrentAgentCell() || undefined,
           lastUserCellRef.current || undefined
         );
         console.log('[DEBUG] Added code cell:', actualCellId, 'with parent:', lastUserCellRef.current);
-        
+        //collapse the code cell
+        cellManager.collapseCodeCell(actualCellId);
         // Set the active cell to the new code cell
         cellManager.setActiveCell(actualCellId);
         cellManager.setCurrentAgentCell(actualCellId);
- 
+
       }
 
       // Update cell state to running and execute the code
       cellManager.updateCellExecutionState(actualCellId, 'running');
-      
+
       const outputs: OutputItem[] = [];
       let shortOutput = '';
-      
+
       try {
         await executeCode(code, {
           onOutput: (output) => {
             // Process ANSI codes in output
             let processedOutput = output;
-            if ((output.type === 'stderr' || output.type === 'error') && 
-                (output.content.includes('[0;') || output.content.includes('[1;'))) {
+            if ((output.type === 'stderr' || output.type === 'error') &&
+              (output.content.includes('[0;') || output.content.includes('[1;'))) {
               try {
                 const htmlContent = convert.toHtml(output.content);
                 processedOutput = {
@@ -586,25 +420,22 @@ const NotebookPage: React.FC = () => {
                 }
               };
             }
-            
+
             // Add to outputs array
             outputs.push(processedOutput);
-            
+
             if (output.type === 'stdout' || output.type === 'stderr') {
               shortOutput += output.content + '\n';
             }
-            
+
             // Update cell with current outputs
             cellManager.updateCellExecutionState(actualCellId, 'running', outputs);
           },
           onStatus: (status) => {
             if (status === 'Completed') {
-              // Save final outputs on completion and collapse code if not manually expanded
+              // Save final outputs on completion
               cellManager.updateCellExecutionState(actualCellId, 'success', outputs);
-              
-              // Collapse the code cell after successful execution
-              cellManager.collapseCodeCell(actualCellId);
-              
+
               // Save to localStorage after successful execution
               setTimeout(() => {
                 cellManager.saveToLocalStorage();
@@ -612,7 +443,7 @@ const NotebookPage: React.FC = () => {
             } else if (status === 'Error') {
               // Save error outputs and keep code visible
               cellManager.updateCellExecutionState(actualCellId, 'error', outputs);
-              
+
               // Save to localStorage after error
               setTimeout(() => {
                 cellManager.saveToLocalStorage();
@@ -623,19 +454,19 @@ const NotebookPage: React.FC = () => {
         return `[Cell Id: ${actualCellId}]\n${stripAnsi(shortOutput.trim()) || "Code executed successfully."}`;
       } catch (error) {
         console.error("[DEBUG] executeCode error:", error);
-        
+
         // Save error state and output, keep code visible
         cellManager.updateCellExecutionState(actualCellId, 'error', [{
           type: 'stderr',
           content: `Error: ${error instanceof Error ? error.message : String(error)}`,
           attrs: { className: 'output-area error-output' }
         }]);
-        
+
         // Save to localStorage after error
         setTimeout(() => {
           cellManager.saveToLocalStorage();
         }, 100);
-        
+
         return `[Cell Id: ${actualCellId}]\nError executing code: ${error instanceof Error ? error.message : String(error)}`;
       }
     } catch (error) {
@@ -652,7 +483,7 @@ const NotebookPage: React.FC = () => {
     let isMounted = true;
     setInitializationError(null);
     setIsAIReady(true);
-    
+
     return () => {
       isMounted = false;
     };
@@ -664,10 +495,10 @@ const NotebookPage: React.FC = () => {
     if (upToCellId) {
       const cellIndex = cells.findIndex(cell => cell.id === upToCellId);
       if (cellIndex !== -1) {
-        relevantCells = cells.slice(0, cellIndex+1);
+        relevantCells = cells.slice(0, cellIndex + 1);
       }
     }
-    return convertCellsToHistory(relevantCells).map(msg => ({
+    return cellManager.convertCellsToHistory(relevantCells).map(msg => ({
       ...msg,
       role: msg.role as ChatRole
     }));
@@ -677,8 +508,8 @@ const NotebookPage: React.FC = () => {
   const handleSendMessage = useCallback(async (message: string) => {
     // If not logged in or not ready, show error
     if (!isLoggedIn || !isReady) {
-      setInitializationError(!isLoggedIn ? 
-        "You must be logged in to use the AI assistant." : 
+      setInitializationError(!isLoggedIn ?
+        "You must be logged in to use the AI assistant." :
         "AI assistant is not ready. Please wait.");
       return;
     }
@@ -722,7 +553,7 @@ const NotebookPage: React.FC = () => {
           return `Tool ${toolCall.name} not implemented`;
         },
         onMessage: (completionId: string, message: string) => {
-          console.log('[DEBUG] New Message:', completionId, message);
+          console.debug('[DEBUG] New Message:', completionId, message);
           cellManager.updateCellById(
             completionId,
             message,
@@ -735,7 +566,7 @@ const NotebookPage: React.FC = () => {
 
       // Process the completion stream
       for await (const item of completion) {
-        console.log('[DEBUG] New Response Item:', item);
+        console.debug('[DEBUG] New Response Item:', item);
       }
     } catch (error) {
       console.error('Error in chat completion:', error);
@@ -745,10 +576,12 @@ const NotebookPage: React.FC = () => {
     }
   }, [activeCellId, cellManager, isReady, isLoggedIn, server, tools, getConversationHistory, handleExecuteCode, agentSettings]);
 
+
+
   // Update handleRegenerateClick to use deleteCellWithChildren and handleSendMessage
   const handleRegenerateClick = async (cellId: string) => {
     if (!isReady || isProcessingAgentResponse) {
-      console.log('[DEBUG] Cannot regenerate while processing another response or not ready', 
+      console.log('[DEBUG] Cannot regenerate while processing another response or not ready',
         { isReady, isProcessingAgentResponse });
       return;
     }
@@ -763,34 +596,34 @@ const NotebookPage: React.FC = () => {
       setIsProcessingAgentResponse(true);
       // Get the message content and position info before deletion
       const messageContent = userCell.content;
-      
+
       // Find the cell's current index before deletion
       const currentIndex = cells.findIndex(cell => cell.id === cellId);
 
       // Delete the cell and its responses first
       cellManager.deleteCellWithChildren(cellId);
-      
+
       // Wait a small tick to ensure deletion is complete
       await new Promise(resolve => setTimeout(resolve, 0));
-      
+
       // Add the new cell at the same position as the old one
       const newCellId = cellManager.addCell(
-        'markdown', 
-        messageContent, 
-        'user', 
-        undefined, 
-        undefined, 
+        'markdown',
+        messageContent,
+        'user',
+        undefined,
+        undefined,
         currentIndex
       );
-      
+
       lastUserCellRef.current = newCellId;
       cellManager.setActiveCell(newCellId);
       cellManager.setCurrentAgentCell(newCellId);
-      
+
       await new Promise(resolve => setTimeout(resolve, 0));
-      
+
       const history = getConversationHistory(cellId || undefined);
-     
+
       // Start chat completion
       const completion = structuredChatCompletion({
         messages: history,
@@ -809,7 +642,7 @@ const NotebookPage: React.FC = () => {
           return `Tool ${toolCall.name} not implemented`;
         },
         onMessage: (completionId: string, message: string) => {
-          console.log('[DEBUG] New Message:', message);
+          console.debug('[DEBUG] New Message:', message);
           cellManager.updateCellById(
             completionId,
             message,
@@ -822,7 +655,7 @@ const NotebookPage: React.FC = () => {
 
       // Process the completion stream
       for await (const item of completion) {
-        console.log('[DEBUG] New Response Item:', item);
+        console.debug('[DEBUG] New Response Item:', item);
       }
     } catch (error) {
       console.error('[DEBUG] Error regenerating responses:', error);
@@ -836,29 +669,29 @@ const NotebookPage: React.FC = () => {
   const handleCommand = useCallback((command: string) => {
     const normalizedCommand = command.toLowerCase().trim();
     let newCellId = '';
-    
+
     // Parse command and arguments
     const [cmd, ...args] = normalizedCommand.split(/\s+/);
     const content = args.join(' ');
-    
+
     switch (cmd) {
       case '/code':
       case '#code':
         // Add new code cell with content if provided
         newCellId = cellManager.addCell('code', content, 'user');
         break;
-        
+
       case '/markdown':
       case '#markdown':
         // Add new markdown cell with content if provided
         newCellId = cellManager.addCell('markdown', content, 'user');
         break;
-        
+
       case '/clear':
         // Clear all cells
         hasInitialized.current = true; // Prevent auto-initialization
         cellManager.clearAllCells(); // Use cellManager to clear cells
-        
+
         // Add a single empty code cell after clearing
         setTimeout(() => {
           const cellId = cellManager.addCell('code', '', 'user');
@@ -868,18 +701,18 @@ const NotebookPage: React.FC = () => {
           }
         }, 100);
         return; // Exit early since we handle scrolling separately
-        
+
       case '/run':
         // Run all cells
         cellManager.runAllCells();
         break;
-        
+
       default:
         // If command not recognized, treat as markdown content
         newCellId = cellManager.addCell('markdown', command, 'user');
         break;
     }
-    
+
     // Scroll to the newly created cell
     if (newCellId) {
       setTimeout(() => {
@@ -902,32 +735,32 @@ const NotebookPage: React.FC = () => {
   // Handle keyboard event handler
   const handleKeyboardEvent = useCallback((e: KeyboardEvent) => {
     // Only ignore if we're in a text input field (not Monaco editor)
-    if (e.target instanceof HTMLInputElement || 
-        (e.target instanceof HTMLTextAreaElement && 
-         !(e.target.closest('.monaco-editor') || e.target.closest('.notebook-cell-container')))) {
+    if (e.target instanceof HTMLInputElement ||
+      (e.target instanceof HTMLTextAreaElement &&
+        !(e.target.closest('.monaco-editor') || e.target.closest('.notebook-cell-container')))) {
       return;
     }
 
     // Handle arrow key navigation when not in editor
-    const isInEditor = e.target instanceof HTMLTextAreaElement || 
-                      e.target instanceof HTMLInputElement ||
-                      (e.target as HTMLElement)?.classList?.contains('monaco-editor');
+    const isInEditor = e.target instanceof HTMLTextAreaElement ||
+      e.target instanceof HTMLInputElement ||
+      (e.target as HTMLElement)?.classList?.contains('monaco-editor');
 
     if (!isInEditor) {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Tab') {
         e.preventDefault(); // Prevent default scrolling
-        
+
         // Find current cell index
         const currentIndex = cells.findIndex(cell => cell.id === activeCellId);
         if (currentIndex === -1) return;
-        
+
         let nextIndex;
         if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) {
           nextIndex = Math.max(0, currentIndex - 1);
         } else {
           nextIndex = Math.min(cells.length - 1, currentIndex + 1);
         }
-        
+
         // Set active cell and focus it
         const nextCell = cells[nextIndex];
         if (nextCell) {
@@ -959,14 +792,14 @@ const NotebookPage: React.FC = () => {
 
       const activeCell = document.activeElement?.closest('[data-cell-id]');
       if (!activeCell) return;
-      
+
       const cellId = activeCell.getAttribute('data-cell-id');
       if (!cellId) return;
-      
+
       // Get cell from cellManager
       const cell = cellManager.findCell(c => c.id === cellId);
       if (!cell) return;
-      
+
       if (cell.type === 'code') {
         executeCell(cellId, true); // Execute and move focus
       } else if (cell.type === 'markdown') {
@@ -1046,10 +879,10 @@ const NotebookPage: React.FC = () => {
     if (!window.confirm('Are you sure you want to restart the kernel? This will clear all outputs and reset the execution state.')) {
       return;
     }
-    
+
     cellManager.clearAllOutputs();
     setExecutionCounter(1);
-    
+
     try {
       // Attempt to restart the kernel
       if (isReady) {
@@ -1131,7 +964,7 @@ const NotebookPage: React.FC = () => {
       try {
         const content = e.target?.result as string;
         const notebookData: NotebookData = JSON.parse(content);
-        
+
         // Ensure title is always defined
         const metadata = {
           ...defaultNotebookMetadata,
@@ -1139,9 +972,9 @@ const NotebookPage: React.FC = () => {
           title: notebookData.metadata?.title || 'Untitled Notebook',
           modified: new Date().toISOString()
         };
-        
+
         setNotebookMetadata(metadata);
-        
+
         // Find the highest execution count to continue from
         let maxExecutionCount = 0;
         notebookData.cells.forEach(cell => {
@@ -1149,33 +982,33 @@ const NotebookPage: React.FC = () => {
             maxExecutionCount = cell.executionCount;
           }
         });
-        
+
         setExecutionCounter(maxExecutionCount + 1);
-        
+
         // Clear existing cells using cellManager
         cellManager.clearAllCells();
-        
+
         // Create a mapping of old cell IDs to new cell IDs
         const idMapping: { [oldId: string]: string } = {};
-        
+
         // Add a small delay to ensure cells are cleared before adding new ones
         setTimeout(() => {
           // First pass: Create all cells and build ID mapping
           notebookData.cells.forEach((cell) => {
             const oldId = cell.id;
             const newCellId = cellManager.addCell(
-              cell.type, 
+              cell.type,
               cell.content || '',
               cell.role || (cell.metadata?.role as CellRole | undefined)
             );
             idMapping[oldId] = newCellId;
           });
-          
+
           // Second pass: Update parent references and other cell properties
           notebookData.cells.forEach((cell, index) => {
             const newCellId = idMapping[cell.id];
             if (!newCellId) return;
-            
+
             // Update parent reference if it exists
             if (cell.metadata?.parent) {
               const newParentId = idMapping[cell.metadata.parent];
@@ -1186,11 +1019,11 @@ const NotebookPage: React.FC = () => {
                 });
               }
             }
-            
+
             // Update cell with execution state and outputs if they exist
             if (cell.executionCount) {
               const executionState = cell.executionState || 'idle';
-              const outputs = cell.output ? 
+              const outputs = cell.output ?
                 cell.output.map(output => ({
                   ...output,
                   attrs: {
@@ -1198,15 +1031,15 @@ const NotebookPage: React.FC = () => {
                     className: `output-area ${output.type === 'stderr' ? 'error-output' : ''}`
                   }
                 })) : undefined;
-                
+
               cellManager.updateCellExecutionState(newCellId, executionState, outputs);
             }
-            
+
             // Set code visibility based on metadata
             if (cell.type === 'code' && cell.metadata?.isCodeVisible === false) {
               cellManager.toggleCodeVisibility(newCellId);
             }
-            
+
             // If it's the last cell, make it active
             if (index === notebookData.cells.length - 1) {
               cellManager.setActiveCell(newCellId);
@@ -1227,9 +1060,9 @@ const NotebookPage: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only ignore if we're in a text input field (not Monaco editor)
-      if (e.target instanceof HTMLInputElement || 
-          (e.target instanceof HTMLTextAreaElement && 
-           !(e.target.closest('.monaco-editor') || e.target.closest('.notebook-cell-container')))) {
+      if (e.target instanceof HTMLInputElement ||
+        (e.target instanceof HTMLTextAreaElement &&
+          !(e.target.closest('.monaco-editor') || e.target.closest('.notebook-cell-container')))) {
         return;
       }
 
@@ -1268,6 +1101,49 @@ const NotebookPage: React.FC = () => {
     }
   };
 
+  // run system cells on startup
+  useEffect(() => {
+    const systemCells = cells.filter(cell => cell.role === 'system' && cell.type === 'code');
+    // Only execute the first system cell
+    if (systemCells.length > 0) {
+      const systemCellId = systemCells[0].id;
+      // show the code of the system cell
+      cellManager.showCode(systemCellId);
+      cellManager.executeCell(systemCellId, false).then(() => {
+        setTimeout(() => {
+          // hide the code and the output of the system cell
+          cellManager.hideCellOutput(systemCellId);
+          cellManager.hideCode(systemCellId);
+        }, 1000);
+      }).catch((error) => {
+        // hide the code and show the output of the system cell
+        cellManager.showCellOutput(systemCellId);
+        cellManager.hideCode(systemCellId);
+        console.error('Error executing system cell:', error);
+      });
+    }
+  }, [isReady]);
+
+  // Add toggleOutputVisibility method to cellManager
+  const toggleOutputVisibility = (id: string) => {
+    setCells((prev) =>
+      prev.map((cell) => {
+        if (cell.id === id) {
+          const currentVisibility = cell.metadata?.isOutputVisible !== false; // if undefined, treat as visible
+          return {
+            ...cell,
+            metadata: {
+              ...cell.metadata,
+              isOutputVisible: !currentVisibility,
+              userModified: true, // Mark that user has manually changed visibility
+            },
+          };
+        }
+        return cell;
+      })
+    );
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
@@ -1276,19 +1152,19 @@ const NotebookPage: React.FC = () => {
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             {/* Title and Logo */}
             <div className="flex items-center gap-3">
-              <Link 
-                to="/" 
+              <Link
+                to="/"
                 className="flex items-center hover:opacity-80 transition"
                 title="Go to Home"
               >
-                <svg 
-                  stroke="currentColor" 
-                  fill="currentColor" 
-                  strokeWidth="0" 
-                  viewBox="0 0 24 24" 
-                  className="h-8 w-8 text-blue-600" 
-                  height="1em" 
-                  width="1em" 
+                <svg
+                  stroke="currentColor"
+                  fill="currentColor"
+                  strokeWidth="0"
+                  viewBox="0 0 24 24"
+                  className="h-8 w-8 text-blue-600"
+                  height="1em"
+                  width="1em"
                   xmlns="http://www.w3.org/2000/svg"
                 >
                   <path d="m21.406 6.086-9-4a1.001 1.001 0 0 0-.813 0l-9 4c-.02.009-.034.024-.054.035-.028.014-.058.023-.084.04-.022.015-.039.034-.06.05a.87.87 0 0 0-.19.194c-.02.028-.041.053-.059.081a1.119 1.119 0 0 0-.076.165c-.009.027-.023.052-.031.079A1.013 1.013 0 0 0 2 7v10c0 .396.232.753.594.914l9 4c.13.058.268.086.406.086a.997.997 0 0 0 .402-.096l.004.01 9-4A.999.999 0 0 0 22 17V7a.999.999 0 0 0-.594-.914zM12 4.095 18.538 7 12 9.905l-1.308-.581L5.463 7 12 4.095zM4 16.351V8.539l7 3.111v7.811l-7-3.11zm9 3.11V11.65l7-3.111v7.812l-7 3.11z"></path>
@@ -1298,8 +1174,8 @@ const NotebookPage: React.FC = () => {
               <input
                 type="text"
                 value={notebookMetadata.title || 'Untitled Notebook'}
-                onChange={(e) => setNotebookMetadata(prev => ({ 
-                  ...prev, 
+                onChange={(e) => setNotebookMetadata(prev => ({
+                  ...prev,
                   title: e.target.value || 'Untitled Notebook',
                   modified: new Date().toISOString()
                 }))}
@@ -1345,16 +1221,14 @@ const NotebookPage: React.FC = () => {
 
       {/* Notebook Content Area - Add more bottom padding */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 pb-48">
-        <div className="max-w-5xl mx-auto px-4 notebook-cells-container">
+        <div className="max-w-5xl mx-auto px-4 notebook-cells-container bg-gray-100">
           {cells.map((cell, index) => (
-            <div 
+            <div
               key={cell.id}
               data-cell-id={cell.id}
-              className={`notebook-cell-container group relative ${
-                cell.executionState === 'error' ? 'border-red-200' : ''
-              } ${
-                activeCellId === cell.id ? 'notebook-cell-container-active' : ''
-              } mb-1 bg-white overflow-hidden rounded-md`}
+              className={`notebook-cell-container group relative ${cell.executionState === 'error' ? 'border-red-200' : ''
+                } ${activeCellId === cell.id ? 'notebook-cell-container-active' : ''
+                } mb-1 bg-white overflow-hidden rounded-md`}
               onClick={() => cellManager.setActiveCell(cell.id)}
               tabIndex={0}
             >
@@ -1366,9 +1240,9 @@ const NotebookPage: React.FC = () => {
               <div className="flex relative w-full">
                 <div className="flex-1 min-w-0 w-full overflow-x-hidden">
                   {cell.type === 'code' ? (
-                    <div className="py-2 w-full">
-                      <CodeCell 
-                        code={cell.content} 
+                    
+                      <CodeCell
+                        code={cell.content}
                         language="python"
                         defaultCollapsed={false}
                         onExecute={() => executeCell(cell.id)}
@@ -1381,10 +1255,12 @@ const NotebookPage: React.FC = () => {
                         onChange={(newCode) => cellManager.updateCellContent(cell.id, newCode)}
                         hideCode={cell.metadata?.isCodeVisible === false}
                         onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
+                        hideOutput={cell.metadata?.isOutputVisible === false}
+                        onOutputVisibilityChange={() => cellManager.toggleOutputVisibility(cell.id)}
                         parent={cell.metadata?.parent}
                         output={cell.output}
                       />
-                    </div>
+               
                   ) : (
                     <MarkdownCell
                       content={cell.content}
@@ -1402,7 +1278,7 @@ const NotebookPage: React.FC = () => {
                 </div>
 
                 {/* Cell Toolbar - Show on hover */}
-                <div 
+                <div
                   className="absolute right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
                   style={{ pointerEvents: 'auto' }}
                 >
@@ -1445,20 +1321,20 @@ const NotebookPage: React.FC = () => {
                         className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
                         title={cell.metadata?.isCodeVisible === false ? "Show code" : "Hide code"}
                       >
-                        <svg 
+                        <svg
                           className={`w-4 h-4 transition-transform ${cell.metadata?.isCodeVisible === false ? 'transform rotate-180' : ''}`}
-                          fill="none" 
-                          stroke="currentColor" 
+                          fill="none"
+                          stroke="currentColor"
                           viewBox="0 0 24 24"
                         >
-                          <path 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round" 
-                            strokeWidth={2} 
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
                             d={cell.metadata?.isCodeVisible === false
                               ? "M9 5l7 7-7 7"
                               : "M19 9l-7 7-7-7"
-                            } 
+                            }
                           />
                         </svg>
                         <span className="text-xs">
@@ -1496,7 +1372,7 @@ const NotebookPage: React.FC = () => {
                       </button>
                     </>
                   )}
-                  
+
                   {cell.type === 'markdown' && (
                     <>
                       {cell.metadata?.isEditing ? (
@@ -1512,7 +1388,7 @@ const NotebookPage: React.FC = () => {
                         </button>
                       ) : (
                         <>
-                         
+
                           {/* Add Copy Button */}
                           <button
                             onClick={(e) => {
@@ -1535,10 +1411,10 @@ const NotebookPage: React.FC = () => {
                             </svg>
                             <span className="text-xs">Edit</span>
                           </button>
-                         
+
                         </>
                       )}
-                      
+
                       <button
                         onClick={() => cellManager.changeCellType(cell.id, 'code')}
                         className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
@@ -1564,7 +1440,7 @@ const NotebookPage: React.FC = () => {
                       <span className="text-xs">Regenerate</span>
                     </button>
                   )}
-                  
+
                   {/* Delete buttons - different for user vs. assistant cells */}
                   {cell.role === 'user' ? (
                     <div className="relative flex items-center gap-1">
@@ -1586,7 +1462,7 @@ const NotebookPage: React.FC = () => {
                           </svg>
                           <span className="text-xs">Delete</span>
                         </button>
-                        
+
                         {/* Additional delete options - initially hidden */}
                         <div className="hidden expanded:flex items-center gap-1 ml-1 pl-1 border-l border-gray-200">
                           <button
@@ -1629,7 +1505,7 @@ const NotebookPage: React.FC = () => {
               </div>
             </div>
           ))}
-          
+
           <div ref={endRef} />
         </div>
       </div>
@@ -1648,21 +1524,21 @@ const NotebookPage: React.FC = () => {
                     AI is thinking...
                   </span>
                 ) : initializationError ? initializationError :
-                !isAIReady ? "Initializing AI assistant..." :
-                "Ask a question or use commands like /code or /markdown to add specific cell types"}
+                  !isAIReady ? "Initializing AI assistant..." :
+                    "Ask a question or use commands like /code or /markdown to add specific cell types"}
               </p>
             )}
           </div>
-          <ChatInput 
-            onSend={handleSendMessage} 
+          <ChatInput
+            onSend={handleSendMessage}
             disabled={!isAIReady || isProcessingAgentResponse || !isLoggedIn}
             isThebeReady={isReady}
             placeholder={
               !isLoggedIn ? "Please log in to use the AI assistant" :
-              !isAIReady ? "Initializing AI assistant..." : 
-              initializationError ? "AI assistant connection failed..." :
-              isProcessingAgentResponse ? "AI is thinking..." :
-              "Enter text or command (e.g., /code, /markdown, /clear)"
+                !isAIReady ? "Initializing AI assistant..." :
+                  initializationError ? "AI assistant connection failed..." :
+                    isProcessingAgentResponse ? "AI is thinking..." :
+                      "Enter text or command (e.g., /code, /markdown, /clear)"
             }
             agentSettings={agentSettings}
             onSettingsChange={setAgentSettings}
@@ -1679,12 +1555,14 @@ const NotebookPage: React.FC = () => {
   );
 };
 
-const NotebookPageWithThebe: React.FC = () => (
-  <ThebeProvider>
-    <ToolProvider>
-      <NotebookPage />
-    </ToolProvider>
-  </ThebeProvider>
-);
+const NotebookPageWithThebe: React.FC = () => {
+  return (
+    <ThebeProvider>
+      <ToolProvider>
+        <NotebookPage />
+      </ToolProvider>
+    </ThebeProvider>
+  );
+};
 
 export default NotebookPageWithThebe; 
