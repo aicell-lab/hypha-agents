@@ -13,6 +13,7 @@ import { useHyphaStore } from '../store/hyphaStore';
 import { ToolProvider, useTools } from '../components/chat/ToolProvider';
 import { JupyterOutput } from '../components/JupyterOutput';
 import { structuredChatCompletion } from '../utils/chatCompletion';
+import { NotebookToolbar } from '../components/notebook/NotebookToolbar';
 // Import icons
 import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaCopy } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
@@ -1307,120 +1308,37 @@ const NotebookPage: React.FC = () => {
               />
             </div>
 
-            {/* Action buttons in a single row */}
-            <div className="flex items-center gap-1">
-              <div className="flex items-center">
-                <input
-                  type="file"
-                  accept=".ipynb"
-                  onChange={loadNotebook}
-                  className="hidden"
-                  id="notebook-file"
-                  aria-label="Open notebook file"
-                />
-                <label
-                  htmlFor="notebook-file"
-                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition cursor-pointer flex items-center"
-                  title="Open notebook"
-                >
-                  <FaFolder className="w-3.5 h-3.5" />
-                </label>
-                <button
-                  onClick={saveNotebook}
-                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
-                  title="Save notebook (Ctrl/Cmd + S)"
-                >
-                  <FaSave className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={downloadNotebook}
-                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
-                  title="Download notebook (Ctrl/Cmd + Shift + S)"
-                >
-                  <FaDownload className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => cellManager.runAllCells()}
-                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
-                  title="Run all cells (Ctrl/Cmd + Shift + Enter)"
-                  disabled={isProcessingAgentResponse}
-                >
-                  {isProcessingAgentResponse ? (
-                    <FaSpinner className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <FaPlay className="w-3.5 h-3.5" />
-                  )}
-                </button>
-                <button
-                  onClick={() => cellManager.clearAllOutputs()}
-                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
-                  title="Clear all outputs"
-                  disabled={isProcessingAgentResponse}
-                >
-                  <FaTrash className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={restartKernel}
-                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition group relative"
-                  title="Restart kernel and clear outputs"
-                  disabled={!isReady || isProcessingAgentResponse}
-                >
-                  <FaRedo className={`w-3.5 h-3.5 ${(!isReady || isProcessingAgentResponse) ? 'opacity-50' : ''}`} />
-                </button>
-              </div>
-
-              <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
-                <button 
-                  onClick={() => {
-                    const afterId = activeCellId ? activeCellId : undefined;
-                    const newCellId = cellManager.addCell('code', '', 'user', afterId);
-                    // Focus the new cell
-                    setTimeout(() => {
-                      const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
-                      if (cellElement) {
-                        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }
-                    }, 100);
-                  }}
-                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition flex items-center"
-                  title="Add code cell (Ctrl/Cmd + B)"
-                >
-                  <VscCode className="w-3.5 h-3.5" />
-                  <AiOutlinePlus className="w-2.5 h-2.5 ml-0.5" />
-                </button>
-                <button 
-                  onClick={() => {
-                    const afterId = activeCellId ? activeCellId : undefined;
-                    const newCellId = cellManager.addCell('markdown', '', 'user', afterId);
-                    // Focus the new cell
-                    setTimeout(() => {
-                      const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
-                      if (cellElement) {
-                        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }
-                    }, 100);
-                  }}
-                  className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition flex items-center"
-                  title="Add markdown cell"
-                >
-                  <MdOutlineTextFields className="w-3.5 h-3.5" />
-                  <AiOutlinePlus className="w-2.5 h-2.5 ml-0.5" />
-                </button>
-                <button
-                  onClick={() => setIsShortcutsDialogOpen(true)}
-                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition ml-1"
-                  title="Keyboard Shortcuts"
-                >
-                  <FaKeyboard className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Add login button section */}
-              <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
-                
-                <LoginButton className="scale-75 z-100" />
-              </div>
-            </div>
+            <NotebookToolbar
+              onSave={saveNotebook}
+              onDownload={downloadNotebook}
+              onLoad={loadNotebook}
+              onRunAll={() => cellManager.runAllCells()}
+              onClearOutputs={() => cellManager.clearAllOutputs()}
+              onRestartKernel={restartKernel}
+              onAddCodeCell={() => {
+                const afterId = activeCellId ? activeCellId : undefined;
+                const newCellId = cellManager.addCell('code', '', 'user', afterId);
+                setTimeout(() => {
+                  const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
+                  if (cellElement) {
+                    cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }, 100);
+              }}
+              onAddMarkdownCell={() => {
+                const afterId = activeCellId ? activeCellId : undefined;
+                const newCellId = cellManager.addCell('markdown', '', 'user', afterId);
+                setTimeout(() => {
+                  const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
+                  if (cellElement) {
+                    cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }, 100);
+              }}
+              onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
+              isProcessing={isProcessingAgentResponse}
+              isReady={isReady}
+            />
           </div>
         </div>
       </div>
@@ -1464,6 +1382,7 @@ const NotebookPage: React.FC = () => {
                         hideCode={cell.metadata?.isCodeVisible === false}
                         onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
                         parent={cell.metadata?.parent}
+                        output={cell.output}
                       />
                     </div>
                   ) : (
@@ -1480,34 +1399,11 @@ const NotebookPage: React.FC = () => {
                       parent={cell.metadata?.parent}
                     />
                   )}
-                  
-                  {/* Output Area */}
-                  {cell.type === 'code' && cell.output && cell.output.length > 0 && (
-                    <div className={`jupyter-cell-flex-container mt-1 ${cell.metadata?.parent ? 'child-cell' : 'parent-cell'}`}>
-                      {/* Empty execution count to align with code */}
-                      <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-                        {cell.executionState === 'running' ? (
-                          <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
-                        ) : (
-                          cell.executionCount ? `[${cell.executionCount}]:` : ''
-                        )}
-                      </div>
-                      <div className="editor-container w-full overflow-hidden">
-                        <div className="bg-gray-50 p-2 rounded-b-md border-none">
-                          <JupyterOutput 
-                            outputs={cell.output} 
-                            className="output-area ansi-enabled" 
-                            wrapLongLines={true} 
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Cell Toolbar - Show on hover */}
                 <div 
-                  className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
+                  className="absolute right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
                   style={{ pointerEvents: 'auto' }}
                 >
                   {/* Cell Type Indicator */}
@@ -1746,8 +1642,12 @@ const NotebookPage: React.FC = () => {
               <p className="text-yellow-800">Please log in to use the AI assistant</p>
             ) : (
               <p className="text-gray-500">
-                {isProcessingAgentResponse ? "AI is thinking..." : 
-                initializationError ? initializationError :
+                {isProcessingAgentResponse ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <FaSpinner className="animate-spin h-4 w-4" />
+                    AI is thinking...
+                  </span>
+                ) : initializationError ? initializationError :
                 !isAIReady ? "Initializing AI assistant..." :
                 "Ask a question or use commands like /code or /markdown to add specific cell types"}
               </p>

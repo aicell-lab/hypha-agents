@@ -14,6 +14,8 @@ import { RoleSelector } from './RoleSelector';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
 import { FaSpinner } from 'react-icons/fa';
+import { JupyterOutput } from '../JupyterOutput';
+import { OutputItem } from '../chat/Chat';
 
 const convert = new Convert({
   fg: '#000',
@@ -83,6 +85,7 @@ interface CodeCellProps {
   hideCode?: boolean;
   onVisibilityChange?: (isVisible: boolean) => void;
   parent?: string;
+  output?: OutputItem[];
 }
 
 export const CodeCell: React.FC<CodeCellProps> = ({ 
@@ -101,13 +104,14 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   onChange,
   hideCode = false,
   onVisibilityChange,
-  parent
+  parent,
+  output
 }) => {
   const { executeCodeWithDOMOutput, status, isReady } = useThebe();
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [isEditing, setIsEditing] = useState(false);
   const [codeValue, setCodeValue] = useState(code);
-  const [output, setOutput] = useState<string>('');
+  const [outputHtml, setOutputHtml] = useState<string>('');
   const [isHovered, setIsHovered] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
   const internalEditorRef = useRef<MonacoEditor | null>(null);
@@ -247,7 +251,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       if (outputRef.current) {
         // Clear previous output
         outputRef.current.innerHTML = '';
-        setOutput('');
+        setOutputHtml('');
         hasFinalDomOutput.current = false;
         
         try {
@@ -284,7 +288,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               
               // Update the output state with the current HTML content
               if (outputRef.current && !hasFinalDomOutput.current) {
-                setOutput(outputRef.current.innerHTML);
+                setOutputHtml(outputRef.current.innerHTML);
               }
             },
             onStatus: (status) => {
@@ -293,7 +297,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               if (status === 'Completed' && outputRef.current) {
                 // When execution completes, use the final DOM output
                 hasFinalDomOutput.current = true;
-                setOutput(outputRef.current.innerHTML);
+                setOutputHtml(outputRef.current.innerHTML);
               }
             }
           });
@@ -310,7 +314,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
             if (outputRef.current) {
               outputRef.current.innerHTML = '';
               outputRef.current.appendChild(errorDiv);
-              setOutput(outputRef.current.innerHTML);
+              setOutputHtml(outputRef.current.innerHTML);
             }
           }
         }
@@ -429,19 +433,18 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       <div className="jupyter-cell-flex-container items-start w-full max-w-full">
         {/* Execution count with role icon */}
         <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-        {role !== undefined && onRoleChange && (
+          {role !== undefined && onRoleChange && (
             <div className="pr-2">
               <RoleSelector role={role} onChange={onRoleChange} />
             </div>
           )}
           <div className="text-gray-500">
             {isExecuting 
-              ? '[*]:'
+              ? <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
               : executionCount
               ? `[${executionCount}]:`
               : ''}
           </div>
-          
         </div>
         
         {/* Editor */}
@@ -474,51 +477,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               </span>
             </div>
           )}
-
-          {/* Cell Toolbar - Show on hover */}
-          <div 
-            className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
-            style={{ pointerEvents: hideCode ? 'none' : 'auto' }}
-          >
-            {/* Cell Type Indicator */}
-            <span className="text-xs text-gray-500 px-1 border-r border-gray-200 mr-1">
-              <span className="flex items-center gap-1">
-                <VscCode className="w-3 h-3" />
-                Code
-              </span>
-            </span>
-
-            {/* Run Button */}
-            <button
-              onClick={onExecute}
-              disabled={!isReady || isExecuting}
-              className="p-1 hover:bg-gray-100 rounded flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Run cell"
-            >
-              {isExecuting ? (
-                <FaSpinner className="w-4 h-4 animate-spin" />
-              ) : (
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-              <span className="text-xs">Run</span>
-            </button>
-
-            {/* Convert Button */}
-            <button
-              onClick={() => onChange?.('markdown')}
-              className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-              title="Convert to Markdown"
-              disabled={isExecuting}
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-              </svg>
-              <span className="text-xs">Convert</span>
-            </button>
-          </div>
 
           {/* Expandable Code Editor */}
           {!hideCode && (
@@ -573,10 +531,23 @@ export const CodeCell: React.FC<CodeCellProps> = ({
           )}
         </div>
       </div>
-      
-      {isExecuting && (
-        <div className="absolute right-3 top-3 flex items-center">
-          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-blue-500"></div>
+
+      {/* Output Area */}
+      {output && output.length > 0 && (
+        <div className={`jupyter-cell-flex-container mt-1 ${parent ? 'child-cell' : 'parent-cell'}`}>
+          {/* Empty execution count to align with code */}
+          <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
+            {executionCount ? `[${executionCount}]:` : '[*]:'}
+          </div>
+          <div className="editor-container w-full overflow-hidden">
+            <div className="bg-gray-50 p-2 rounded-b-md border-none">
+              <JupyterOutput 
+                outputs={output} 
+                className="output-area ansi-enabled" 
+                wrapLongLines={true} 
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
