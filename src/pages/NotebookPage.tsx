@@ -1168,6 +1168,8 @@ hypha_core = await server.get_service("${svc.id}")
               onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
               onToggleSystemPrompts={toggleSystemPrompts}
               showSystemPrompts={showSystemPrompts}
+              onToggleCanvasPanel={() => setShowCanvasPanel(!showCanvasPanel)}
+              showCanvasPanel={showCanvasPanel}
               isProcessing={isProcessingAgentResponse}
               isReady={isReady}
             />

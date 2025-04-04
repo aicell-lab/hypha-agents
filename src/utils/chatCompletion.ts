@@ -52,7 +52,7 @@ export interface AgentSettings {
 export const DefaultAgentConfig: AgentSettings = {
     baseURL: 'http://localhost:11434/v1/',
     apiKey: 'ollama',
-    model: 'llama3.1:latest',
+    model: 'qwen2.5-coder:7b',
     temperature: 0.7,
     instructions: `You are a code assistant specialized in generating Python code for notebooks. Follow these guidelines:
   
@@ -87,7 +87,7 @@ each step, with 5 words at most!
      {
        "thoughts": ["plot", "modify", "xy-axis"],
        "response": "I've created a basic sine wave plot. The graph shows one complete cycle of the sine function from 0 to 2π. The wave oscillates between -1 and 1 on the y-axis. Would you like to modify any aspects of the plot?",
-       "script": null
+       "script": ""
      }
   
   5. BEST PRACTICES
@@ -113,7 +113,7 @@ each step, with 5 words at most!
 export async function* structuredChatCompletion({
   messages,
   systemPrompt,
-  model = 'llama3.1:latest',
+  model = 'qwen2.5-coder:7b',
   temperature = 0.7,
   onToolCall,
   onMessage,
@@ -295,7 +295,7 @@ function generateId(): string {
 export async function* chatCompletion({
   messages,
   systemPrompt,
-  model = 'llama3.1:latest',
+  model = 'qwen2.5-coder:7b',
   temperature = 0.7,
   onToolCall,
   onMessage,

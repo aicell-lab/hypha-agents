@@ -213,6 +213,7 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
                     aria-label="Select AI model"
                   >
                     <option value="llama3.1:latest">Llama 3.1</option>
+                    <option value="qwen2.5-coder:7b">Qwen 2.5 Coder</option>
                     <option value="gpt-4o-mini">GPT-4 Mini</option>
                     <option value="mistral">Mistral</option>
                     <option value="codellama">Code Llama</option>

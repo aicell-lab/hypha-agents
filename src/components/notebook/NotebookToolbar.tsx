@@ -4,6 +4,7 @@ import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
 import { RiRobot2Line } from 'react-icons/ri';
+import { TbLayoutSidebarRightExpand } from 'react-icons/tb';
 import LoginButton from '../LoginButton';
 
 interface FileOperationsProps {
@@ -99,6 +100,8 @@ interface CellControlsProps {
   onShowKeyboardShortcuts: () => void;
   onToggleSystemPrompts: () => void;
   showSystemPrompts: boolean;
+  onToggleCanvasPanel: () => void;
+  showCanvasPanel: boolean;
 }
 
 export const CellControls: React.FC<CellControlsProps> = ({
@@ -106,7 +109,9 @@ export const CellControls: React.FC<CellControlsProps> = ({
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
   onToggleSystemPrompts,
-  showSystemPrompts
+  showSystemPrompts,
+  onToggleCanvasPanel,
+  showCanvasPanel
 }) => (
   <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
     <button 
@@ -131,6 +136,13 @@ export const CellControls: React.FC<CellControlsProps> = ({
       title={`${showSystemPrompts ? 'Hide' : 'Show'} system prompts`}
     >
       <RiRobot2Line className="w-3.5 h-3.5" />
+    </button>
+    <button
+      onClick={onToggleCanvasPanel}
+      className={`p-1.5 hover:bg-gray-100 rounded transition flex items-center ${showCanvasPanel ? 'text-blue-600' : 'text-gray-500'}`}
+      title={`${showCanvasPanel ? 'Hide' : 'Show'} canvas panel`}
+    >
+      <TbLayoutSidebarRightExpand className="w-3.5 h-3.5" />
     </button>
     <button
       onClick={onShowKeyboardShortcuts}
@@ -160,6 +172,8 @@ interface NotebookToolbarProps {
   onShowKeyboardShortcuts: () => void;
   onToggleSystemPrompts: () => void;
   showSystemPrompts: boolean;
+  onToggleCanvasPanel: () => void;
+  showCanvasPanel: boolean;
   isProcessing: boolean;
   isReady: boolean;
 }
@@ -176,6 +190,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onShowKeyboardShortcuts,
   onToggleSystemPrompts,
   showSystemPrompts,
+  onToggleCanvasPanel,
+  showCanvasPanel,
   isProcessing,
   isReady
 }) => (
@@ -194,6 +210,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       onShowKeyboardShortcuts={onShowKeyboardShortcuts}
       onToggleSystemPrompts={onToggleSystemPrompts}
       showSystemPrompts={showSystemPrompts}
+      onToggleCanvasPanel={onToggleCanvasPanel}
+      showCanvasPanel={showCanvasPanel}
     />
     <LoginSection />
   </div>
