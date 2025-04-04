@@ -35,6 +35,7 @@
     "jszip": "^3.10.1",
     "katex": "^0.16.21",
     "lib0": "^0.2.101",
+    "localforage": "^1.10.0",
     "openai": "^4.86.0",
     "path-browserify": "^1.0.1",
     "prismjs": "^1.29.0",

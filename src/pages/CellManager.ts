@@ -2,6 +2,7 @@ import React from "react";
 import { OutputItem } from "../components/chat/Chat";
 import Convert from "ansi-to-html";
 import { v4 as uuidv4 } from 'uuid';
+import localforage from 'localforage';
 // Define different types of cells in our notebook
 type CellType = "markdown" | "code";
 type ExecutionState = "idle" | "running" | "success" | "error";
@@ -14,6 +15,13 @@ const convert = new Convert({
   newline: true,
   escapeXML: true,
   stream: false
+});
+
+// Configure localforage
+localforage.config({
+  name: 'notebook_storage',
+  storeName: 'notebooks',
+  description: 'Storage for notebook cells and metadata'
 });
 
 const stripAnsi = (str: string) => {
@@ -81,7 +89,13 @@ interface NotebookMetadata {
   modified: string;
 }
 
-// Add localStorage constants and helpers
+// Interface for stored notebook data
+interface StoredNotebookData {
+  cells: NotebookCell[];
+  metadata: NotebookMetadata;
+}
+
+// Storage key constant
 const STORAGE_KEY = "notebook_state";
 
 // Helper to safely stringify notebook state
@@ -105,12 +119,12 @@ const safeParse = (str: string | null) => {
   }
 };
 
-// Helper to save notebook state to localStorage
-const saveToLocalStorage = (
+// Helper to save notebook state using localforage
+const saveToLocalStorage = async (
   cells: NotebookCell[],
   metadata: NotebookMetadata
 ) => {
-  const data = safeStringify({
+  const data: StoredNotebookData = {
     cells: cells.map((cell) => ({
       ...cell,
       output: cell.output
@@ -132,15 +146,13 @@ const saveToLocalStorage = (
       ...metadata,
       modified: new Date().toISOString(),
     },
-  });
+  };
 
-  if (data) {
-    try {
-      localStorage.setItem(STORAGE_KEY, data);
-      console.log("[DEBUG] Saved notebook with cells:", cells.length);
-    } catch (error) {
-      console.error("Error saving to localStorage:", error);
-    }
+  try {
+    await localforage.setItem(STORAGE_KEY, data);
+    console.log("[DEBUG] Saved notebook with cells:", cells.length);
+  } catch (error) {
+    console.error("Error saving to localforage:", error);
   }
 };
 
@@ -785,51 +797,56 @@ export class CellManager {
   }
 
   // Save to localStorage
-  saveToLocalStorage(): void {
+  async saveToLocalStorage(): Promise<void> {
     const currentCells = this.getCurrentCellsContent();
     console.log(
       "[DEBUG] Auto-saving notebook with cells:",
       currentCells.length
     );
-    saveToLocalStorage(currentCells, this.notebookMetadata);
+    await saveToLocalStorage(currentCells, this.notebookMetadata);
   }
 
   // Helper to load notebook state from localStorage
-  loadFromLocalStorage(): {
+  async loadFromLocalStorage(): Promise<{
     cells: NotebookCell[];
     metadata: NotebookMetadata;
-  } | null {
-    const data = safeParse(localStorage.getItem(STORAGE_KEY));
-    if (!data) return null;
+  } | null> {
+    try {
+      const data = await localforage.getItem<StoredNotebookData>(STORAGE_KEY);
+      if (!data) return null;
 
-    // Ensure we have valid cells array and metadata
-    if (!Array.isArray(data.cells)) return null;
-    if (!data.metadata || typeof data.metadata !== "object") return null;
+      // Ensure we have valid cells array and metadata
+      if (!Array.isArray(data.cells)) return null;
+      if (!data.metadata || typeof data.metadata !== "object") return null;
 
-    return {
-      cells: data.cells.map((cell: NotebookCell) => ({
-        ...cell,
-        id: uuidv4(), // Generate new ID
-        executionState: "idle",
-        output: cell.output
-          ? cell.output.map((output: OutputItem) => ({
-              ...output,
-              attrs: {
-                ...output.attrs,
-                className: `output-area ${
-                  output.type === "stderr" ? "error-output" : ""
-                }`,
-              },
-            }))
-          : undefined,
-        metadata: {
-          ...cell.metadata,
-          isNew: false,
-          parent: cell.metadata?.parent, // Explicitly preserve parent key
-        },
-      })),
-      metadata: data.metadata,
-    };
+      return {
+        cells: data.cells.map((cell: NotebookCell) => ({
+          ...cell,
+          id: uuidv4(), // Generate new ID
+          executionState: "idle",
+          output: cell.output
+            ? cell.output.map((output: OutputItem) => ({
+                ...output,
+                attrs: {
+                  ...output.attrs,
+                  className: `output-area ${
+                    output.type === "stderr" ? "error-output" : ""
+                  }`,
+                },
+              }))
+            : undefined,
+          metadata: {
+            ...cell.metadata,
+            isNew: false,
+            parent: cell.metadata?.parent, // Explicitly preserve parent key
+          },
+        })),
+        metadata: data.metadata,
+      };
+    } catch (error) {
+      console.error("Error loading from localforage:", error);
+      return null;
+    }
   }
 
   // Run all cells

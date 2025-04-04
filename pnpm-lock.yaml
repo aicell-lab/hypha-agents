@@ -107,6 +107,9 @@ importers:
       lib0:
         specifier: ^0.2.101
         version: 0.2.101
+      localforage:
+        specifier: ^1.10.0
+        version: 1.10.0
       openai:
         specifier: ^4.86.0
         version: 4.86.0(encoding@0.1.13)(ws@8.18.0)(zod@3.24.2)

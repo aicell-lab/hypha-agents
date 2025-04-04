@@ -322,30 +322,41 @@ hypha_core = await server.get_service("${svc.id}")
 
   // Load saved state on mount
   useEffect(() => {
-    if (!hasInitialized.current) {
-      const savedState = cellManager.loadFromLocalStorage();
-      if (savedState) {
-        console.log('Restored notebook state from localStorage');
-        cellManager.setCells(savedState.cells);
-        setNotebookMetadata(savedState.metadata);
+    const loadInitialState = async () => {
+      if (!hasInitialized.current) {
+        try {
+          const savedState = await cellManager.loadFromLocalStorage();
+          if (savedState) {
+            console.log('Restored notebook state from localStorage');
+            cellManager.setCells(savedState.cells);
+            setNotebookMetadata(savedState.metadata);
 
-        // Find the highest execution count to continue from
-        let maxExecutionCount = 0;
-        savedState.cells.forEach(cell => {
-          if (cell.executionCount && cell.executionCount > maxExecutionCount) {
-            maxExecutionCount = cell.executionCount;
+            // Find the highest execution count to continue from
+            let maxExecutionCount = 0;
+            savedState.cells.forEach(cell => {
+              if (cell.executionCount && cell.executionCount > maxExecutionCount) {
+                maxExecutionCount = cell.executionCount;
+              }
+            });
+            setExecutionCounter(maxExecutionCount + 1);
+          } else {
+            // No saved state, add welcome cells
+            console.log('No saved state found, adding welcome cells');
+            cellManager.addCell('markdown', `# 🚀 Welcome to the Interactive Notebook\n\nThis notebook combines the power of Jupyter notebooks with AI assistance.\n\n* Type your question or request in the chat input below\n* Add code cells with \`/code\` command\n* Add markdown cells with \`/markdown\` command\n* Run cells with the run button or Ctrl+Enter`, 'assistant');
+            cellManager.addCell('code', '', 'assistant');
           }
-        });
-        setExecutionCounter(maxExecutionCount + 1);
-
-      } else {
-        // No saved state, add welcome cells
-        console.log('No saved state found, adding welcome cells');
-        cellManager.addCell('markdown', `# 🚀 Welcome to the Interactive Notebook\n\nThis notebook combines the power of Jupyter notebooks with AI assistance.\n\n* Type your question or request in the chat input below\n* Add code cells with \`/code\` command\n* Add markdown cells with \`/markdown\` command\n* Run cells with the run button or Ctrl+Enter`, 'assistant');
-        cellManager.addCell('code', '', 'assistant');
+          hasInitialized.current = true;
+        } catch (error) {
+          console.error('Error loading initial state:', error);
+          // Add welcome cells as fallback
+          cellManager.addCell('markdown', `# 🚀 Welcome to the Interactive Notebook\n\nThis notebook combines the power of Jupyter notebooks with AI assistance.\n\n* Type your question or request in the chat input below\n* Add code cells with \`/code\` command\n* Add markdown cells with \`/markdown\` command\n* Run cells with the run button or Ctrl+Enter`, 'assistant');
+          cellManager.addCell('code', '', 'assistant');
+          hasInitialized.current = true;
+        }
       }
-      hasInitialized.current = true;
-    }
+    };
+
+    loadInitialState();
   }, [cellManager]);
 
   // Update auto-save effect to use a debounce
@@ -356,8 +367,12 @@ hypha_core = await server.get_service("${svc.id}")
     }
 
     // Set new auto-save timer with longer delay
-    autoSaveTimerRef.current = setTimeout(() => {
-      cellManager.saveToLocalStorage();
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await cellManager.saveToLocalStorage();
+      } catch (error) {
+        console.error('Error auto-saving notebook:', error);
+      }
     }, 2000); // Increased delay to 2 seconds
 
     // Cleanup timer on unmount
