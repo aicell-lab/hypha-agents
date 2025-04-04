@@ -10,11 +10,12 @@ import logging
 from dotenv import load_dotenv
 from hypha_rpc import connect_to_server, login
 from hypha_agent_engine.hypha_service import register_agent_service
+from hypha_agent_engine.asgi_service import register_frontend_service
 
 # from hypha_agent_engine.services.plotting import register_plotting_service
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)
 
 # Configure logger to print to stdout
 logger = logging.getLogger(__name__)
@@ -45,6 +46,13 @@ async def start_service(server_url: str = "https://hypha.aicell.io") -> None:
         agent_svc = await register_agent_service(server)
         logger.info(
             "Hypha service started successfully. Agent service ID: %s", agent_svc.id
+        )
+
+        frontend_service = await register_frontend_service(
+            server, os.getenv("WORKSPACE"), "agent-platform", "build"
+        )
+        logger.info(
+            "Frontend service started successfully. Service ID: %s", frontend_service.id
         )
 
         # Register plotting service
