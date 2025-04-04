@@ -22,14 +22,16 @@ RUN pip install --upgrade pip
 WORKDIR /app/
 
 # Copy only requirements first to leverage Docker cache
-COPY requirements.txt requirements_test.txt pyproject.toml setup.py ./
+COPY requirements.txt requirements_test.txt ./
 
-# Install the required Python packages
+# Install Python requirements
 RUN pip install -r requirements.txt
-RUN pip install -e .
 
-# Copy the rest of the repository to the image
+# Copy the entire repository to include README.md and all other files
 COPY . .
+
+# Now install the package in editable mode after README.md is available
+RUN pip install -e .
 
 # Create logs directory and set permissions
 RUN mkdir -p /app/logs && \
