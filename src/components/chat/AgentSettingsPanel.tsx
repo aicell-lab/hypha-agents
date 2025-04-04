@@ -1,5 +1,29 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DefaultAgentConfig, AgentSettings } from '../../utils/chatCompletion';
+
+// Add localStorage key constant
+const AGENT_SETTINGS_STORAGE_KEY = 'agent_settings';
+
+// Export helper functions for localStorage
+export const loadSavedAgentSettings = (): AgentSettings => {
+  try {
+    const stored = localStorage.getItem(AGENT_SETTINGS_STORAGE_KEY);
+    if (!stored) return DefaultAgentConfig;
+    return JSON.parse(stored) as AgentSettings;
+  } catch (error) {
+    console.error('Error loading settings from localStorage:', error);
+    return DefaultAgentConfig;
+  }
+};
+
+export const saveAgentSettings = (settings: AgentSettings): void => {
+  try {
+    localStorage.setItem(AGENT_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch (error) {
+    console.error('Error saving settings to localStorage:', error);
+  }
+};
+
 // Define interfaces for our settings
 
 interface AgentSettingsProps {
@@ -10,7 +34,7 @@ interface AgentSettingsProps {
 
 
 export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({ 
-  settings = DefaultAgentConfig,
+  settings,
   onSettingsChange = () => {},
   className 
 }) => {
@@ -19,9 +43,11 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Update local settings when prop changes
   useEffect(() => {
-    setLocalSettings(settings || DefaultAgentConfig);
-    onSettingsChange(settings || DefaultAgentConfig);
+    if (settings) {
+      setLocalSettings(settings);
+    }
   }, [settings]);
 
   // Close dropdown when clicking outside
@@ -42,31 +68,63 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Save to localStorage first
+      saveAgentSettings(localSettings);
+      // Then notify parent component
       onSettingsChange(localSettings);
+      // Close the panel
       setIsOpen(false);
+      
+      // Show success message
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
+      messageDiv.textContent = 'Settings saved successfully';
+      document.body.appendChild(messageDiv);
+      setTimeout(() => {
+        messageDiv.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(messageDiv), 500);
+      }, 2000);
     } catch (error) {
       console.error('Error saving settings:', error);
+      
+      // Show error message
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
+      messageDiv.textContent = 'Error saving settings';
+      document.body.appendChild(messageDiv);
+      setTimeout(() => {
+        messageDiv.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(messageDiv), 500);
+      }, 2000);
     }
   };
 
   // Handle input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setLocalSettings(prev => ({
-      ...prev,
+    const newSettings = {
+      ...localSettings,
       [name]: name === 'temperature' ? parseFloat(value) : value
-    }));
+    };
+    setLocalSettings(newSettings);
   };
 
   // Reset to defaults
   const handleReset = () => {
     const newSettings = { ...DefaultAgentConfig };
     setLocalSettings(newSettings);
-    try {
-      onSettingsChange(newSettings);
-    } catch (error) {
-      console.error('Error resetting settings:', error);
-    }
+    saveAgentSettings(newSettings);
+    onSettingsChange(newSettings);
+    
+    // Show success message
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
+    messageDiv.textContent = 'Settings reset to defaults';
+    document.body.appendChild(messageDiv);
+    setTimeout(() => {
+      messageDiv.style.opacity = '0';
+      setTimeout(() => document.body.removeChild(messageDiv), 500);
+    }, 2000);
   };
 
   return (
@@ -155,6 +213,7 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
                     aria-label="Select AI model"
                   >
                     <option value="llama3.1:latest">Llama 3.1</option>
+                    <option value="qwen2.5-coder:7b">Qwen 2.5 Coder</option>
                     <option value="gpt-4o-mini">GPT-4 Mini</option>
                     <option value="mistral">Mistral</option>
                     <option value="codellama">Code Llama</option>

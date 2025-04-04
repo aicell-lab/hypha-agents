@@ -62,7 +62,7 @@ interface ThebeContextType {
   executeCode: (code: string, callbacks?: {
     onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
-  }) => Promise<void>;
+  }, timeout?: number) => Promise<void>;
   executeCodeWithDOMOutput: (code: string, outputElement: HTMLElement, callbacks?: {
     onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
@@ -626,6 +626,7 @@ print(f"{sys.version.split()[0]}")
     switch (type) {
       case 'stdout':
       case 'stderr':
+      case 'execute_input':
         const firstHalf = stripAnsi(content.substring(0, maxLength/2));
         const secondHalf = stripAnsi(content.substring(content.length - maxLength/2));
         const key = storeOutput(content, type);
@@ -671,7 +672,8 @@ print(f"{sys.version.split()[0]}")
     callbacks?: {
       onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
       onStatus?: (status: string) => void;
-    }
+    },
+    timeout?: number = 60000
   ): Promise<void> => {
     const { onOutput, onStatus } = callbacks || {};
 
@@ -694,6 +696,13 @@ print(f"{sys.version.split()[0]}")
               type: msg.content.name || 'stdout',
               content: streamContent,
               short_content: createShortContent(streamContent, msg.content.name || 'stdout')
+            });
+            break;
+          case "execute_input":
+            onOutput?.({
+              type: 'execute_input',
+              content: msg.content.code,
+              short_content: createShortContent(msg.content.code, 'execute_input')
             });
             break;
           case 'display_data':
@@ -756,8 +765,10 @@ print(f"{sys.version.split()[0]}")
             break;
         }
       };
-      // Wait for execution to complete
-      await future.done;
+      // Wait for execution to complete with a timeout (use Promise.race)
+      // await future.done;
+      await Promise.race([future.done, new Promise((_, reject) => setTimeout(() => reject(new Error(`Execution timeout after ${timeout/1000}s`)), timeout))]);
+
     } catch (error) {
       console.error('Error executing code:', error);
       onStatus?.('Error');
