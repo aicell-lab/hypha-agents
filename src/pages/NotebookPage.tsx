@@ -1015,7 +1015,7 @@ const NotebookPage: React.FC = () => {
         console.error('Error executing system cell:', error);
       });
     }
-  }, [isReady]);
+  }, [isReady, cellManager]);
 
   // Add toggleOutputVisibility method to cellManager
   const toggleOutputVisibility = (id: string) => {
