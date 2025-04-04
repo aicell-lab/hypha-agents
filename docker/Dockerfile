@@ -40,6 +40,11 @@ RUN mkdir -p /app/logs && \
 
 # Install frontend dependencies and build
 RUN pnpm install
+
+# Accept build argument for NODE_OPTIONS
+ENV NODE_OPTIONS="--max_old_space_size=8192"
+
+# Build the frontend with increased memory limit
 RUN pnpm build
 
 # Add /app to the list of safe directories for Git
