@@ -68,7 +68,6 @@ type CellRole = 'user' | 'assistant' | 'system';
 interface CodeCellProps {
   code: string;
   language?: string;
-  defaultCollapsed?: boolean;
   onExecute?: () => void;
   isExecuting?: boolean;
   executionCount?: number;
@@ -92,7 +91,6 @@ interface CodeCellProps {
 export const CodeCell: React.FC<CodeCellProps> = ({ 
   code, 
   language = 'python',
-  defaultCollapsed = false,
   onExecute,
   isExecuting = false,
   executionCount,
@@ -108,7 +106,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   parent,
   output
 }) => {
-  const { executeCodeWithDOMOutput, status, isReady } = useThebe();
+  const { status, isReady } = useThebe();
   const [codeValue, setCodeValue] = useState(code);
   const outputRef = useRef<HTMLDivElement>(null);
   const internalEditorRef = useRef<MonacoEditor | null>(null);
@@ -231,79 +229,13 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const handleExecute = useCallback(async () => {
     if (!isReady || isExecuting) return;
     
-    // Get the current value from the editor
-    const currentCode = internalEditorRef.current?.getValue() || codeValue;
-    
     if (onExecute) {
       onExecute();
     } else {
-      // Fallback to local execution if no onExecute provided
-      if (outputRef.current) {
-        // Clear previous output
-        outputRef.current.innerHTML = '';
-        hasFinalDomOutput.current = false;
-        
-        try {
-          await executeCodeWithDOMOutput(currentCode, outputRef.current, {
-            onOutput: (output) => {
-              // For non-HTML outputs, create appropriate DOM elements
-              if (hasFinalDomOutput.current) return;
-              
-              if (output.type === 'stdout' || output.type === 'stderr') {
-                const pre = document.createElement('pre');
-                pre.className = output.type === 'stdout' 
-                  ? 'text-gray-700 whitespace-pre-wrap'
-                  : 'text-red-600 whitespace-pre-wrap';
-                // Convert ANSI escape codes to HTML
-                pre.innerHTML = convert.toHtml(output.content);
-                outputRef.current?.appendChild(pre);
-              } else if (output.type === 'img') {
-                const img = document.createElement('img');
-                img.src = output.content;
-                img.className = 'max-w-full';
-                img.alt = 'Output';
-                outputRef.current?.appendChild(img);
-              } else if (output.type === 'html') {
-                // For HTML content, create a container and set innerHTML
-                const container = document.createElement('div');
-                container.innerHTML = output.content;
-                // Execute any scripts in the HTML content
-                executeScripts(container);
-                
-                if (outputRef.current && !hasFinalDomOutput.current) {
-                  outputRef.current.appendChild(container);
-                }
-              }
-         
-            },
-            onStatus: (status) => {
-              console.log('Execution status:', status);
-              
-              if (status === 'Completed' && outputRef.current) {
-                // When execution completes, use the final DOM output
-                hasFinalDomOutput.current = true;
-              }
-            }
-          });
-        } catch (error) {
-          console.error('Error executing code:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Error executing code';
-          
-          // Only add error message if we don't already have output
-          if (!hasFinalDomOutput.current) {
-            const errorDiv = document.createElement('pre');
-            errorDiv.className = 'error-output text-red-600';
-            // Convert ANSI escape codes in error messages too
-            errorDiv.innerHTML = convert.toHtml(errorMessage);
-            if (outputRef.current) {
-              outputRef.current.innerHTML = '';
-              outputRef.current.appendChild(errorDiv);
-            }
-          }
-        }
-      }
+      console.error("No onExecute function provided");
+      throw new Error("No onExecute function provided");
     }
-  }, [isReady, isExecuting, codeValue, executeCodeWithDOMOutput, onExecute]);
+  }, [isReady, isExecuting, codeValue, onExecute]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -452,13 +384,13 @@ export const CodeCell: React.FC<CodeCellProps> = ({
         <div className="jupyter-cell-flex-container items-start w-full max-w-full">
           {/* Execution count with role icon */}
           <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-            {role !== undefined && onRoleChange && (
+            {!isExecuting &&role !== undefined && onRoleChange && (
               <div className="pr-1">
                 <RoleSelector role={role} onChange={onRoleChange} />
               </div>
             )}
             {isExecuting ? (
-              <div className="text-gray-500 pr-1">
+              <div className="text-gray-500 pr-2">
                 <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
               </div>
             ) : (
@@ -561,7 +493,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
           {!hideOutput && (
             <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
               {isExecuting ? (
-                <div className="text-gray-500 pr-1">
+                <div className="text-gray-500 pr-2">
                   <FaSpinner className="w-4 h-4 animate-spin text-blue-500" />
                 </div>
               ) : (

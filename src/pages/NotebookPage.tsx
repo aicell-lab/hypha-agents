@@ -23,9 +23,18 @@ import { CellManager } from './CellManager';
 import '../styles/notebook.css';
 import { AgentSettings, DefaultAgentConfig } from '../utils/chatCompletion';
 import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
+import { HyphaCore } from 'hypha-core';
+import { CanvasPanel } from '../components/notebook/CanvasPanel';
 
 // Add type imports from chatCompletion
 import { ChatRole, ChatMessage } from '../utils/chatCompletion';
+
+// Add types for side panel
+interface HyphaCoreWindow {
+  id: string;
+  src: string;
+  title?: string;
+}
 
 const convert = new Convert({
   fg: '#000',
@@ -124,72 +133,6 @@ const KeyboardShortcutsDialog: React.FC<{ isOpen: boolean; onClose: () => void }
   );
 };
 
-// Custom Hook for tool registration that follows React's rules
-const useNotebookTools = (
-  isReady: boolean,
-  handleExecuteCode: (code: string, cell_id?: string) => Promise<string>
-) => {
-  const { tools, registerTools } = useTools();
-  const [isToolRegistered, setIsToolRegistered] = useState(false);
-
-  // Register the code execution tool
-  useEffect(() => {
-    if (!isReady || isToolRegistered) return;
-
-    // Check if tool is already registered to prevent duplicate registrations
-    const existingTool = tools.find(tool => tool.name === 'runCode');
-    if (existingTool) {
-      console.log('[DEBUG] runCode tool already registered, skipping registration');
-      setIsToolRegistered(true);
-      return;
-    }
-
-    // Register the runCode tool for the agent to use
-    console.log('[DEBUG] Registering runCode tool for notebook agent');
-    const runCodeTool = {
-      type: 'function' as const,
-      name: 'runCode',
-      description: `Execute Python code in the notebook environment. The code will be added as a new code cell and executed.
-Features:
-- Persistent variables and imports between runs
-- Rich output: text, plots, HTML/JS widgets
-- Pre-installed: numpy, scipy, pandas, matplotlib, plotly
-
-Usage:
-1. Basic code: print(), display()
-2. Package install: await micropip.install(['pkg'])
-3. Plots: plt.plot(); plt.show() or fig.show()
-
-Note: A cell_id along with a summary of the outputs will be returned and the full results will be displayed in the notebook interface.
-With the cell_id, you can update the cell content in the subsequent tool call, e.g. if the code is incorrect.
-`,
-      parameters: {
-        type: 'object',
-        properties: {
-          code: { type: 'string', description: 'The code to execute' },
-          cell_id: { type: 'string', description: 'Optional: the cell_id of the code cell to update' }
-        },
-        required: ['code']
-      },
-      fn: async (args: { code: string, cell_id?: string }) => {
-        try {
-          console.log("[DEBUG] runCode tool fn called with:", args.code.substring(0, 100) + "...", args.cell_id);
-          return await handleExecuteCode(args.code, args.cell_id);
-        } catch (error) {
-          console.error('[DEBUG] Error in runCode tool fn:', error);
-          return `Error executing code: ${error instanceof Error ? error.message : String(error)}`;
-        }
-      }
-    };
-
-    registerTools([runCodeTool]);
-    console.log('[DEBUG] Successfully registered notebook tools');
-    setIsToolRegistered(true);
-  }, [isReady, tools, registerTools, handleExecuteCode, isToolRegistered]);
-
-  return { tools, isToolRegistered };
-};
-
 const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
 
 
@@ -275,7 +218,7 @@ const NotebookPage: React.FC = () => {
   const [isAIReady, setIsAIReady] = useState(false);
   // Add state for agent settings with proper initialization from localStorage
   const [agentSettings, setAgentSettings] = useState<AgentSettings>(() => loadSavedAgentSettings());
-
+  const [hyphaCoreApi, setHyphaCoreApi] = useState<any>(null);
   // Initialize the cell manager
   const cellManager = useCellManager(
     cells,
@@ -289,6 +232,93 @@ const NotebookPage: React.FC = () => {
     lastAgentCellRef,
     executeCode
   );
+
+  // Update side panel state names
+  const [canvasPanelWidth, setCanvasPanelWidth] = useState(600);
+  const [showCanvasPanel, setShowCanvasPanel] = useState(false);
+  const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
+  const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
+
+  const addWindowCallback = useCallback((config: any) => {
+    // Add the new window to our state
+    const newWindow: HyphaCoreWindow = {
+      id: config.window_id,
+      src: config.src,
+      title: config.title || `Window ${config.window_id}`
+    };
+    
+    setHyphaCoreWindows(prev => [...prev, newWindow]);
+    setShowCanvasPanel(true);
+    setActiveCanvasTab(config.window_id);
+  }, [setHyphaCoreWindows, setShowCanvasPanel, setActiveCanvasTab]);
+
+  const handleTabClose = useCallback((tabId: string) => {
+    setHyphaCoreWindows(prev => {
+      const newWindows = prev.filter(w => w.id !== tabId);
+      if (newWindows.length === 0) {
+        setShowCanvasPanel(false);
+        setActiveCanvasTab(null);
+      } else if (activeCanvasTab === tabId) {
+        // Set the last window as active when closing the active tab
+        setActiveCanvasTab(newWindows[newWindows.length - 1].id);
+      }
+      return newWindows;
+    });
+  }, [activeCanvasTab]);
+
+  const setupNotebookService = async () => {
+    const hyphaCore = new HyphaCore();
+    hyphaCore.on("add_window", addWindowCallback);
+
+    const api: any = await hyphaCore.start();
+    setHyphaCoreApi(api);
+    console.log("Setting up notebook service");
+    try {
+      const service: any = {
+        "id": "hypha-core",
+        "name": "Hypha Core",
+        "description": "Hypha Core service",
+        "config": {
+          "require_context": false,
+        }
+      }
+      for (const key of Object.keys(api)) {
+        if (service[key] === undefined) {
+          // service[key] = api[key];
+          // wrap the api[key] in a function that logs the call if its a function
+          if (typeof api[key] === 'function') {
+            service[key] = (...args: any[]) => {
+              console.log(`Calling ${key} with args`, args);
+              return api[key](...args);
+            }
+          } else {
+            service[key] = api[key];
+          }
+        }
+      }
+      const svc = await server.registerService(service, {overwrite: true})
+      console.log(`Notebook service registered with id ${svc.id}`);
+      const token = await server.generateToken()
+      await executeCode(`from hypha_rpc import connect_to_server
+server = await connect_to_server(server_url="${server.config.public_base_url}", token="${token}")
+hypha_core = await server.get_service("${svc.id}")
+      `, {onOutput: (output) => {
+        console.log(output);
+      }, onStatus: (status) => {
+        console.log(status);
+      }})
+    } catch (error) {
+      console.error("Failed to register notebook service:", error);
+    }
+  }
+  // if isHyphaCoreReady is true, we call api.alert("Hello, world!")
+  useEffect(() => {
+    if (server && isLoggedIn && !hyphaCoreApi) {
+      // hyphaCoreAPI.alert("Hello, world!");
+      console.log("HyphaCore is ready");
+      setupNotebookService();
+    }
+  }, [server, isLoggedIn]);
 
   // Load saved state on mount
   useEffect(() => {
@@ -385,100 +415,14 @@ const NotebookPage: React.FC = () => {
         cellManager.setCurrentAgentCell(actualCellId);
 
       }
-
-      // Update cell state to running and execute the code
-      cellManager.updateCellExecutionState(actualCellId, 'running');
-
-      const outputs: OutputItem[] = [];
-      let shortOutput = '';
-
-      try {
-        await executeCode(code, {
-          onOutput: (output) => {
-            // Process ANSI codes in output
-            let processedOutput = output;
-            if ((output.type === 'stderr' || output.type === 'error') &&
-              (output.content.includes('[0;') || output.content.includes('[1;'))) {
-              try {
-                const htmlContent = convert.toHtml(output.content);
-                processedOutput = {
-                  ...output,
-                  content: htmlContent,
-                  attrs: {
-                    ...output.attrs,
-                    className: `output-area ${output.attrs?.className || ''}`,
-                    isProcessedAnsi: true
-                  }
-                };
-              } catch (error) {
-                console.error("[DEBUG] ANSI conversion error:", error);
-              }
-            } else {
-              processedOutput = {
-                ...output,
-                attrs: {
-                  ...output.attrs,
-                  className: `output-area ${output.attrs?.className || ''}`
-                }
-              };
-            }
-
-            // Add to outputs array
-            outputs.push(processedOutput);
-
-            if (output.type === 'stdout' || output.type === 'stderr') {
-              shortOutput += output.content + '\n';
-            }
-
-            // Update cell with current outputs
-            cellManager.updateCellExecutionState(actualCellId, 'running', outputs);
-          },
-          onStatus: (status) => {
-            if (status === 'Completed') {
-              // Save final outputs on completion
-              cellManager.updateCellExecutionState(actualCellId, 'success', outputs);
-
-              // Save to localStorage after successful execution
-              setTimeout(() => {
-                cellManager.saveToLocalStorage();
-              }, 100);
-            } else if (status === 'Error') {
-              // Save error outputs and keep code visible
-              cellManager.updateCellExecutionState(actualCellId, 'error', outputs);
-
-              // Save to localStorage after error
-              setTimeout(() => {
-                cellManager.saveToLocalStorage();
-              }, 100);
-            }
-          }
-        });
-        return `[Cell Id: ${actualCellId}]\n${stripAnsi(shortOutput.trim()) || "Code executed successfully."}`;
-      } catch (error) {
-        console.error("[DEBUG] executeCode error:", error);
-
-        // Save error state and output, keep code visible
-        cellManager.updateCellExecutionState(actualCellId, 'error', [{
-          type: 'stderr',
-          content: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          attrs: { className: 'output-area error-output' }
-        }]);
-
-        // Save to localStorage after error
-        setTimeout(() => {
-          cellManager.saveToLocalStorage();
-        }, 100);
-
-        return `[Cell Id: ${actualCellId}]\nError executing code: ${error instanceof Error ? error.message : String(error)}`;
-      }
+      // wait for the next tick
+      await new Promise(resolve => setTimeout(resolve, 0));
+      return await cellManager.executeCell(actualCellId, true);
     } catch (error) {
       console.error("[DEBUG] Fatal error in handleExecuteCode:", error);
       return `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
     }
   }, [cellManager, executeCode, lastAgentCellRef, lastUserCellRef]);
-
-  // Use the proper custom hook to register tools
-  const { tools, isToolRegistered } = useNotebookTools(isReady, handleExecuteCode);
 
   // Update initialization effect to just check for server and login
   useEffect(() => {
@@ -541,10 +485,8 @@ const NotebookPage: React.FC = () => {
       const completion = structuredChatCompletion({
         messages: history,
         systemPrompt: agentSettings.instructions,
-        tools,
         model: agentSettings.model,
         temperature: agentSettings.temperature,
-        server,
         maxSteps: 15,
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
@@ -576,7 +518,7 @@ const NotebookPage: React.FC = () => {
     } finally {
       setIsProcessingAgentResponse(false);
     }
-  }, [activeCellId, cellManager, isReady, isLoggedIn, server, tools, getConversationHistory, handleExecuteCode, agentSettings]);
+  }, [activeCellId, cellManager, isReady, isLoggedIn, server, getConversationHistory, handleExecuteCode, agentSettings]);
 
 
 
@@ -630,10 +572,8 @@ const NotebookPage: React.FC = () => {
       const completion = structuredChatCompletion({
         messages: history,
         systemPrompt: agentSettings.instructions,
-        tools,
         model: agentSettings.model,
         temperature: agentSettings.temperature,
-        server,
         maxSteps: 15,
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
@@ -1166,11 +1106,14 @@ const NotebookPage: React.FC = () => {
   }, [showSystemPrompts]);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex h-screen overflow-hidden">
+    {/* Main notebook content */}
+    <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full bg-gray-50">
       {/* Header */}
       <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
         <div className="px-4 py-2">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="max-w-full mx-auto flex items-center justify-between">
             {/* Title and Logo */}
             <div className="flex items-center gap-3">
               <Link
@@ -1242,298 +1185,316 @@ const NotebookPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Notebook Content Area - Add more bottom padding */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-1 pb-48">
-        <div className="max-w-5xl mx-auto px-4 notebook-cells-container bg-gray-100">
-          {cells.map((cell, index) => (
-            <div
-              key={cell.id}
-              data-cell-id={cell.id}
-              className={`notebook-cell-container group relative ${cell.executionState === 'error' ? 'border-red-200' : ''
-                } ${activeCellId === cell.id ? 'notebook-cell-container-active' : ''
-                } mb-1 bg-white overflow-hidden rounded-md`}
-              onClick={() => cellManager.setActiveCell(cell.id)}
-              tabIndex={0}
-            >
-              {/* Active cell indicator strip */}
-              {activeCellId === cell.id && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
-              )}
-              {/* Cell Content */}
-              <div className="flex relative w-full">
-                <div className="flex-1 min-w-0 w-full overflow-x-hidden">
-                  {cell.type === 'code' ? (
-                    
-                      <CodeCell
-                        code={cell.content}
-                        language="python"
-                        defaultCollapsed={false}
-                        onExecute={() => executeCell(cell.id)}
-                        isExecuting={cell.executionState === 'running'}
-                        executionCount={cell.executionState === 'running' ? undefined : cell.executionCount}
-                        blockRef={getEditorRef(cell.id)}
-                        isActive={activeCellId === cell.id}
+      {/* Main content area with notebook and canvas panel */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Notebook Content Area */}
+        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden py-1 pb-48">
+          <div className="max-w-5xl mx-auto px-4 notebook-cells-container bg-gray-100">
+            {cells.map((cell, index) => (
+              <div
+                key={cell.id}
+                data-cell-id={cell.id}
+                className={`notebook-cell-container group relative ${cell.executionState === 'error' ? 'border-red-200' : ''
+                  } ${activeCellId === cell.id ? 'notebook-cell-container-active' : ''
+                  } mb-1 bg-white overflow-hidden rounded-md`}
+                onClick={() => cellManager.setActiveCell(cell.id)}
+                tabIndex={0}
+              >
+                {/* Active cell indicator strip */}
+                {activeCellId === cell.id && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
+                )}
+                {/* Cell Content */}
+                <div className="flex relative w-full">
+                  <div className="flex-1 min-w-0 w-full overflow-x-hidden">
+                    {cell.type === 'code' ? (
+                      
+                        <CodeCell
+                          code={cell.content}
+                          language="python"
+                          onExecute={() => executeCell(cell.id)}
+                          isExecuting={cell.executionState === 'running'}
+                          executionCount={cell.executionState === 'running' ? undefined : cell.executionCount}
+                          blockRef={getEditorRef(cell.id)}
+                          isActive={activeCellId === cell.id}
+                          role={cell.role}
+                          onRoleChange={(role) => cellManager.updateCellRole(cell.id, role)}
+                          onChange={(newCode) => cellManager.updateCellContent(cell.id, newCode)}
+                          hideCode={cell.metadata?.isCodeVisible === false}
+                          onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
+                          hideOutput={cell.metadata?.isOutputVisible === false}
+                          onOutputVisibilityChange={() => cellManager.toggleOutputVisibility(cell.id)}
+                          parent={cell.metadata?.parent}
+                          output={cell.output}
+                        />
+               
+                    ) : (
+                      <MarkdownCell
+                        content={cell.content}
+                        onChange={(content) => cellManager.updateCellContent(cell.id, content)}
+                        initialEditMode={cell.metadata?.isNew === true}
                         role={cell.role}
                         onRoleChange={(role) => cellManager.updateCellRole(cell.id, role)}
-                        onChange={(newCode) => cellManager.updateCellContent(cell.id, newCode)}
-                        hideCode={cell.metadata?.isCodeVisible === false}
-                        onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
-                        hideOutput={cell.metadata?.isOutputVisible === false}
-                        onOutputVisibilityChange={() => cellManager.toggleOutputVisibility(cell.id)}
+                        isEditing={cell.metadata?.isEditing || false}
+                        onEditingChange={(isEditing) => cellManager.toggleCellEditing(cell.id, isEditing)}
+                        editorRef={getEditorRef(cell.id)}
+                        isActive={activeCellId === cell.id}
                         parent={cell.metadata?.parent}
-                        output={cell.output}
                       />
-               
-                  ) : (
-                    <MarkdownCell
-                      content={cell.content}
-                      onChange={(content) => cellManager.updateCellContent(cell.id, content)}
-                      initialEditMode={cell.metadata?.isNew === true}
-                      role={cell.role}
-                      onRoleChange={(role) => cellManager.updateCellRole(cell.id, role)}
-                      isEditing={cell.metadata?.isEditing || false}
-                      onEditingChange={(isEditing) => cellManager.toggleCellEditing(cell.id, isEditing)}
-                      editorRef={getEditorRef(cell.id)}
-                      isActive={activeCellId === cell.id}
-                      parent={cell.metadata?.parent}
-                    />
-                  )}
-                </div>
-
-                {/* Cell Toolbar - Show on hover */}
-                <div
-                  className="absolute right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
-                  style={{ pointerEvents: 'auto' }}
-                >
-                  {/* Cell Type Indicator */}
-                  <span className="text-xs text-gray-500 px-1 border-r border-gray-200 mr-1">
-                    {cell.type === 'code' ? (
-                      <span className="flex items-center gap-1">
-                        <VscCode className="w-3 h-3" />
-                        Code
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1">
-                        <MdOutlineTextFields className="w-3 h-3" />
-                        Markdown
-                      </span>
                     )}
-                  </span>
+                  </div>
 
-                  {cell.type === 'code' && (
-                    <>
-                      {/* Add Copy Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          copyToClipboard(cell.content);
-                        }}
-                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                        title="Copy code"
-                      >
-                        <FaCopy className="w-3.5 h-3.5" />
-                        <span className="text-xs">Copy</span>
-                      </button>
-
-                      {/* Hide/Show Code Button - Moved before Run button */}
-                      <button
-                        onClick={(e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          cellManager.toggleCodeVisibility(cell.id);
-                        }}
-                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                        title={cell.metadata?.isCodeVisible === false ? "Show code" : "Hide code"}
-                      >
-                        <svg
-                          className={`w-4 h-4 transition-transform ${cell.metadata?.isCodeVisible === false ? 'transform rotate-180' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d={cell.metadata?.isCodeVisible === false
-                              ? "M9 5l7 7-7 7"
-                              : "M19 9l-7 7-7-7"
-                            }
-                          />
-                        </svg>
-                        <span className="text-xs">
-                          {cell.metadata?.isCodeVisible === false ? 'Show' : 'Hide'}
+                  {/* Cell Toolbar - Show on hover */}
+                  <div
+                    className="absolute right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
+                    style={{ pointerEvents: 'auto' }}
+                  >
+                    {/* Cell Type Indicator */}
+                    <span className="text-xs text-gray-500 px-1 border-r border-gray-200 mr-1">
+                      {cell.type === 'code' ? (
+                        <span className="flex items-center gap-1">
+                          <VscCode className="w-3 h-3" />
+                          Code
                         </span>
-                      </button>
-
-                      <button
-                        onClick={() => executeCell(cell.id)}
-                        disabled={!isReady || cell.executionState === 'running'}
-                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Run cell"
-                      >
-                        {cell.executionState === 'running' ? (
-                          <FaSpinner className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        )}
-                        <span className="text-xs">Run</span>
-                      </button>
-
-                      <button
-                        onClick={() => cellManager.changeCellType(cell.id, 'markdown')}
-                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                        title="Convert to Markdown"
-                        disabled={cell.executionState === 'running'}
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                        </svg>
-                        <span className="text-xs">Convert</span>
-                      </button>
-                    </>
-                  )}
-
-                  {cell.type === 'markdown' && (
-                    <>
-                      {cell.metadata?.isEditing ? (
-                        <button
-                          onClick={() => handleMarkdownRender(cell.id)}
-                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                          title="Render markdown (Shift+Enter)"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-xs">Render</span>
-                        </button>
                       ) : (
-                        <>
-
-                          {/* Add Copy Button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              copyToClipboard(cell.content);
-                            }}
-                            className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                            title="Copy markdown"
-                          >
-                            <FaCopy className="w-3.5 h-3.5" />
-                            <span className="text-xs">Copy</span>
-                          </button>
-                          <button
-                            onClick={() => cellManager.toggleCellEditing(cell.id, true)}
-                            className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                            title="Edit markdown"
-                          >
-                            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                            </svg>
-                            <span className="text-xs">Edit</span>
-                          </button>
-
-                        </>
+                        <span className="flex items-center gap-1">
+                          <MdOutlineTextFields className="w-3 h-3" />
+                          Markdown
+                        </span>
                       )}
+                    </span>
 
-                      <button
-                        onClick={() => cellManager.changeCellType(cell.id, 'code')}
-                        className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                        title="Convert to Code"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                        </svg>
-                        <span className="text-xs">Convert</span>
-                      </button>
-                    </>
-                  )}
-
-                  {/* Add regenerate button for user message cells */}
-                  {cell.role === 'user' && (
-                    <button
-                      onClick={() => handleRegenerateClick(cell.id)}
-                      disabled={!isReady || isProcessingAgentResponse}
-                      className="p-1 hover:bg-green-100 rounded text-green-600 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Regenerate AI response"
-                    >
-                      <FaSyncAlt className="w-3 h-3" />
-                      <span className="text-xs">Regenerate</span>
-                    </button>
-                  )}
-
-                  {/* Delete buttons - different for user vs. assistant cells */}
-                  {cell.role === 'user' ? (
-                    <div className="relative flex items-center gap-1">
-                      {/* Delete button group with expanding options */}
-                      <div className="flex items-center gap-1 bg-white rounded overflow-hidden transition-all duration-200">
+                    {cell.type === 'code' && (
+                      <>
+                        {/* Add Copy Button */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            const target = e.currentTarget.parentElement;
-                            if (target) {
-                              target.classList.toggle('expanded');
-                            }
+                            copyToClipboard(cell.content);
                           }}
-                          className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
-                          title="Delete options"
+                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                          title="Copy code"
                         >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          <span className="text-xs">Delete</span>
+                          <FaCopy className="w-3.5 h-3.5" />
+                          <span className="text-xs">Copy</span>
                         </button>
 
-                        {/* Additional delete options - initially hidden */}
-                        <div className="hidden expanded:flex items-center gap-1 ml-1 pl-1 border-l border-gray-200">
+                        {/* Hide/Show Code Button - Moved before Run button */}
+                        <button
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            cellManager.toggleCodeVisibility(cell.id);
+                          }}
+                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                          title={cell.metadata?.isCodeVisible === false ? "Show code" : "Hide code"}
+                        >
+                          <svg
+                            className={`w-4 h-4 transition-transform ${cell.metadata?.isCodeVisible === false ? 'transform rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d={cell.metadata?.isCodeVisible === false
+                                ? "M9 5l7 7-7 7"
+                                : "M19 9l-7 7-7-7"
+                              }
+                            />
+                          </svg>
+                          <span className="text-xs">
+                            {cell.metadata?.isCodeVisible === false ? 'Show' : 'Hide'}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => executeCell(cell.id)}
+                          disabled={!isReady || cell.executionState === 'running'}
+                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Run cell"
+                        >
+                          {cell.executionState === 'running' ? (
+                            <FaSpinner className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                          <span className="text-xs">Run</span>
+                        </button>
+
+                        <button
+                          onClick={() => cellManager.changeCellType(cell.id, 'markdown')}
+                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                          title="Convert to Markdown"
+                          disabled={cell.executionState === 'running'}
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                          </svg>
+                          <span className="text-xs">Convert</span>
+                        </button>
+                      </>
+                    )}
+
+                    {cell.type === 'markdown' && (
+                      <>
+                        {cell.metadata?.isEditing ? (
+                          <button
+                            onClick={() => handleMarkdownRender(cell.id)}
+                            className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                            title="Render markdown (Shift+Enter)"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-xs">Render</span>
+                          </button>
+                        ) : (
+                          <>
+
+                            {/* Add Copy Button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(cell.content);
+                              }}
+                              className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                              title="Copy markdown"
+                            >
+                              <FaCopy className="w-3.5 h-3.5" />
+                              <span className="text-xs">Copy</span>
+                            </button>
+                            <button
+                              onClick={() => cellManager.toggleCellEditing(cell.id, true)}
+                              className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                              title="Edit markdown"
+                            >
+                              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                              </svg>
+                              <span className="text-xs">Edit</span>
+                            </button>
+
+                          </>
+                        )}
+
+                        <button
+                          onClick={() => cellManager.changeCellType(cell.id, 'code')}
+                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                          title="Convert to Code"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                          </svg>
+                          <span className="text-xs">Convert</span>
+                        </button>
+                      </>
+                    )}
+
+                    {/* Add regenerate button for user message cells */}
+                    {cell.role === 'user' && (
+                      <button
+                        onClick={() => handleRegenerateClick(cell.id)}
+                        disabled={!isReady || isProcessingAgentResponse}
+                        className="p-1 hover:bg-green-100 rounded text-green-600 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Regenerate AI response"
+                      >
+                        <FaSyncAlt className="w-3 h-3" />
+                        <span className="text-xs">Regenerate</span>
+                      </button>
+                    )}
+
+                    {/* Delete buttons - different for user vs. assistant cells */}
+                    {cell.role === 'user' ? (
+                      <div className="relative flex items-center gap-1">
+                        {/* Delete button group with expanding options */}
+                        <div className="flex items-center gap-1 bg-white rounded overflow-hidden transition-all duration-200">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              cellManager.deleteCell(cell.id);
+                              const target = e.currentTarget.parentElement;
+                              if (target) {
+                                target.classList.toggle('expanded');
+                              }
                             }}
-                            className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
+                            className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
+                            title="Delete options"
                           >
-                            <span className="text-xs">This Cell</span>
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span className="text-xs">Delete</span>
                           </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              cellManager.deleteCellWithChildren(cell.id);
-                            }}
-                            className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
-                          >
-                            <span className="text-xs">With Responses</span>
-                          </button>
+
+                          {/* Additional delete options - initially hidden */}
+                          <div className="hidden expanded:flex items-center gap-1 ml-1 pl-1 border-l border-gray-200">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cellManager.deleteCell(cell.id);
+                              }}
+                              className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
+                            >
+                              <span className="text-xs">This Cell</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cellManager.deleteCellWithChildren(cell.id);
+                              }}
+                              className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
+                            >
+                              <span className="text-xs">With Responses</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        cellManager.deleteCell(cell.id);
-                      }}
-                      className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
-                      title="Delete cell"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      <span className="text-xs">Delete</span>
-                    </button>
-                  )}
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cellManager.deleteCell(cell.id);
+                        }}
+                        className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
+                        title="Delete cell"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span className="text-xs">Delete</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
 
-          <div ref={endRef} />
+            <div ref={endRef} />
+          </div>
         </div>
+
+        {/* Canvas Panel */}
+        {showCanvasPanel && (
+          <div className="border-l border-gray-200 h-full relative" style={{ width: canvasPanelWidth }}>
+            <CanvasPanel
+              windows={hyphaCoreWindows}
+              isVisible={showCanvasPanel}
+              width={canvasPanelWidth}
+              activeTab={activeCanvasTab}
+              onResize={setCanvasPanelWidth}
+              onClose={() => setShowCanvasPanel(false)}
+              onTabChange={setActiveCanvasTab}
+              onTabClose={handleTabClose}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Input Area - Add a semi-transparent background */}
+      {/* Input Area */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md z-10">
         <div className="max-w-6xl mx-auto">
           <div className="mb-2 text-xs text-center">
@@ -1575,6 +1536,8 @@ const NotebookPage: React.FC = () => {
         onClose={() => setIsShortcutsDialogOpen(false)}
       />
     </div>
+     </div>
+     </div>
   );
 };
 
@@ -1582,7 +1545,8 @@ const NotebookPageWithThebe: React.FC = () => {
   return (
     <ThebeProvider>
       <ToolProvider>
-        <NotebookPage />
+            <NotebookPage />
+         
       </ToolProvider>
     </ThebeProvider>
   );

@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import { Tool } from '../components/chat/ToolProvider';
 import { z } from 'zod';
 import { zodResponseFormat } from 'openai/helpers/zod';
 
@@ -20,10 +19,8 @@ export interface ChatMessage {
 export interface ChatCompletionOptions {
   messages: ChatMessage[];
   systemPrompt?: string;
-  tools?: Tool[];
   model?: string;
   temperature?: number;
-  server: any;
   onToolCall?: (toolCall: any) => Promise<string>;
   onMessage?: (completionId: string, message: string) => void;
   maxSteps?: number; // Maximum number of tool call steps before stopping
@@ -34,7 +31,8 @@ export interface ChatCompletionOptions {
 // Define the response schema for the code agent
 // Note: it seems better to use nullable for optional fields https://github.com/Klimatbyran/garbo/issues/473
 const CodeAgentResponse = z.object({
-  thoughts: z.string().nullable().describe('Brief reasoning for the current response or script'),
+  // Chain of Drafts reasoning https://arxiv.org/abs/2502.18600
+  thoughts: z.array(z.string()).nullable().describe('Brief reasoning for the current response or script, 5 words at most'),
   response: z.string().describe('Response to be displayed to the user'),
   script: z.string().nullable().describe('Optional: The python script to be executed to fulfill the request'),
 //   cell_id: z.string().nullable().describe('Optional: used to update an existing cell for error recovery; if not provided, a new cell will be created'),
@@ -60,7 +58,8 @@ export const DefaultAgentConfig: AgentSettings = {
   
   1. RESPONSE FORMAT
      You must respond in a structured format with the following fields:
-     - thoughts (required): Your reasoning process and analysis of the situation
+     - thoughts (required): Your step by step reasoning and planning, but only keep a minimum draft for
+each step, with 5 words at most!
      - response (required): Your main response to the user, explaining what you're doing or your findings
      - script (optional): Python code to execute to gather information or perform actions; Must be a valid multi-line python script
   
@@ -78,15 +77,17 @@ export const DefaultAgentConfig: AgentSettings = {
   4. EXAMPLE RESPONSE FORMAT:
      When user asks "Plot a sine wave":
      {
+        // 5 words at most"
+       "thoughts": ["import", "data", "plot;show"],
        "response": "I'll help you create a plot of a sine wave using numpy and matplotlib.",
-       "script": "import numpy as np\nimport matplotlib.pyplot as plt\n\nx = np.linspace(0, 2*np.pi, 100)\ny = np.sin(x)\n\nplt.plot(x, y)\nplt.title('Sine Wave')\nplt.xlabel('x')\nplt.ylabel('sin(x)')\nplt.grid(True)\nplt.show()",
-       "thoughts": "To create a sine wave plot, we need: 1) numpy for calculations, 2) matplotlib for plotting, 3) x values from 0 to 2π, 4) calculate sin(x), 5) create plot with labels and grid"
+       "script": "import numpy as np\nimport matplotlib.pyplot as plt\n\nx = np.linspace(0, 2*np.pi, 100)\ny = np.sin(x)\n\nplt.plot(x, y)\nplt.title('Sine Wave')\nplt.xlabel('x')\nplt.ylabel('sin(x)')\nplt.grid(True)\nplt.show()"
      }
   
      After seeing the plot:
      {
+       "thoughts": ["plot", "modify", "xy-axis"],
        "response": "I've created a basic sine wave plot. The graph shows one complete cycle of the sine function from 0 to 2π. The wave oscillates between -1 and 1 on the y-axis. Would you like to modify any aspects of the plot?",
-       "thoughts": "The plot was successfully generated. Now I can offer to customize it further based on user preferences."
+       "script": null
      }
   
   5. BEST PRACTICES
@@ -112,10 +113,8 @@ export const DefaultAgentConfig: AgentSettings = {
 export async function* structuredChatCompletion({
   messages,
   systemPrompt,
-  tools,
   model = 'llama3.1:latest',
   temperature = 0.7,
-  server,
   onToolCall,
   onMessage,
   maxSteps = 10, // Default to 10 loops
@@ -296,10 +295,8 @@ function generateId(): string {
 export async function* chatCompletion({
   messages,
   systemPrompt,
-  tools,
   model = 'llama3.1:latest',
   temperature = 0.7,
-  server,
   onToolCall,
   onMessage,
   maxSteps = 10, // Default to 10 loops
@@ -326,16 +323,6 @@ export async function* chatCompletion({
         apiKey,
       dangerouslyAllowBrowser: true
     });
-
-    // Format tools for OpenAI function calling format
-    const formattedTools = tools?.map(tool => ({
-      type: 'function' as const,
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters
-      }
-    })) || [];
 
     // Track all pending tool calls and their promises
     const pendingToolCalls: {

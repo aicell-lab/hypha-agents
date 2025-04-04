@@ -384,7 +384,7 @@ export class CellManager {
   updateCellExecutionState(
     id: string,
     state: ExecutionState,
-    output?: OutputItem[]
+    outputs?: OutputItem[]
   ): void {
     this.setCells((prev) =>
       prev.map((cell) => {
@@ -407,10 +407,10 @@ export class CellManager {
             this.setExecutionCounter((prev) => prev + 1);
           }
 
-          if (!output || output.length === 0) {
+          if (!outputs || outputs.length === 0) {
             updates.output = undefined;
           } else {
-            const processedOutput = this.processOutputItems(output);
+            const processedOutput = this.processOutputItems(outputs);
             updates.output = processedOutput;
           }
 
@@ -423,34 +423,72 @@ export class CellManager {
 
   // Process output items for ANSI codes
   processOutputItems(output: OutputItem[]): OutputItem[] {
-    return output.map((item) => {
-      if (
-        (item.type === "stderr" || item.type === "error") &&
-        (item.content.includes("[0;") || item.content.includes("[1;"))
-      ) {
-        try {
-          const htmlContent = convert.toHtml(item.content);
-          return {
-            ...item,
-            content: htmlContent,
-            attrs: {
-              ...item.attrs,
-              className: `output-area ${item.attrs?.className || ""}`,
-              isProcessedAnsi: true,
-            },
-          };
-        } catch (error) {
-          console.error("Error converting ANSI:", error);
-        }
+    // Group stdout and stderr items
+    let stdoutContent = '';
+    let stderrContent = '';
+    const otherItems: OutputItem[] = [];
+
+    // First pass: collect and group items
+    output.forEach((item) => {
+      if (item.type === 'stdout') {
+        stdoutContent += item.content;
+      } else if (item.type === 'stderr' || item.type === 'error') {
+        stderrContent += item.content;
+      } else {
+        otherItems.push(item);
       }
-      return {
-        ...item,
-        attrs: {
-          ...item.attrs,
-          className: `output-area ${item.attrs?.className || ""}`,
-        },
-      };
     });
+
+    const processedItems: OutputItem[] = [];
+
+    // Process stdout if exists
+    if (stdoutContent) {
+      // Split by newlines, filter empty lines, and rejoin
+      const lines = stdoutContent.split('\n');
+      const content = lines.join('\n');
+      if (content) {
+        processedItems.push({
+          type: 'stdout',
+          content,
+          attrs: {
+            className: 'output-area',
+          },
+        });
+      }
+    }
+
+    // Process stderr if exists
+    if (stderrContent) {
+      try {
+        const htmlContent = convert.toHtml(stderrContent);
+        processedItems.push({
+          type: 'stderr',
+          content: htmlContent,
+          attrs: {
+            className: 'output-area error-output',
+            isProcessedAnsi: true,
+          },
+        });
+      } catch (error) {
+        console.error("Error converting ANSI:", error);
+        processedItems.push({
+          type: 'stderr',
+          content: stderrContent,
+          attrs: {
+            className: 'output-area error-output',
+          },
+        });
+      }
+    }
+
+    // Add other items back
+    return [...processedItems, ...otherItems.map(item => ({
+      ...item,
+      attrs: {
+        ...item.attrs,
+        className: `output-area ${item.attrs?.className || ''}`,
+      },
+    }))];
   }
 
   // Toggle cell editing mode
@@ -617,9 +655,11 @@ export class CellManager {
   async executeCell(
     id: string,
     shouldMoveFocus: boolean = false
-  ): Promise<void> {
+  ): Promise<string> {
     const cell = this.cells.find((c) => c.id === id);
-    if (!cell || cell.type !== "code" || !this.executeCodeFn) return;
+    if (!cell || cell.type !== "code" || !this.executeCodeFn) {
+        throw new Error("Error: Cell not found or not a code cell");
+    }
 
     // Get the current code from the editor ref
     const editorRef = this.editorRefs.current[id]?.current;
@@ -634,26 +674,39 @@ export class CellManager {
     // Update to running state
     this.updateCellExecutionState(id, "running");
 
-    // If shouldMoveFocus is true, move to the next cell immediately before execution
-    if (shouldMoveFocus) {
-      this.moveToNextCell(id);
-    }
+
 
     try {
       const outputs: OutputItem[] = [];
+      let shortOutput = '';
       await this.executeCodeFn(currentCode, {
         onOutput: (output: OutputItem) => {
           outputs.push(output);
+          shortOutput += output.short_content + '\n';
           this.updateCellExecutionState(id, "running", outputs);
         },
         onStatus: (status: string) => {
           if (status === "Completed") {
             this.updateCellExecutionState(id, "success", outputs);
+            // Save to localStorage after successful execution
+            setTimeout(() => {
+                this.saveToLocalStorage();
+              }, 100);
           } else if (status === "Error") {
             this.updateCellExecutionState(id, "error", outputs);
+            // Save to localStorage after error
+            setTimeout(() => {
+                this.saveToLocalStorage();
+              }, 100);
           }
         },
       });
+
+          // If shouldMoveFocus is true, move to the next cell immediately before execution
+        if (shouldMoveFocus) {
+        this.moveToNextCell(id);
+      }
+      return `[Cell Id: ${id}]\n${stripAnsi(shortOutput.trim()) || "Code executed successfully."}`;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -681,6 +734,7 @@ export class CellManager {
           },
         },
       ]);
+      return `[Cell Id: ${id}]\nError executing code: ${errorMessage}`;
     }
   }
 
