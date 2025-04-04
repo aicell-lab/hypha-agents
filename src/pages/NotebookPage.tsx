@@ -33,7 +33,7 @@ import { ChatRole, ChatMessage } from '../utils/chatCompletion';
 interface HyphaCoreWindow {
   id: string;
   src: string;
-  title?: string;
+  name?: string;
 }
 
 const convert = new Convert({
@@ -244,7 +244,7 @@ const NotebookPage: React.FC = () => {
     const newWindow: HyphaCoreWindow = {
       id: config.window_id,
       src: config.src,
-      title: config.title || `Window ${config.window_id}`
+      name: config.name || `${config.src || 'Untitled Window'}`
     };
     
     setHyphaCoreWindows(prev => [...prev, newWindow]);
@@ -368,24 +368,11 @@ hypha_core = await server.get_service("${svc.id}")
     };
   }, [cells, notebookMetadata, cellManager]);
 
-  // Execute a cell with management of execution states
-  const executeCell = async (id: string, shouldMoveFocus: boolean = false) => {
-    setIsProcessingAgentResponse(true);
-    try {
-      await cellManager.executeCell(id, shouldMoveFocus);
-    }
-    catch (error) {
-      console.error('[DEBUG] Error in executeCell:', error);
-      throw error;
-    }
-    finally {
-      setIsProcessingAgentResponse(false);
-    }
-  };
 
   // Update handleExecuteCode to use lastUserCellRef
   const handleExecuteCode = useCallback(async (code: string, cellId?: string): Promise<string> => {
     try {
+      setIsProcessingAgentResponse(true);
       let actualCellId = cellId;
 
       if (actualCellId) {
@@ -421,6 +408,9 @@ hypha_core = await server.get_service("${svc.id}")
     } catch (error) {
       console.error("[DEBUG] Fatal error in handleExecuteCode:", error);
       return `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    finally {
+      setIsProcessingAgentResponse(false);
     }
   }, [cellManager, executeCode, lastAgentCellRef, lastUserCellRef]);
 
@@ -743,7 +733,7 @@ hypha_core = await server.get_service("${svc.id}")
       if (!cell) return;
 
       if (cell.type === 'code') {
-        executeCell(cellId, true); // Execute and move focus
+        cellManager.executeCell(cellId, true); // Execute and move focus
       } else if (cell.type === 'markdown') {
         handleMarkdownRender(cellId);
         cellManager.moveToNextCell(cellId);
@@ -758,7 +748,7 @@ hypha_core = await server.get_service("${svc.id}")
       if (activeCell) {
         const cellId = activeCell.getAttribute('data-cell-id');
         if (cellId) {
-          executeCell(cellId, false);
+          cellManager.executeCell(cellId, false);
         }
       }
       return;
@@ -789,7 +779,7 @@ hypha_core = await server.get_service("${svc.id}")
       cellManager.runAllCells();
       return;
     }
-  }, [executeCell, handleMarkdownRender, cellManager, editorRefs, activeCellId, cells]);
+  }, [handleMarkdownRender, cellManager, editorRefs, activeCellId, cells]);
 
   // Add keyboard event listener
   useEffect(() => {
@@ -1212,7 +1202,7 @@ hypha_core = await server.get_service("${svc.id}")
                         <CodeCell
                           code={cell.content}
                           language="python"
-                          onExecute={() => executeCell(cell.id)}
+                          onExecute={() => cellManager.executeCell(cell.id)}
                           isExecuting={cell.executionState === 'running'}
                           executionCount={cell.executionState === 'running' ? undefined : cell.executionCount}
                           blockRef={getEditorRef(cell.id)}
@@ -1310,7 +1300,7 @@ hypha_core = await server.get_service("${svc.id}")
                         </button>
 
                         <button
-                          onClick={() => executeCell(cell.id)}
+                          onClick={() => cellManager.executeCell(cell.id)}
                           disabled={!isReady || cell.executionState === 'running'}
                           className="p-1 hover:bg-gray-100 rounded flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Run cell"

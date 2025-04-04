@@ -36,22 +36,31 @@ export const Splitter: React.FC<SplitterProps> = ({
     e.preventDefault();
   }, [isResizing, startX, startWidth, minWidth, maxWidth, onResize]);
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e?: Event) => {
     if (isResizing) {
       setIsResizing(false);
       onResizeEnd?.();
+      // Remove event listeners immediately
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+      if (e) e.preventDefault();
     }
-  }, [isResizing, onResizeEnd]);
+  }, [isResizing, onResizeEnd, handleMouseMove]);
 
+  // Add event listeners when resizing starts
   useEffect(() => {
     if (isResizing) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
+      
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
+      };
     }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   return (

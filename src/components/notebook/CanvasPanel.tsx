@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect } from 'react';
+import React from 'react';
 import { Splitter } from './Splitter';
 
 interface HyphaCoreWindow {
   id: string;
   src: string;
-  title?: string;
+  name?: string;
 }
 
 interface CanvasPanelProps {
@@ -29,37 +29,6 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   onTabClose
 }) => {
   const [isResizing, setIsResizing] = React.useState(false);
-  const resizeStartXRef = React.useRef<number>(0);
-  const resizeStartWidthRef = React.useRef<number>(0);
-
-  const handleResizeStart = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    resizeStartXRef.current = e.clientX;
-    resizeStartWidthRef.current = width;
-  };
-
-  const handleResizeMove = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
-    
-    const deltaX = resizeStartXRef.current - e.clientX;
-    const newWidth = Math.min(Math.max(resizeStartWidthRef.current + deltaX, 300), window.innerWidth - 300);
-    onResize(newWidth);
-  }, [isResizing, onResize]);
-
-  const handleResizeEnd = useCallback(() => {
-    setIsResizing(false);
-  }, []);
-
-  useEffect(() => {
-    if (isResizing) {
-      window.addEventListener('mousemove', handleResizeMove);
-      window.addEventListener('mouseup', handleResizeEnd);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleResizeMove);
-      window.removeEventListener('mouseup', handleResizeEnd);
-    };
-  }, [isResizing, handleResizeMove, handleResizeEnd]);
 
   if (!isVisible) return null;
 
@@ -70,7 +39,11 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-white border-l border-gray-200 relative">
-      <Splitter onResize={onResize} onResizeStart={() => setIsResizing(true)} onResizeEnd={() => setIsResizing(false)} />
+      <Splitter 
+        onResize={onResize} 
+        onResizeStart={() => setIsResizing(true)} 
+        onResizeEnd={() => setIsResizing(false)} 
+      />
 
       {/* Overlay to prevent iframe from capturing events during resize */}
       {isResizing && (
@@ -93,7 +66,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <span>{window.title}</span>
+              <span>{window.name}</span>
               {onTabClose && (
                 <span
                   onClick={(e) => handleTabClose(e, window.id)}
@@ -129,7 +102,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
               src={window.src}
               id={window.id}
               className="w-full h-full border-none"
-              title={window.title}
+              title={window.name}
             />
           </div>
         ))}
