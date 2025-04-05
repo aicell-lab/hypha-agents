@@ -21,9 +21,8 @@ import { MdOutlineTextFields } from 'react-icons/md';
 import { CellManager } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
-import { AgentSettings, DefaultAgentConfig } from '../utils/chatCompletion';
+import { AgentSettings } from '../utils/chatCompletion';
 import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
-import { HyphaCore } from 'hypha-core';
 import { CanvasPanel } from '../components/notebook/CanvasPanel';
 import { setupNotebookService, HyphaCoreWindow } from '../components/services/hyphaCoreServices';
 
@@ -264,17 +263,29 @@ const NotebookPage: React.FC = () => {
   useEffect(() => {
     if (server && isLoggedIn && !hyphaCoreApi) {
       console.log("HyphaCore is ready");
-      setupNotebookService({
-        onAddWindow: addWindowCallback,
-        server,
-        executeCode
-      }).then(api => {
-        setHyphaCoreApi(api);
-      }).catch(error => {
-        console.error("Failed to setup notebook service:", error);
-      });
+      // Create a stable reference to executeCode that won't change
+      const setupService = async () => {
+        try {
+          const api = await setupNotebookService({
+            onAddWindow: addWindowCallback,
+            server,
+            executeCode: async (code: string) => {
+              if (!isReady) {
+                throw new Error('Jupyter kernel is not ready');
+              }
+              return executeCode(code);
+            }
+          });
+          setHyphaCoreApi(api);
+        } catch (error) {
+          console.error("Failed to setup notebook service:", error);
+        }
+      };
+      if (isReady && server && isLoggedIn) {
+        setupService();
+      }
     }
-  }, [server, isLoggedIn, addWindowCallback, executeCode]);
+  }, [server, isLoggedIn, addWindowCallback, isReady]); // Remove executeCode from dependencies
 
   // Load saved state on mount
   useEffect(() => {

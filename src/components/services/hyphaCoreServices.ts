@@ -78,7 +78,7 @@ export const setupNotebookService = async ({ onAddWindow, server, executeCode }:
     const token = await server.generateToken();
     await executeCode(`from hypha_rpc import connect_to_server
 server = await connect_to_server(server_url="${server.config.public_base_url}", token="${token}")
-core = await server.get_service("${svc.id}")
+api = await server.get_service("${svc.id}")
     `, {
       onOutput: (output: any) => {
         console.log(output);
