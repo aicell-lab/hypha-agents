@@ -22,14 +22,33 @@ interface SetupNotebookServiceProps {
   executeCode: (code: string, options?: any) => Promise<any>;
 }
 
+// Store the HyphaCore instance and API promise globally
+declare global {
+  interface Window {
+    _hyphaCorePromise?: {
+      instance: HyphaCore;
+      api: Promise<any>;
+    };
+  }
+}
+
 // Setup notebook service
 export const setupNotebookService = async ({ onAddWindow, server, executeCode }: SetupNotebookServiceProps) => {
-  const hyphaCore = new HyphaCore();
-  hyphaCore.on("add_window", onAddWindow);
+  // Initialize or get the existing HyphaCore promise
+  if (!window._hyphaCorePromise) {
+    const instance = new HyphaCore();
+    const api = instance.start();
+    window._hyphaCorePromise = { instance, api };
+  }
 
-  const api: any = await hyphaCore.start();
+  // Register the event handler on the instance
+  window._hyphaCorePromise.instance.on("add_window", onAddWindow);
+
   console.log("Setting up notebook service");
   try {
+    // Await the API promise
+    const api = await window._hyphaCorePromise.api;
+    
     const service: HyphaCoreService = {
       "id": "hypha-core",
       "name": "Hypha Core",
@@ -59,7 +78,7 @@ export const setupNotebookService = async ({ onAddWindow, server, executeCode }:
     const token = await server.generateToken();
     await executeCode(`from hypha_rpc import connect_to_server
 server = await connect_to_server(server_url="${server.config.public_base_url}", token="${token}")
-hypha_core = await server.get_service("${svc.id}")
+core = await server.get_service("${svc.id}")
     `, {
       onOutput: (output: any) => {
         console.log(output);
