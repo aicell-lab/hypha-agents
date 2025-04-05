@@ -269,12 +269,7 @@ const NotebookPage: React.FC = () => {
           const api = await setupNotebookService({
             onAddWindow: addWindowCallback,
             server,
-            executeCode: async (code: string) => {
-              if (!isReady) {
-                throw new Error('Jupyter kernel is not ready');
-              }
-              return executeCode(code);
-            }
+            executeCode,
           });
           setHyphaCoreApi(api);
         } catch (error) {
