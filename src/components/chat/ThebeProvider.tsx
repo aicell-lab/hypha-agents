@@ -18,6 +18,7 @@ interface KernelConnection {
     done: Promise<any>;
     onIOPub: ((msg: KernelMessage) => void) | ((callback: (msg: KernelMessage) => void) => void);
   };
+  restart(): Promise<void>;
   statusChanged: {
     connect: (callback: (sender: any, status: 'idle' | 'busy' | 'starting' | 'error') => void) => void;
   };
@@ -673,10 +674,10 @@ print(f"{sys.version.split()[0]}")
       onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
       onStatus?: (status: string) => void;
     },
-    timeout?: number = 60000
+    timeout: number | undefined = 600000
   ): Promise<void> => {
     const { onOutput, onStatus } = callbacks || {};
-
+    timeout = timeout || 600000;
     // Get a ready kernel
     const currentKernel = kernel && isReady ? kernel : await connect();
 
@@ -948,17 +949,31 @@ print(f"{sys.version.split()[0]}")
       setStatus('starting');
       globalThebeState.status = 'starting';
       
-      // Disconnect current kernel
-      if (kernel) {
-        await kernel.requestExecute({ code: 'exit()' }).done;
+      // Clear the current kernel state
+      if (globalThebeState.kernel) {
+        globalThebeState.kernel = null;
       }
+      if (globalThebeState.session) {
+        globalThebeState.session = null;
+      }
+      setKernel(null);
+      setSession(null);
+      
+      // Reset initialization flags
+      globalThebeState.isInitialized = false;
+      globalThebeState.isInitializing = false;
+      globalThebeState.initPromise = null;
       
       // Create new kernel connection
       const newKernel = await connect();
+      
+      // Get kernel info for the new kernel
       await getKernelInfo(newKernel);
       
       setStatus('idle');
       globalThebeState.status = 'idle';
+      
+      console.log('Kernel restarted successfully');
     } catch (error) {
       console.error('Failed to restart kernel:', error);
       setStatus('error');

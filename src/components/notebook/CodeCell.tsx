@@ -503,7 +503,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               )}
             </div>
           )}
-          <div className="w-full overflow-visible relative group">
+          <div className="w-[calc(100%-28px)] ml-4 overflow-visible relative group">
             {/* Hide button - only shown when output is visible */}
             {!hideOutput && (
               <div className="absolute left-1/2 -translate-x-1/2 -top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">

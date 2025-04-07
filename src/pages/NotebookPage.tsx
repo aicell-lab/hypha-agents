@@ -21,20 +21,13 @@ import { MdOutlineTextFields } from 'react-icons/md';
 import { CellManager } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
-import { AgentSettings, DefaultAgentConfig } from '../utils/chatCompletion';
+import { AgentSettings } from '../utils/chatCompletion';
 import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
-import { HyphaCore } from 'hypha-core';
 import { CanvasPanel } from '../components/notebook/CanvasPanel';
+import { setupNotebookService, HyphaCoreWindow } from '../components/services/hyphaCoreServices';
 
 // Add type imports from chatCompletion
 import { ChatRole, ChatMessage } from '../utils/chatCompletion';
-
-// Add types for side panel
-interface HyphaCoreWindow {
-  id: string;
-  src: string;
-  name?: string;
-}
 
 const convert = new Convert({
   fg: '#000',
@@ -199,7 +192,7 @@ const NotebookPage: React.FC = () => {
   const [cells, setCells] = useState<NotebookCell[]>([]);
   const [executionCounter, setExecutionCounter] = useState(1);
   const endRef = useRef<HTMLDivElement>(null);
-  const { isReady, executeCode } = useThebe();
+  const { isReady, executeCode, restartKernel } = useThebe();
   const [isShortcutsDialogOpen, setIsShortcutsDialogOpen] = useState(false);
   const hasInitialized = useRef(false);
   const autoSaveTimerRef = useRef<NodeJS.Timeout>();
@@ -266,59 +259,28 @@ const NotebookPage: React.FC = () => {
     });
   }, [activeCanvasTab]);
 
-  const setupNotebookService = async () => {
-    const hyphaCore = new HyphaCore();
-    hyphaCore.on("add_window", addWindowCallback);
-
-    const api: any = await hyphaCore.start();
-    setHyphaCoreApi(api);
-    console.log("Setting up notebook service");
-    try {
-      const service: any = {
-        "id": "hypha-core",
-        "name": "Hypha Core",
-        "description": "Hypha Core service",
-        "config": {
-          "require_context": false,
-        }
-      }
-      for (const key of Object.keys(api)) {
-        if (service[key] === undefined) {
-          // service[key] = api[key];
-          // wrap the api[key] in a function that logs the call if its a function
-          if (typeof api[key] === 'function') {
-            service[key] = (...args: any[]) => {
-              console.log(`Calling ${key} with args`, args);
-              return api[key](...args);
-            }
-          } else {
-            service[key] = api[key];
-          }
-        }
-      }
-      const svc = await server.registerService(service, {overwrite: true})
-      console.log(`Notebook service registered with id ${svc.id}`);
-      const token = await server.generateToken()
-      await executeCode(`from hypha_rpc import connect_to_server
-server = await connect_to_server(server_url="${server.config.public_base_url}", token="${token}")
-hypha_core = await server.get_service("${svc.id}")
-      `, {onOutput: (output) => {
-        console.log(output);
-      }, onStatus: (status) => {
-        console.log(status);
-      }})
-    } catch (error) {
-      console.error("Failed to register notebook service:", error);
-    }
-  }
-  // if isHyphaCoreReady is true, we call api.alert("Hello, world!")
+  // Update the useEffect to use the imported setupNotebookService
   useEffect(() => {
     if (server && isLoggedIn && !hyphaCoreApi) {
-      // hyphaCoreAPI.alert("Hello, world!");
       console.log("HyphaCore is ready");
-      setupNotebookService();
+      // Create a stable reference to executeCode that won't change
+      const setupService = async () => {
+        try {
+          const api = await setupNotebookService({
+            onAddWindow: addWindowCallback,
+            server,
+            executeCode,
+          });
+          setHyphaCoreApi(api);
+        } catch (error) {
+          console.error("Failed to setup notebook service:", error);
+        }
+      };
+      if (isReady && server && isLoggedIn) {
+        setupService();
+      }
     }
-  }, [server, isLoggedIn]);
+  }, [server, isLoggedIn, addWindowCallback, isReady]); // Remove executeCode from dependencies
 
   // Load saved state on mount
   useEffect(() => {
@@ -821,25 +783,15 @@ hypha_core = await server.get_service("${svc.id}")
   }, [cells]);
 
   // Restart kernel and clear outputs
-  const restartKernel = async () => {
+  const handleRestartKernel = async () => {
     // Show confirmation dialog
     if (!window.confirm('Are you sure you want to restart the kernel? This will clear all outputs and reset the execution state.')) {
       return;
     }
-
+    // clear running state for all cells
     cellManager.clearAllOutputs();
     setExecutionCounter(1);
-
-    try {
-      // Attempt to restart the kernel
-      if (isReady) {
-        await executeCode('%reset -f'); // Force reset IPython namespace
-        await executeCode('%reset_selective -f out'); // Reset output history
-        console.log('Kernel reset successfully');
-      }
-    } catch (error) {
-      console.error('Error resetting kernel:', error);
-    }
+    await restartKernel();
   };
 
   // Update save function to include current editor content
@@ -1069,7 +1021,7 @@ hypha_core = await server.get_service("${svc.id}")
         console.error('Error executing system cell:', error);
       });
     }
-  }, [isReady]);
+  }, [isReady, cellManager]);
 
   // Add toggleOutputVisibility method to cellManager
   const toggleOutputVisibility = (id: string) => {
@@ -1159,7 +1111,7 @@ hypha_core = await server.get_service("${svc.id}")
               onLoad={loadNotebook}
               onRunAll={() => cellManager.runAllCells()}
               onClearOutputs={() => cellManager.clearAllOutputs()}
-              onRestartKernel={restartKernel}
+              onRestartKernel={handleRestartKernel}
               onAddCodeCell={() => {
                 const afterId = activeCellId ? activeCellId : undefined;
                 const newCellId = cellManager.addCell('code', '', 'user', afterId);
