@@ -11,6 +11,10 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # Required for GitHub Actions cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.1.0
