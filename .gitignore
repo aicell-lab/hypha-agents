@@ -65,3 +65,6 @@ yarn-error.log*
 Thumbs.db
 public/thebe
 .aider*
+
+# PNPM
+pnpm-lock.yaml
