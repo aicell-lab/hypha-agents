@@ -25,6 +25,7 @@ import { AgentSettings } from '../utils/chatCompletion';
 import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
 import { CanvasPanel } from '../components/notebook/CanvasPanel';
 import { setupNotebookService, HyphaCoreWindow } from '../components/services/hyphaCoreServices';
+import ThinkingCell from '../components/notebook/ThinkingCell';
 
 // Add type imports from chatCompletion
 import { ChatRole, ChatMessage } from '../utils/chatCompletion';
@@ -38,7 +39,7 @@ const convert = new Convert({
 });
 
 // Define different types of cells in our notebook
-type CellType = 'markdown' | 'code';
+type CellType = 'markdown' | 'code' | 'thinking';
 type ExecutionState = 'idle' | 'running' | 'success' | 'error';
 type CellRole = 'user' | 'assistant' | 'system';
 
@@ -416,7 +417,6 @@ const NotebookPage: React.FC = () => {
       role: msg.role as ChatRole
     }));
   }, [cells]);
-
   // Update handleSendMessage to use agent settings
   const handleSendMessage = useCallback(async (message: string) => {
     // If not logged in or not ready, show error
@@ -433,6 +433,9 @@ const NotebookPage: React.FC = () => {
       return;
     }
 
+    // Initialize thinkingCellId with empty string
+    let thinkingCellId = '';
+
     try {
       setIsProcessingAgentResponse(true);
 
@@ -448,6 +451,17 @@ const NotebookPage: React.FC = () => {
       cellManager.setCurrentAgentCell(userCellId);
       lastUserCellRef.current = userCellId;
 
+      // Add a thinking cell right after the user's message
+      thinkingCellId = cellManager.addCell(
+        'thinking',
+        '🤔 Thinking...',
+        'assistant',
+        userCellId,
+        userCellId
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       // Use agent settings in chat completion
       const completion = structuredChatCompletion({
         messages: history,
@@ -457,7 +471,7 @@ const NotebookPage: React.FC = () => {
         maxSteps: 15,
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
-        onToolCall: async (toolCall) => {
+        onToolCall: async (completionId: string, toolCall) => {
           if (toolCall.name === 'runCode') {
             return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
           }
@@ -469,6 +483,16 @@ const NotebookPage: React.FC = () => {
             completionId,
             message,
             'markdown',
+            'assistant',
+            lastUserCellRef.current || undefined
+          );
+        },
+        onStreaming: (completionId: string, message: string) => {
+          // Update the thinking cell content while streaming
+          cellManager.updateCellById(
+            thinkingCellId,
+            message,
+            'thinking',
             'assistant',
             lastUserCellRef.current || undefined
           );
@@ -484,6 +508,10 @@ const NotebookPage: React.FC = () => {
       setInitializationError("Error communicating with AI assistant. Please try again.");
     } finally {
       setIsProcessingAgentResponse(false);
+      if (thinkingCellId !== '') {
+        // remove the thinking cell
+        cellManager.deleteCell(thinkingCellId);
+      }
     }
   }, [activeCellId, cellManager, isReady, isLoggedIn, server, getConversationHistory, handleExecuteCode, agentSettings]);
 
@@ -503,7 +531,11 @@ const NotebookPage: React.FC = () => {
       console.error('[DEBUG] Cannot regenerate responses for a non-user cell or cell not found');
       return;
     }
+
+    // Initialize thinkingCellId with empty string
+    let thinkingCellId = '';
     try {
+
       setIsProcessingAgentResponse(true);
       // Get the message content and position info before deletion
       const messageContent = userCell.content;
@@ -531,6 +563,15 @@ const NotebookPage: React.FC = () => {
       cellManager.setActiveCell(newCellId);
       cellManager.setCurrentAgentCell(newCellId);
 
+      // Add a thinking cell right after the user's message
+      thinkingCellId = cellManager.addCell(
+        'thinking',
+        '🤔 Thinking...',
+        'assistant',
+        newCellId,
+        newCellId
+      );
+      
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const history = getConversationHistory(cellId || undefined);
@@ -544,7 +585,7 @@ const NotebookPage: React.FC = () => {
         maxSteps: 15,
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
-        onToolCall: async (toolCall) => {
+        onToolCall: async (completionId: string, toolCall) => {
           if (toolCall.name === 'runCode') {
             return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
           }
@@ -559,6 +600,16 @@ const NotebookPage: React.FC = () => {
             'assistant',
             lastUserCellRef.current || undefined
           );
+        },
+        onStreaming: (completionId: string, message: string) => {
+          // Update the thinking cell content while streaming
+          cellManager.updateCellById(
+            thinkingCellId,
+            message,
+            'thinking',
+            'assistant',
+            lastUserCellRef.current || undefined
+          );
         }
       });
 
@@ -570,6 +621,10 @@ const NotebookPage: React.FC = () => {
       console.error('[DEBUG] Error regenerating responses:', error);
       setInitializationError("Error regenerating response. Please try again.");
     } finally {
+      if (thinkingCellId !== '') {
+        // remove the thinking cell
+        cellManager.deleteCell(thinkingCellId);
+      }
       setIsProcessingAgentResponse(false);
     }
   };
@@ -604,10 +659,7 @@ const NotebookPage: React.FC = () => {
         // Add a single empty code cell after clearing
         setTimeout(() => {
           const cellId = cellManager.addCell('code', '', 'user');
-          const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
-          if (cellElement) {
-            cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
+         
         }, 100);
         return; // Exit early since we handle scrolling separately
 
@@ -1114,23 +1166,11 @@ const NotebookPage: React.FC = () => {
               onRestartKernel={handleRestartKernel}
               onAddCodeCell={() => {
                 const afterId = activeCellId ? activeCellId : undefined;
-                const newCellId = cellManager.addCell('code', '', 'user', afterId);
-                setTimeout(() => {
-                  const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
-                  if (cellElement) {
-                    cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }
-                }, 100);
+                cellManager.addCell('code', '', 'user', afterId);
               }}
               onAddMarkdownCell={() => {
                 const afterId = activeCellId ? activeCellId : undefined;
-                const newCellId = cellManager.addCell('markdown', '', 'user', afterId);
-                setTimeout(() => {
-                  const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
-                  if (cellElement) {
-                    cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }
-                }, 100);
+                cellManager.addCell('markdown', '', 'user', afterId);
               }}
               onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
               onToggleSystemPrompts={toggleSystemPrompts}
@@ -1166,27 +1206,30 @@ const NotebookPage: React.FC = () => {
                 {/* Cell Content */}
                 <div className="flex relative w-full">
                   <div className="flex-1 min-w-0 w-full overflow-x-hidden">
-                    {cell.type === 'code' ? (
-                      
-                        <CodeCell
-                          code={cell.content}
-                          language="python"
-                          onExecute={() => cellManager.executeCell(cell.id)}
-                          isExecuting={cell.executionState === 'running'}
-                          executionCount={cell.executionState === 'running' ? undefined : cell.executionCount}
-                          blockRef={getEditorRef(cell.id)}
-                          isActive={activeCellId === cell.id}
-                          role={cell.role}
-                          onRoleChange={(role) => cellManager.updateCellRole(cell.id, role)}
-                          onChange={(newCode) => cellManager.updateCellContent(cell.id, newCode)}
-                          hideCode={cell.metadata?.isCodeVisible === false}
-                          onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
-                          hideOutput={cell.metadata?.isOutputVisible === false}
-                          onOutputVisibilityChange={() => cellManager.toggleOutputVisibility(cell.id)}
-                          parent={cell.metadata?.parent}
-                          output={cell.output}
-                        />
-               
+                    {cell.type === 'thinking' ? (
+                      <ThinkingCell
+                        content={cell.content}
+                        parent={cell.metadata?.parent}
+                      />
+                    ) : cell.type === 'code' ? (
+                      <CodeCell
+                        code={cell.content}
+                        language="python"
+                        onExecute={() => cellManager.executeCell(cell.id)}
+                        isExecuting={cell.executionState === 'running'}
+                        executionCount={cell.executionState === 'running' ? undefined : cell.executionCount}
+                        blockRef={getEditorRef(cell.id)}
+                        isActive={activeCellId === cell.id}
+                        role={cell.role}
+                        onRoleChange={(role) => cellManager.updateCellRole(cell.id, role)}
+                        onChange={(newCode) => cellManager.updateCellContent(cell.id, newCode)}
+                        hideCode={cell.metadata?.isCodeVisible === false}
+                        onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
+                        hideOutput={cell.metadata?.isOutputVisible === false}
+                        onOutputVisibilityChange={() => cellManager.toggleOutputVisibility(cell.id)}
+                        parent={cell.metadata?.parent}
+                        output={cell.output}
+                      />
                     ) : (
                       <MarkdownCell
                         content={cell.content}
@@ -1428,6 +1471,7 @@ const NotebookPage: React.FC = () => {
                       </button>
                     )}
                   </div>
+               
                 </div>
               </div>
             ))}

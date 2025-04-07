@@ -4,7 +4,7 @@ import Convert from "ansi-to-html";
 import { v4 as uuidv4 } from 'uuid';
 import localforage from 'localforage';
 // Define different types of cells in our notebook
-type CellType = "markdown" | "code";
+type CellType = 'markdown' | 'code' | 'thinking';
 type ExecutionState = "idle" | "running" | "success" | "error";
 type CellRole = "user" | "assistant" | "system";
 
@@ -1159,6 +1159,7 @@ export class CellManager {
           cell.id === cellId
             ? {
                 ...cell,
+                type, // Update the type as well
                 content,
                 metadata: {
                   ...cell.metadata,

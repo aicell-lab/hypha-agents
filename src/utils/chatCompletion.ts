@@ -21,24 +21,13 @@ export interface ChatCompletionOptions {
   systemPrompt?: string;
   model?: string;
   temperature?: number;
-  onToolCall?: (toolCall: any) => Promise<string>;
+  onToolCall?: (completionId: string, toolCall: any) => Promise<string>;
   onMessage?: (completionId: string, message: string) => void;
+  onStreaming?: (completionId: string, message: string) => void;
   maxSteps?: number; // Maximum number of tool call steps before stopping
   baseURL?: string; // Base URL for the API
   apiKey?: string; // API key for authentication
 }
-
-// Define the response schema for the code agent
-// Note: it seems better to use nullable for optional fields https://github.com/Klimatbyran/garbo/issues/473
-const CodeAgentResponse = z.object({
-  // Chain of Drafts reasoning https://arxiv.org/abs/2502.18600
-  thoughts: z.array(z.string()).nullable().describe('Brief reasoning for the current response or script, 5 words at most'),
-  response: z.string().describe('Response to be displayed to the user'),
-  script: z.string().nullable().describe('Optional: The python script to be executed to fulfill the request'),
-//   cell_id: z.string().nullable().describe('Optional: used to update an existing cell for error recovery; if not provided, a new cell will be created'),
-//   is_final: z.boolean().describe('Whether the response is final'),
-});
-
 
 export interface AgentSettings {
   baseURL: string;
@@ -48,58 +37,45 @@ export interface AgentSettings {
   instructions: string;
 }
 const RESPONSE_INSTRUCTIONS = `
-Follow these guidelines:
-  1. RESPONSE FORMAT
-     You must respond in a structured format with the following fields:
-     - thoughts (required): Your step by step reasoning and planning, but only keep a minimum draft for
-each step, with 5 words at most!
-     - response (required): Your main response to the user, explaining what you're doing or your findings
-     - script (optional): Python code to execute to gather information or perform actions; Must be a valid multi-line python script
+You must respond with a valid Python script that ALWAYS starts with a thoughts comment:
 
-     When user asks "Plot a sine wave":
-     {
-        // 5 words at most"
-       "thoughts": ["import", "data", "plot;show"],
-       "response": "I'll help you create a plot of a sine wave using numpy and matplotlib.",
-       "script": "import numpy as np\nimport matplotlib.pyplot as plt\n\nx = np.linspace(0, 2*np.pi, 100)\ny = np.sin(x)\n\nplt.plot(x, y)\nplt.title('Sine Wave')\nplt.xlabel('x')\nplt.ylabel('sin(x)')\nplt.grid(True)\nplt.show()"
-     }
-  
-     After seeing the plot:
-     {
-       "thoughts": ["plot", "modify", "xy-axis"],
-       "response": "I've created a basic sine wave plot. The graph shows one complete cycle of the sine function from 0 to 2π. The wave oscillates between -1 and 1 on the y-axis. Would you like to modify any aspects of the plot?",
-       "script": ""
-     }
-  
-  2. INTERACTION FLOW
-     - If you need information: Include a script to gather it, then wait for results
-     - If you have all needed info: Provide final response without a script
-     - You can have multiple script-response rounds to build up context
-  
-  3. CODE GENERATION
-     - Write clean, well-documented Python code
-     - Include necessary imports
-     - Use clear variable names
-     - Add comments for complex operations
-  
-  4. BEST PRACTICES
-     - Use scripts to verify assumptions or gather data
-     - Provide clear explanations in the response field
-     - Document your reasoning in the thoughts field
-     - Break complex tasks into multiple steps
-     - Handle errors gracefully with clear error messages
-  
-  5. WHEN USING SCRIPTS
-     - For data exploration: Use scripts to inspect variables, check shapes, or verify assumptions
-     - For visualization: Create plots to help understand the data
-     - For verification: Test code or validate results
-     - For complex operations: Break down into smaller, testable steps
-  
-  6. FINAL RESPONSES
-     - Always end with a response-only output (no script) to summarize or conclude
-     - Make sure the final response is clear and actionable
-     - Include relevant observations from script outputs
-     - Suggest next steps if appropriate
+#Thoughts: Brief thoughts in max 5 words
+
+Then either:
+1. Python code to execute, or
+2. Just a final response comment
+
+Example responses:
+
+When user asks "Plot a sine wave":
+#Thoughts: import numpy plot sine wave\n\nimport numpy as np\nimport matplotlib.pyplot as plt\n\nx = np.linspace(0, 2*np.pi, 100)\ny = np.sin(x)\n\nplt.plot(x, y)\nplt.title('Sine Wave')\nplt.xlabel('x')\nplt.ylabel('sin(x)')\nplt.grid(True)\nplt.show()"
+
+After seeing the plot:
+#Thoughts: plot complete, give feedback\n#FinalResponse: I've created a basic sine wave plot. The graph shows one complete cycle of the sine function from 0 to 2π. The wave oscillates between -1 and 1 on the y-axis. Would you like to modify any aspects of the plot?"
+
+
+INTERACTION GUIDELINES:
+
+1. SCRIPT FORMAT
+   - ALWAYS start with #Thoughts: comment (max 5 words)
+   - For actions: Include executable Python code
+   - For final responses: Use #FinalResponse: comment
+   - Keep code clean and well-documented
+   - Include necessary imports
+   - Use clear variable names
+
+2. WORKFLOW
+   - Need information? → Write code to gather it
+   - Have all info? → Use #FinalResponse:
+   - Complex tasks → Multiple code-response rounds
+   - Always handle errors gracefully
+
+3. BEST PRACTICES
+   - Break complex tasks into steps
+   - Verify assumptions with code
+   - Test results before finalizing
+   - Give clear error messages
+   - Document complex operations
 `;
 
 // Update defaultAgentConfig to use the AgentSettings interface
@@ -111,6 +87,18 @@ export const DefaultAgentConfig: AgentSettings = {
     instructions: `You are a code assistant specialized in generating Python code for notebooks.`
   };
 
+// Helper function to extract final response from script
+function extractFinalResponse(script: string): string | null {
+  const match = script.match(/#FinalResponse:\s*(.*)/);
+  return match ? match[1].trim() : null;
+}
+
+// Helper function to extract thoughts from script
+function extractThoughts(script: string): string | null {
+  const match = script.match(/#Thoughts:\s*(.*)/);
+  return match ? match[1].trim() : null;
+}
+
 export async function* structuredChatCompletion({
   messages,
   systemPrompt,
@@ -118,7 +106,8 @@ export async function* structuredChatCompletion({
   temperature = 0.7,
   onToolCall,
   onMessage,
-  maxSteps = 10, // Default to 10 loops
+  onStreaming,
+  maxSteps = 10,
   baseURL = 'http://localhost:11434/v1/',
   apiKey = 'ollama',
 }: ChatCompletionOptions): AsyncGenerator<{
@@ -131,7 +120,6 @@ export async function* structuredChatCompletion({
 }, void, unknown> {
   try {
     systemPrompt = (systemPrompt || '') + RESPONSE_INSTRUCTIONS;
-    // Initialize OpenAI client with provided settings
     const openai = new OpenAI({
       baseURL,
       apiKey,
@@ -142,7 +130,6 @@ export async function* structuredChatCompletion({
 
     while (loopCount < maxSteps) {
       loopCount++;
-      // Prepare messages array with system prompt if provided
       const fullMessages = systemPrompt 
         ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
         : messages;
@@ -155,15 +142,12 @@ export async function* structuredChatCompletion({
       };
 
       let accumulatedResponse = '';
-      let accumulatedJson = '';
-      let isInJsonBlock = false;
 
       // Create standard completion stream
       const stream = await openai.chat.completions.create({
         model,
         messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
         temperature,
-        response_format: zodResponseFormat(CodeAgentResponse, "code_agent_response"),
         stream: true,
       });
 
@@ -171,17 +155,9 @@ export async function* structuredChatCompletion({
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
         accumulatedResponse += content;
-        
-        if (content.includes('{') && !isInJsonBlock) {
-          isInJsonBlock = true;
-        }
-        
-        if (isInJsonBlock) {
-          accumulatedJson += content;
-        }
 
-        if(onMessage){
-          onMessage(completionId, accumulatedResponse);
+        if(onStreaming){
+          onStreaming(completionId, accumulatedResponse);
         }
         yield {
           type: 'text',
@@ -191,88 +167,81 @@ export async function* structuredChatCompletion({
 
       // Parse and validate the accumulated JSON
       try {
-        const jsonResponse = JSON.parse(accumulatedJson);
-        const parsedResponse = CodeAgentResponse.parse(jsonResponse);
-
-        // trim the script
-        parsedResponse.script = (parsedResponse.script || '').trim();
-        // sometimes the script is in markdown format, so we need to convert it to code
-        // ``` or ```python quotes are not allowed in the script
-        // use regex to strip the outter most quotes and the python prefix
-        parsedResponse.script = parsedResponse.script.replace(/^```python\s*|\s*```$/g, '').trim();
-        // trim the response
-        parsedResponse.response = parsedResponse.response.trim();
+       
+        // Extract thoughts for logging
+        const thoughts = extractThoughts(accumulatedResponse);
+        if (thoughts) {
+          console.log('Thoughts:', thoughts);
+        }
+        // Check if this is a final response
+        const finalResponse = extractFinalResponse(accumulatedResponse);
         
-        // If there's a script to execute, handle it as a tool call
-        if (parsedResponse.script) {
+        if (finalResponse) {
           if(onMessage){
-              onMessage(completionId, parsedResponse.response);
+              onMessage(completionId, finalResponse);
           }
           yield {
             type: 'text',
-            content: parsedResponse.response
+            content: finalResponse
           };
-          if(!onToolCall){
-            throw new Error('onToolCall is not defined');
-          }
-          const toolCallId = `tool_${Date.now()}`;
+          break;
+        }
+        
+        // Handle script execution
+        if(!onToolCall){
+          throw new Error('onToolCall is not defined');
+        }
+        const toolCallId = `tool_${Date.now()}`;
 
-          yield {
-            type: 'function_call',
+        yield {
+          type: 'function_call',
+          name: 'runCode',
+          arguments: {
+            code: accumulatedResponse,
+          },
+          call_id: toolCallId
+        };
+
+        // Add the tool call to messages
+        messages.push({
+          role: 'assistant',
+          content: `To help me complete your request, please execute the following code:\n\`\`\`\n${accumulatedResponse}\n\`\`\``
+        });
+
+        // Execute the tool call
+        const result = await onToolCall(
+          completionId,
+          {
             name: 'runCode',
             arguments: {
-              code: parsedResponse.script,
+              code: accumulatedResponse,
             },
             call_id: toolCallId
-          };
-
-          // add the tool call to the messages
-          messages.push({
-            role: 'assistant',
-            content: `${parsedResponse.response}\n\nTo help me complete your request, please execute the following code:\n\`\`\`\n${parsedResponse.script}\n\`\`\``
-          });
-
-          // Execute the tool call
-          const result = await onToolCall({
-            name: 'runCode',
-            arguments: {
-              code: parsedResponse.script,
-            },
-            call_id: toolCallId
-          });
-
-          // Yield the tool call output
-          yield {
-            type: 'function_call_output',
-            content: result,
-            call_id: toolCallId
-          };
-
-          // Add tool response to messages
-          messages.push({
-            role: 'user',
-            content: `I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.`
-          });
-
-          // Check if we've hit the loop limit
-          if (loopCount >= maxSteps) {
-            console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
-            if(onMessage){
-              onMessage(completionId, `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`);
-            }
-            yield {
-              type: 'text',
-              content: `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`
-            };
-            break;
           }
-        } else {
+        );
+
+        // Yield the tool call output
+        yield {
+          type: 'function_call_output',
+          content: result,
+          call_id: toolCallId
+        };
+
+        // Add tool response to messages
+        messages.push({
+          role: 'user',
+          content: `I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.`
+        });
+
+        // Check if we've hit the loop limit
+        if (loopCount >= maxSteps) {
+          console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
           if(onMessage){
-              onMessage(completionId, parsedResponse.response);
+            onMessage(completionId, `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`);
           }
           yield {
-              type: 'text',
-              content: parsedResponse.response
+            type: 'text',
+            content: `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`
           };
           break;
         }
@@ -301,6 +270,7 @@ export async function* chatCompletion({
   temperature = 0.7,
   onToolCall,
   onMessage,
+  onStreaming,
   maxSteps = 10, // Default to 10 loops
   baseURL = 'http://localhost:11434/v1/',
   apiKey = 'ollama',
@@ -382,7 +352,7 @@ export async function* chatCompletion({
 
                 if (onToolCall) {
                   // Start the tool call immediately and store its promise
-                  const toolCallPromise = onToolCall({
+                  const toolCallPromise = onToolCall(completionId, {
                     name: currentToolCall.function.name,
                     arguments: JSON.parse(currentToolCall.function.arguments),
                     call_id: currentToolCall.id
@@ -439,7 +409,7 @@ export async function* chatCompletion({
           call_id: currentToolCall.id
         };
 
-        const toolCallPromise = onToolCall({
+        const toolCallPromise = onToolCall(completionId, {
           name: currentToolCall.function.name,
           arguments: JSON.parse(currentToolCall.function.arguments),
           call_id: currentToolCall.id
