@@ -1327,11 +1327,11 @@ export class CellManager {
           }
         } else {
           // For non-system cells, include both code and output
-          content = `\`\`\`python\n${cell.content}\n\`\`\`\n`;
+          content = `<python>${cell.content}</python>`;
 
           // Add outputs if they exist
           if (cell.output && cell.output.length > 0) {
-            content += "\nOutput:\n";
+            content += "\n<observation>\n";
             for (const output of cell.output) {
               switch (output.type) {
                 case "stdout":
@@ -1363,6 +1363,7 @@ export class CellManager {
                   }
               }
             }
+            content += "\n</observation>\n";
           }
         }
 

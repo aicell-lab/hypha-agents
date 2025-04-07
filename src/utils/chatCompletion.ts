@@ -32,6 +32,7 @@ export interface ChatCompletionOptions {
   maxSteps?: number; // Maximum number of tool call steps before stopping
   baseURL?: string; // Base URL for the API
   apiKey?: string; // API key for authentication
+  stream?: boolean;
 }
 
 export interface AgentSettings {
@@ -42,36 +43,51 @@ export interface AgentSettings {
   instructions: string;
 }
 const RESPONSE_INSTRUCTIONS = `
-You must respond with a valid Python script that ALWAYS starts with a thoughts comment:
+You must respond with thoughts tag:
+<thoughts>Brief thoughts in max 5 words</thoughts>
 
-#Thoughts: Brief thoughts in max 5 words
-
-Then either:
-1. Python code to execute, or
-2. Just a final response comment
+Then EITHER:
+1. Python code to execute (wrapped in <python> tags), or
+2. A final response (wrapped in <finalResponse> tags)
 
 Example responses:
 
-When user asks "Plot a sine wave":
-#Thoughts: import numpy plot sine wave\n\nimport numpy as np\nimport matplotlib.pyplot as plt\n\nx = np.linspace(0, 2*np.pi, 100)\ny = np.sin(x)\n\nplt.plot(x, y)\nplt.title('Sine Wave')\nplt.xlabel('x')\nplt.ylabel('sin(x)')\nplt.grid(True)\nplt.show()"
+When executing code:
+<thoughts>Plotting sine wave with numpy</thoughts>
+<python>
+import numpy as np
+import matplotlib.pyplot as plt
 
-After seeing the plot:
-#Thoughts: plot complete, give feedback\n#FinalResponse: I've created a basic sine wave plot. The graph shows one complete cycle of the sine function from 0 to 2π. The wave oscillates between -1 and 1 on the y-axis. Would you like to modify any aspects of the plot?"
+x = np.linspace(0, 2*np.pi, 100)
+y = np.sin(x)
 
+plt.plot(x, y)
+plt.title('Sine Wave')
+plt.xlabel('x')
+plt.ylabel('sin(x)')
+plt.grid(True)
+plt.show()
+</python>
+
+When providing a final response:
+<thoughts>Explaining the sine plot</thoughts>
+<finalResponse>
+I've created a basic sine wave plot. The graph shows one complete cycle of the sine function from 0 to 2π. The wave oscillates between -1 and 1 on the y-axis. Would you like to modify any aspects of the plot?
+</finalResponse>
 
 INTERACTION GUIDELINES:
 
-1. SCRIPT FORMAT
-   - ALWAYS start with #Thoughts: comment (max 5 words)
-   - For actions: Include executable Python code
-   - For final responses: Use #FinalResponse: comment
+1. RESPONSE FORMAT
+   - ALWAYS start with <thoughts> tag (max 5 words)
+   - For actions: Use <python> tags with Python code
+   - For final responses: Use <finalResponse> tags
    - Keep code clean and well-documented
    - Include necessary imports
    - Use clear variable names
 
 2. WORKFLOW
    - Need information? → Write code to gather it
-   - Have all info? → Use #FinalResponse:
+   - Have all info? → Use <finalResponse>
    - Complex tasks → Multiple code-response rounds
    - Always handle errors gracefully
 
@@ -94,13 +110,19 @@ export const DefaultAgentConfig: AgentSettings = {
 
 // Helper function to extract final response from script
 function extractFinalResponse(script: string): string | null {
-  const match = script.match(/#FinalResponse:\s*(.*)/);
+  const match = script.match(/<finalResponse>([\s\S]*?)<\/finalResponse>/);
   return match ? match[1].trim() : null;
 }
 
 // Helper function to extract thoughts from script
 function extractThoughts(script: string): string | null {
-  const match = script.match(/#Thoughts:\s*(.*)/);
+  const match = script.match(/<thoughts>([\s\S]*?)<\/thoughts>/);
+  return match ? match[1].trim() : null;
+}
+
+// Helper function to extract script content
+function extractScript(script: string): string | null {
+  const match = script.match(/<python>([\s\S]*?)<\/python>/);
   return match ? match[1].trim() : null;
 }
 
@@ -115,6 +137,7 @@ export async function* structuredChatCompletion({
   maxSteps = 10,
   baseURL = 'http://localhost:11434/v1/',
   apiKey = 'ollama',
+  stream = true,
 }: ChatCompletionOptions): AsyncGenerator<{
   type: 'text' | 'function_call' | 'function_call_output' | 'new_completion';
   content?: string;
@@ -132,7 +155,7 @@ export async function* structuredChatCompletion({
     });
 
     let loopCount = 0;
-
+    
     while (loopCount < maxSteps) {
       loopCount++;
       const fullMessages = systemPrompt 
@@ -149,15 +172,15 @@ export async function* structuredChatCompletion({
       let accumulatedResponse = '';
 
       // Create standard completion stream
-      const stream = await openai.chat.completions.create({
+      const completionStream = await openai.chat.completions.create({
         model,
         messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
         temperature,
-        stream: true,
+        stream: stream,
       });
 
       // Process the stream and accumulate JSON
-      for await (const chunk of stream) {
+      for await (const chunk of completionStream) {
         const content = chunk.choices[0]?.delta?.content || '';
         accumulatedResponse += content;
 
@@ -198,55 +221,64 @@ export async function* structuredChatCompletion({
         }
         const toolCallId = `tool_${Date.now()}`;
 
-        yield {
-          type: 'function_call',
-          name: 'runCode',
-          arguments: {
-            code: accumulatedResponse,
-          },
-          call_id: toolCallId
-        };
-
-        // Add the tool call to messages
-        messages.push({
-          role: 'assistant',
-          content: `To help me complete your request, please execute the following code:\n\`\`\`\n${accumulatedResponse}\n\`\`\``
-        });
-
-        // Execute the tool call
-        const result = await onToolCall(
-          completionId,
-          {
+        // Extract script content if it exists
+        const scriptContent = extractScript(accumulatedResponse);
+        if (scriptContent) {
+          yield {
+            type: 'function_call',
             name: 'runCode',
             arguments: {
-              code: accumulatedResponse,
+              code: scriptContent,
             },
             call_id: toolCallId
+          };
+
+          // Add the tool call to messages with XML format
+          messages.push({
+            role: 'assistant',
+            content: `<thoughts>${extractThoughts(accumulatedResponse)}</thoughts>\n<python>${scriptContent}</python>`
+          });
+
+          // on Streaming about executing the code
+          if(onStreaming){
+            onStreaming(completionId, `Executing code...`);
           }
-        );
 
-        // Yield the tool call output
-        yield {
-          type: 'function_call_output',
-          content: result,
-          call_id: toolCallId
-        };
+          // Execute the tool call
+          const result = await onToolCall(
+            completionId,
+            {
+              name: 'runCode',
+              arguments: {
+                code: scriptContent,
+              },
+              call_id: toolCallId
+            }
+          );
 
-        // Add tool response to messages
-        messages.push({
-          role: 'user',
-          content: `I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.`
-        });
+          // Yield the tool call output
+          yield {
+            type: 'function_call_output',
+            content: result,
+            call_id: toolCallId
+          };
+
+          // Add tool response to messages
+          messages.push({
+            role: 'user',
+            content: `<observation>I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.</observation>`
+          });
+        }
 
         // Check if we've hit the loop limit
         if (loopCount >= maxSteps) {
           console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
           if(onMessage){
-            onMessage(completionId, `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`);
+            onMessage(completionId, `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.</finalResponse>`);
           }
           yield {
             type: 'text',
-            content: `\n\nNote: Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.`
+            content: `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.</finalResponse>`
           };
           break;
         }
