@@ -296,7 +296,7 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
             {/* Presets Section */}
             <div className="p-4 space-y-4">
               <div className="flex justify-between items-center">
-                <h4 className="text-sm font-medium text-gray-900">Saved Presets</h4>
+                <h4 className="text-sm font-medium text-gray-900">Presets</h4>
               </div>
               <div className="space-y-2">
                 {presets.map((preset) => (
