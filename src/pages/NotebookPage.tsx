@@ -407,7 +407,7 @@ const NotebookPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [server, isLoggedIn]);
+  }, [server]); // Remove isLoggedIn dependency
 
   // Function to get conversation history up to a specific cell
   const getConversationHistory = useCallback((upToCellId?: string): ChatMessage[] => {
@@ -425,11 +425,9 @@ const NotebookPage: React.FC = () => {
   }, [cells]);
   // Update handleSendMessage to use AbortController
   const handleSendMessage = useCallback(async (message: string) => {
-    // If not logged in or not ready, show error
-    if (!isLoggedIn || !isReady) {
-      setInitializationError(!isLoggedIn ?
-        "You must be logged in to use the AI assistant." :
-        "AI assistant is not ready. Please wait.");
+    // If not ready, show error
+    if (!isReady) {
+      setInitializationError("AI assistant is not ready. Please wait.");
       return;
     }
 
@@ -525,7 +523,7 @@ const NotebookPage: React.FC = () => {
         cellManager.deleteCell(thinkingCellId);
       }
     }
-  }, [activeCellId, cellManager, isReady, isLoggedIn, server, getConversationHistory, handleExecuteCode, agentSettings]);
+  }, [activeCellId, cellManager, isReady, server, getConversationHistory, handleExecuteCode, agentSettings]);
 
   // Add a function to handle stopping the chat completion
   const handleStopChatCompletion = useCallback(() => {
@@ -1099,7 +1097,7 @@ const NotebookPage: React.FC = () => {
     if (systemCells.length > 0) {
       const systemCellId = systemCells[0].id;
       // show the code of the system cell
-      cellManager.showCode(systemCellId);
+      // cellManager.showCode(systemCellId);
       cellManager.executeCell(systemCellId, false).then(() => {
         setTimeout(() => {
           // hide the code and the output of the system cell
@@ -1283,6 +1281,7 @@ const NotebookPage: React.FC = () => {
                         editorRef={getEditorRef(cell.id)}
                         isActive={activeCellId === cell.id}
                         parent={cell.metadata?.parent}
+                        onRegenerateResponse={cell.role === 'user' ? () => handleRegenerateClick(cell.id) : undefined}
                       />
                     )}
                   </div>
@@ -1542,33 +1541,28 @@ const NotebookPage: React.FC = () => {
       <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md z-10">
         <div className="max-w-6xl mx-auto">
           <div className="mb-2 text-xs text-center">
-            {!isLoggedIn ? (
-              <p className="text-yellow-800">Please log in to use the AI assistant</p>
-            ) : (
-              <p className="text-gray-500">
-                {isProcessingAgentResponse ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <FaSpinner className="animate-spin h-4 w-4" />
-                    AI is thinking...
-                  </span>
-                ) : initializationError ? initializationError :
-                  !isAIReady ? "Initializing AI assistant..." :
-                    "Ask a question or use commands like /code or /markdown to add specific cell types"}
-              </p>
-            )}
+            <p className="text-gray-500">
+              {isProcessingAgentResponse ? (
+                <span className="flex items-center justify-center gap-2">
+                  <FaSpinner className="animate-spin h-4 w-4" />
+                  AI is thinking...
+                </span>
+              ) : initializationError ? initializationError :
+                !isAIReady ? "Initializing AI assistant..." :
+                  "Ask a question or use commands like /code or /markdown to add specific cell types"}
+            </p>
           </div>
           <ChatInput
             onSend={handleSendMessage}
             onStop={handleStopChatCompletion}
             isProcessing={isProcessingAgentResponse || (activeAbortController !== null)}
-            disabled={!isAIReady || !isLoggedIn}
+            disabled={!isAIReady}
             isThebeReady={isReady}
             placeholder={
-              !isLoggedIn ? "Please log in to use the AI assistant" :
-                !isAIReady ? "Initializing AI assistant..." :
-                  initializationError ? "AI assistant connection failed..." :
-                    isProcessingAgentResponse ? "AI is thinking..." :
-                      "Enter text or command (e.g., /code, /markdown, /clear)"
+              !isAIReady ? "Initializing AI assistant..." :
+                initializationError ? "AI assistant connection failed..." :
+                  isProcessingAgentResponse ? "AI is thinking..." :
+                    "Enter text or command (e.g., /code, /markdown, /clear)"
             }
             agentSettings={agentSettings}
             onSettingsChange={setAgentSettings}

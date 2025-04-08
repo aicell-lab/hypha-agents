@@ -31,6 +31,7 @@ interface MarkdownCellProps {
   editorRef?: React.RefObject<any>;
   isActive?: boolean;
   parent?: string; // ID of parent cell (user message that triggered this cell)
+  onRegenerateResponse?: () => void; // New prop for regenerating response
 }
 
 const MarkdownCell: React.FC<MarkdownCellProps> = ({ 
@@ -43,7 +44,8 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   onEditingChange,
   editorRef,
   isActive = false,
-  parent
+  parent,
+  onRegenerateResponse
 }) => {
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
@@ -53,6 +55,13 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   const paddingHeight = 16;
   const monacoRef = useRef<any>(null);
   const [isFocused, setIsFocused] = useState(false);
+
+  // Function to handle regenerate response
+  const handleRegenerateResponse = useCallback(() => {
+    if (onRegenerateResponse) {
+      onRegenerateResponse();
+    }
+  }, [onRegenerateResponse]);
 
   // Update effect to handle edit mode based on active state and empty content
   useEffect(() => {
@@ -141,6 +150,12 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
       editor.addCommand(monacoRef.current.KeyMod.Shift | monacoRef.current.KeyCode.Enter, () => {
         handleRun();
       });
+      
+      // Add keyboard shortcut for Ctrl+Enter and Command+Enter to regenerate response
+      const ctrlCmdKey = monacoRef.current.KeyMod.CtrlCmd;
+      editor.addCommand(ctrlCmdKey | monacoRef.current.KeyCode.Enter, () => {
+        handleRegenerateResponse();
+      });
     }
 
     // Focus the editor if it's active
@@ -168,12 +183,23 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
     }
   };
 
-  // Handle keyboard shortcuts
+  // Update effect to handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle keyboard shortcuts if the editor has focus
+      // Only handle keyboard shortcuts if the editor has focus or the cell is active
       const isEditorFocused = internalEditorRef.current?.hasTextFocus?.() || 
                              editorDivRef.current?.contains(document.activeElement);
+
+      // Check if Ctrl+Enter or Command+Enter was pressed
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.shiftKey) {
+        // For regenerate, this should work regardless of edit mode
+        if (isEditorFocused || isFocused) {
+          e.preventDefault();
+          e.stopPropagation(); // Stop event from bubbling to other handlers
+          handleRegenerateResponse();
+          return;
+        }
+      }
 
       if (!isEditorFocused) return;
 
@@ -186,7 +212,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
 
     window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isEditing, handleRun]);
+  }, [isEditing, handleRun, handleRegenerateResponse]);
 
   // Handle focus and blur events
   useEffect(() => {
@@ -222,6 +248,13 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
       className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''} ${parent ? 'child-cell' : 'parent-cell'}`}
       tabIndex={-1} // Make the container focusable
       data-parent={parent || undefined}
+      onFocus={() => setIsFocused(true)}
+      onBlur={(e) => {
+        // Only set unfocused if the focus is leaving the entire cell
+        if (!editorDivRef.current?.contains(e.relatedTarget as Node)) {
+          setIsFocused(false);
+        }
+      }}
     >
       <div 
         className="jupyter-cell-flex-container" 
@@ -285,6 +318,8 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
             <div 
               className="markdown-preview group relative overflow-x-auto w-[calc(100%-24px)] pt-2"
               onDoubleClick={() => onEditingChange?.(true)}
+              tabIndex={0} // Make preview area focusable
+              onFocus={() => setIsFocused(true)}
             >
               <div className="markdown-body py-2 overflow-auto break-words min-h-[60px]">
                 <ReactMarkdown
