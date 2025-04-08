@@ -305,6 +305,8 @@ const NotebookPage: React.FC = () => {
           } else {
             // No saved state, add welcome cells
             console.log('No saved state found, adding welcome cells');
+            // add a system prompt cell
+            cellManager.addCell('code', `# Startup script\n\n# Use this cell to include any startup code you want to run when the notebook is opened.\nUse print statements to output system prompts for the AI assistant.`, 'system');
             cellManager.addCell('markdown', `# 🚀 Welcome to the Interactive Notebook\n\nThis notebook combines the power of Jupyter notebooks with AI assistance.\n\n* Type your question or request in the chat input below\n* Add code cells with \`/code\` command\n* Add markdown cells with \`/markdown\` command\n* Run cells with the run button or Ctrl+Enter`, 'assistant');
             cellManager.addCell('code', '', 'assistant');
           }
