@@ -33,6 +33,7 @@ export interface ChatCompletionOptions {
   baseURL?: string; // Base URL for the API
   apiKey?: string; // API key for authentication
   stream?: boolean;
+  abortController?: AbortController; // Add abortController to options
 }
 
 export interface AgentSettings {
@@ -148,6 +149,7 @@ export async function* structuredChatCompletion({
   baseURL = 'http://localhost:11434/v1/',
   apiKey = 'ollama',
   stream = true,
+  abortController, // Add abortController parameter
 }: ChatCompletionOptions): AsyncGenerator<{
   type: 'text' | 'function_call' | 'function_call_output' | 'new_completion';
   content?: string;
@@ -157,6 +159,10 @@ export async function* structuredChatCompletion({
   completion_id?: string;
 }, void, unknown> {
   try {
+    // Create a new AbortController if one wasn't provided
+    const controller = abortController || new AbortController();
+    const { signal } = controller;
+    
     systemPrompt = (systemPrompt || '') + RESPONSE_INSTRUCTIONS;
     const openai = new OpenAI({
       baseURL,
@@ -167,6 +173,12 @@ export async function* structuredChatCompletion({
     let loopCount = 0;
     
     while (loopCount < maxSteps) {
+      // Check if abort signal was triggered
+      if (signal.aborted) {
+        console.log('Chat completion aborted by user');
+        return;
+      }
+      
       loopCount++;
       const fullMessages = systemPrompt 
         ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
@@ -181,30 +193,55 @@ export async function* structuredChatCompletion({
 
       let accumulatedResponse = '';
 
-      // Create standard completion stream
-      const completionStream: any = await openai.chat.completions.create({
-        model,
-        messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
-        temperature,
-        stream: stream,
-      });
+      // Create standard completion stream with abort signal
+      const completionStream: any = await openai.chat.completions.create(
+        {
+          model,
+          messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
+          temperature,
+          stream: stream,
+        },
+        { 
+          signal // Pass the abort signal as part of the request options
+        }
+      );
 
       // Process the stream and accumulate JSON
-      for await (const chunk of completionStream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        accumulatedResponse += content;
+      try {
+        for await (const chunk of completionStream) {
+          // Check if abort signal was triggered during streaming
+          if (signal.aborted) {
+            console.log('Chat completion stream aborted by user');
+            return;
+          }
+          
+          const content = chunk.choices[0]?.delta?.content || '';
+          accumulatedResponse += content;
 
-        if(onStreaming){
-          onStreaming(completionId, accumulatedResponse);
+          if(onStreaming){
+            onStreaming(completionId, accumulatedResponse);
+          }
+          yield {
+            type: 'text',
+            content: accumulatedResponse
+          };
         }
-        yield {
-          type: 'text',
-          content: accumulatedResponse
-        };
+      } catch (error) {
+        // Check if error is due to abortion
+        if (signal.aborted) {
+          console.log('Stream processing aborted by user');
+          return;
+        }
+        throw error; // Re-throw for other errors
       }
 
       // Parse and validate the accumulated JSON
       try {
+        // Check if abort signal was triggered after streaming
+        if (signal.aborted) {
+          console.log('Chat completion parsing aborted by user');
+          return;
+        }
        
         // Extract thoughts for logging
         const thoughts = extractThoughts(accumulatedResponse);
@@ -235,6 +272,12 @@ export async function* structuredChatCompletion({
         // Extract script content if it exists
         const scriptContent = extractScript(accumulatedResponse);
         if (scriptContent) {
+          // Check if abort signal was triggered before tool execution
+          if (signal.aborted) {
+            console.log('Chat completion tool execution aborted by user');
+            return;
+          }
+          
           yield {
             type: 'function_call',
             name: 'runCode',

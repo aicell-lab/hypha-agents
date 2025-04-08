@@ -233,6 +233,10 @@ const NotebookPage: React.FC = () => {
   const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
   const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
 
+  // Add this near the top where state variables are defined
+  const [isExecutingCode, setIsExecutingCode] = useState(false);
+  const [activeAbortController, setActiveAbortController] = useState<AbortController | null>(null);
+
   const addWindowCallback = useCallback((config: any) => {
     // Add the new window to our state
     const newWindow: HyphaCoreWindow = {
@@ -349,10 +353,10 @@ const NotebookPage: React.FC = () => {
   }, [cells, notebookMetadata, cellManager]);
 
 
-  // Update handleExecuteCode to use lastUserCellRef
+  // Update handleExecuteCode to use isExecutingCode instead of isProcessingAgentResponse
   const handleExecuteCode = useCallback(async (code: string, cellId?: string): Promise<string> => {
     try {
-      setIsProcessingAgentResponse(true);
+      setIsExecutingCode(true);
       let actualCellId = cellId;
 
       if (actualCellId) {
@@ -390,7 +394,7 @@ const NotebookPage: React.FC = () => {
       return `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
     }
     finally {
-      setIsProcessingAgentResponse(false);
+      setIsExecutingCode(false);
     }
   }, [cellManager, executeCode, lastAgentCellRef, lastUserCellRef]);
 
@@ -419,7 +423,7 @@ const NotebookPage: React.FC = () => {
       role: msg.role as ChatRole
     }));
   }, [cells]);
-  // Update handleSendMessage to use agent settings
+  // Update handleSendMessage to use AbortController
   const handleSendMessage = useCallback(async (message: string) => {
     // If not logged in or not ready, show error
     if (!isLoggedIn || !isReady) {
@@ -464,6 +468,10 @@ const NotebookPage: React.FC = () => {
 
       await new Promise(resolve => setTimeout(resolve, 0));
 
+      // Create an abort controller for this chat completion
+      const abortController = new AbortController();
+      setActiveAbortController(abortController);
+
       // Use agent settings in chat completion
       const completion = structuredChatCompletion({
         messages: history,
@@ -473,6 +481,7 @@ const NotebookPage: React.FC = () => {
         maxSteps: 15,
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
+        abortController, // Add the abort controller
         onToolCall: async (completionId: string, toolCall) => {
           if (toolCall.name === 'runCode') {
             return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
@@ -510,6 +519,7 @@ const NotebookPage: React.FC = () => {
       setInitializationError("Error communicating with AI assistant. Please try again.");
     } finally {
       setIsProcessingAgentResponse(false);
+      setActiveAbortController(null);
       if (thinkingCellId !== '') {
         // remove the thinking cell
         cellManager.deleteCell(thinkingCellId);
@@ -517,9 +527,32 @@ const NotebookPage: React.FC = () => {
     }
   }, [activeCellId, cellManager, isReady, isLoggedIn, server, getConversationHistory, handleExecuteCode, agentSettings]);
 
+  // Add a function to handle stopping the chat completion
+  const handleStopChatCompletion = useCallback(() => {
+    if (activeAbortController) {
+      console.log('Aborting active chat completion');
+      activeAbortController.abort();
+      setActiveAbortController(null);
+      
+      // Show a message that the stop request has been sent
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'fixed top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
+      messageDiv.textContent = 'Stop request sent. The operation may take a moment to complete...';
+      document.body.appendChild(messageDiv);
+      
+      // Fade out and remove the message after a delay
+      setTimeout(() => {
+        messageDiv.style.opacity = '0';
+        setTimeout(() => {
+          if (document.body.contains(messageDiv)) {
+            document.body.removeChild(messageDiv);
+          }
+        }, 500);
+      }, 3000);
+    }
+  }, [activeAbortController]);
 
-
-  // Update handleRegenerateClick to use deleteCellWithChildren and handleSendMessage
+  // Update handleRegenerateClick to use AbortController
   const handleRegenerateClick = async (cellId: string) => {
     if (!isReady || isProcessingAgentResponse) {
       console.log('[DEBUG] Cannot regenerate while processing another response or not ready',
@@ -537,7 +570,6 @@ const NotebookPage: React.FC = () => {
     // Initialize thinkingCellId with empty string
     let thinkingCellId = '';
     try {
-
       setIsProcessingAgentResponse(true);
       // Get the message content and position info before deletion
       const messageContent = userCell.content;
@@ -578,6 +610,10 @@ const NotebookPage: React.FC = () => {
 
       const history = getConversationHistory(cellId || undefined);
 
+      // Create an abort controller for this chat completion
+      const abortController = new AbortController();
+      setActiveAbortController(abortController);
+
       // Start chat completion
       const completion = structuredChatCompletion({
         messages: history,
@@ -587,6 +623,7 @@ const NotebookPage: React.FC = () => {
         maxSteps: 15,
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
+        abortController, // Add the abort controller
         onToolCall: async (completionId: string, toolCall) => {
           if (toolCall.name === 'runCode') {
             return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
@@ -628,6 +665,7 @@ const NotebookPage: React.FC = () => {
         cellManager.deleteCell(thinkingCellId);
       }
       setIsProcessingAgentResponse(false);
+      setActiveAbortController(null);
     }
   };
 
@@ -1212,6 +1250,7 @@ const NotebookPage: React.FC = () => {
                       <ThinkingCell
                         content={cell.content}
                         parent={cell.metadata?.parent}
+                        onStop={activeAbortController ? handleStopChatCompletion : undefined}
                       />
                     ) : cell.type === 'code' ? (
                       <CodeCell
@@ -1520,7 +1559,9 @@ const NotebookPage: React.FC = () => {
           </div>
           <ChatInput
             onSend={handleSendMessage}
-            disabled={!isAIReady || isProcessingAgentResponse || !isLoggedIn}
+            onStop={handleStopChatCompletion}
+            isProcessing={isProcessingAgentResponse || (activeAbortController !== null)}
+            disabled={!isAIReady || !isLoggedIn}
             isThebeReady={isReady}
             placeholder={
               !isLoggedIn ? "Please log in to use the AI assistant" :

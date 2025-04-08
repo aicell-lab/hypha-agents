@@ -1,5 +1,6 @@
 import React, { useRef, useState, KeyboardEvent, useEffect } from 'react';
 import { SendIcon } from './icons/SendIcon';
+import { StopIcon } from './icons/StopIcon';
 import { ThebeStatus } from './ThebeStatus';
 import { ToolSelector } from './ToolSelector';
 import { Tool } from './ToolProvider';
@@ -8,10 +9,12 @@ import { AgentSettings } from '../../utils/chatCompletion';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onStop?: () => void;
   disabled?: boolean;
   placeholder?: string;
   isTyping?: boolean;
   isThebeReady?: boolean;
+  isProcessing?: boolean;
   onSelectTool?: (tool: Tool) => void;
   agentSettings?: AgentSettings;
   onSettingsChange?: (settings: AgentSettings) => void;
@@ -19,10 +22,12 @@ interface ChatInputProps {
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
+  onStop,
   disabled = false,
   placeholder = "Type your message...",
   isTyping = false,
   isThebeReady = false,
+  isProcessing = false,
   onSelectTool,
   agentSettings,
   onSettingsChange,
@@ -60,6 +65,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const handleStop = () => {
+    if (onStop) {
+      onStop();
+    }
+  };
+
   const handleInput = () => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -78,7 +89,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onInput={handleInput}
         placeholder={placeholder}
         rows={1}
-        disabled={disabled}
+        disabled={disabled || isProcessing}
         className="flex-1 resize-none overflow-hidden max-h-[200px] focus:outline-none focus:ring-0 border-0 bg-transparent p-2"
         style={{ height: '36px' }}
       />
@@ -86,19 +97,36 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <AgentSettingsPanel settings={agentSettings} onSettingsChange={onSettingsChange} className="mx-1" />
         {onSelectTool && <ToolSelector onSelectTool={onSelectTool} className="mx-1" />}
         <ThebeStatus />
-        <button
-          onClick={handleSend}
-          disabled={!message.trim() || disabled}
-          className={`p-2 rounded-lg transition-colors ${
-            !message.trim() || disabled
-              ? 'text-gray-400 cursor-not-allowed'
-              : 'text-blue-600 hover:bg-blue-50'
-          }`}
-          title="Send message"
-          aria-label="Send message"
-        >
-          <SendIcon className="w-5 h-5" />
-        </button>
+        
+        {isProcessing ? (
+          <button
+            onClick={handleStop}
+            disabled={!onStop}
+            className={`p-2 rounded-lg transition-colors ${
+              !onStop
+                ? 'text-gray-400 cursor-not-allowed'
+                : 'text-red-600 hover:bg-red-50'
+            }`}
+            title="Stop generation"
+            aria-label="Stop generation"
+          >
+            <StopIcon className="w-5 h-5" />
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={!message.trim() || disabled}
+            className={`p-2 rounded-lg transition-colors ${
+              !message.trim() || disabled
+                ? 'text-gray-400 cursor-not-allowed'
+                : 'text-blue-600 hover:bg-blue-50'
+            }`}
+            title="Send message"
+            aria-label="Send message"
+          >
+            <SendIcon className="w-5 h-5" />
+          </button>
+        )}
       </div>
     </div>
   );
