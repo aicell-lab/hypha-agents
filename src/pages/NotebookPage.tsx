@@ -1201,7 +1201,7 @@ const NotebookPage: React.FC = () => {
               >
                 {/* Active cell indicator strip */}
                 {activeCellId === cell.id && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 z-10"></div>
                 )}
                 {/* Cell Content */}
                 <div className="flex relative w-full">

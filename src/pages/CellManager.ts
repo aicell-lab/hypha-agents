@@ -1331,7 +1331,7 @@ export class CellManager {
           });
         } else {
           // For non-system cells, include both code and output
-          content = `<python>${cell.content}</python>`;
+          content = `<py-script>${cell.content}</py-script>`;
           history.push({
             role: cell.role,
             content: content.trim(),

@@ -47,14 +47,23 @@ You must respond with thoughts tag:
 <thoughts>Brief thoughts in max 5 words</thoughts>
 
 Then it MUST followed by one of the following tags:
-1. Python code to execute (wrapped in <python> tags), or
+1. Python code to execute (wrapped in <py-script> tags), or
 2. A final response (wrapped in <finalResponse> tags)
+
+RUNTIME ENVIRONMENT:
+- Code runs in a Jupyter notebook-like environment in the browser using Pyodide (WebAssembly)
+- Most common Python libraries are pre-installed
+- To install new packages use micropip:
+  import micropip
+  await micropip.install(['package1', 'package2'])
+- HTTP requests can be made using the patched 'requests' module as normal
+- Some system-level or binary-dependent packages may not be available
 
 Example responses:
 
 When executing code:
 <thoughts>Plotting sine wave with numpy</thoughts>
-<python>
+<py-script>
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -67,7 +76,7 @@ plt.xlabel('x')
 plt.ylabel('sin(x)')
 plt.grid(True)
 plt.show()
-</python>
+</py-script>
 
 When providing a final response:
 <thoughts>Explaining the sine plot</thoughts>
@@ -79,7 +88,7 @@ INTERACTION GUIDELINES:
 
 1. RESPONSE FORMAT
    - ALWAYS start with <thoughts> tag (max 5 words)
-   - For actions: Use <python> tags with Python code
+   - For actions: Use <py-script> tags with Python code
    - For final responses: Use <finalResponse> tags
    - Keep code clean and well-documented
    - Include necessary imports
@@ -97,6 +106,7 @@ INTERACTION GUIDELINES:
    - Test results before finalizing
    - Give clear error messages
    - Document complex operations
+   - Install required packages using micropip when needed
 `;
 
 // Update defaultAgentConfig to use the AgentSettings interface
@@ -122,7 +132,7 @@ function extractThoughts(script: string): string | null {
 
 // Helper function to extract script content
 function extractScript(script: string): string | null {
-  const match = script.match(/<python>([\s\S]*?)<\/python>/);
+  const match = script.match(/<py\-script>([\s\S]*?)<\/py\-script>/);
   return match ? match[1].trim() : null;
 }
 
@@ -172,7 +182,7 @@ export async function* structuredChatCompletion({
       let accumulatedResponse = '';
 
       // Create standard completion stream
-      const completionStream = await openai.chat.completions.create({
+      const completionStream: any = await openai.chat.completions.create({
         model,
         messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
         temperature,
@@ -271,10 +281,10 @@ export async function* structuredChatCompletion({
           });
         }
         else{
-          // if no thoughts or python tag produced
+          // if no <thoughts> or <py-script> tag produced
           messages.push({
             role: 'assistant',
-            content: `<thoughts>${accumulatedResponse} (Reminder: I need to use python tag to execute script or finalResponse tag to conclude the session)</thoughts>`
+            content: `<thoughts>${accumulatedResponse} (Reminder: I need to use \`py-script\` tag to execute script or \`finalResponse\` tag to conclude the session)</thoughts>`
           });
         }
 
