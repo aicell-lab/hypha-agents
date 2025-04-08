@@ -125,23 +125,27 @@ const saveToLocalStorage = async (
   metadata: NotebookMetadata
 ) => {
   const data: StoredNotebookData = {
-    cells: cells.map((cell) => ({
-      ...cell,
-      output: cell.output
-        ? cell.output.map((output) => ({
-            ...output,
-            attrs: {
-              ...output.attrs,
-              className: undefined, // Remove className as it's UI-specific
-            },
-          }))
-        : undefined,
-      metadata: {
+    cells: cells.map((cell) => {
+      // Preserve all metadata including parent
+      const cellMetadata = {
         ...cell.metadata,
         hasOutput: cell.output && cell.output.length > 0,
-        parent: cell.metadata?.parent, // Explicitly preserve parent key
-      },
-    })),
+      };
+
+      return {
+        ...cell,
+        output: cell.output
+          ? cell.output.map((output) => ({
+              ...output,
+              attrs: {
+                ...output.attrs,
+                className: undefined, // Remove className as it's UI-specific
+              },
+            }))
+          : undefined,
+        metadata: cellMetadata,
+      };
+    }),
     metadata: {
       ...metadata,
       modified: new Date().toISOString(),
@@ -150,7 +154,10 @@ const saveToLocalStorage = async (
 
   try {
     await localforage.setItem(STORAGE_KEY, data);
-    console.log("[DEBUG] Saved notebook with cells:", cells.length);
+    console.log("[DEBUG] Saved notebook state:", {
+      cellCount: cells.length,
+      cells: cells.map(c => ({ id: c.id, parent: c.metadata?.parent }))
+    });
   } catch (error) {
     console.error("Error saving to localforage:", error);
   }
@@ -819,11 +826,23 @@ export class CellManager {
       if (!Array.isArray(data.cells)) return null;
       if (!data.metadata || typeof data.metadata !== "object") return null;
 
-      return {
-        cells: data.cells.map((cell: NotebookCell) => ({
+      // Create a mapping of old IDs to new IDs to maintain parent relationships
+      const idMapping: { [oldId: string]: string } = {};
+      
+      // First pass: generate new IDs and create mapping
+      data.cells.forEach((cell: NotebookCell) => {
+        idMapping[cell.id] = uuidv4();
+      });
+
+      // Second pass: reconstruct cells with updated parent references
+      const reconstructedCells = data.cells.map((cell: NotebookCell) => {
+        const newId = idMapping[cell.id];
+        const newParentId = cell.metadata?.parent ? idMapping[cell.metadata.parent] : undefined;
+
+        return {
           ...cell,
-          id: uuidv4(), // Generate new ID
-          executionState: "idle",
+          id: newId,
+          executionState: "idle" as ExecutionState,
           output: cell.output
             ? cell.output.map((output: OutputItem) => ({
                 ...output,
@@ -838,9 +857,20 @@ export class CellManager {
           metadata: {
             ...cell.metadata,
             isNew: false,
-            parent: cell.metadata?.parent, // Explicitly preserve parent key
+            parent: newParentId, // Use the mapped parent ID
+            isCodeVisible: cell.metadata?.isCodeVisible ?? true,
+            isOutputVisible: cell.metadata?.isOutputVisible ?? true,
           },
-        })),
+        };
+      });
+
+      console.log("[DEBUG] Loaded notebook state:", {
+        cellCount: reconstructedCells.length,
+        cells: reconstructedCells.map(c => ({ id: c.id, parent: c.metadata?.parent }))
+      });
+
+      return {
+        cells: reconstructedCells,
         metadata: data.metadata,
       };
     } catch (error) {
