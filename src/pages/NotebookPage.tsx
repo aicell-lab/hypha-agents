@@ -1399,8 +1399,8 @@ const NotebookPage: React.FC = () => {
                       </>
                     )}
 
-                    {/* Add regenerate button for user message cells */}
-                    {cell.role === 'user' && (
+                    {/* Add regenerate button for user markdown cells */}
+                    {cell.role === 'user' && cell.type === 'markdown' && (
                       <button
                         onClick={() => handleRegenerateClick(cell.id)}
                         disabled={!isReady || isProcessingAgentResponse}
