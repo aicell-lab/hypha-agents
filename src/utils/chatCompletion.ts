@@ -201,9 +201,9 @@ export async function* structuredChatCompletion({
         if (thoughts) {
           console.log('Thoughts:', thoughts);
         }
-        // Check if this is a final response
+
+        // Check if this is a final response - if so, we should stop the loop
         const finalResponse = extractFinalResponse(accumulatedResponse);
-        
         if (finalResponse) {
           if(onMessage){
               onMessage(completionId, finalResponse);
@@ -212,7 +212,8 @@ export async function* structuredChatCompletion({
             type: 'text',
             content: finalResponse
           };
-          break;
+          // Exit the loop since we have a final response
+          return;
         }
         
         // Handle script execution

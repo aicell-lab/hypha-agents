@@ -1325,13 +1325,20 @@ export class CellManager {
               }
             }
           }
+          history.push({
+            role: cell.role,
+            content: content.trim(),
+          });
         } else {
           // For non-system cells, include both code and output
           content = `<python>${cell.content}</python>`;
-
+          history.push({
+            role: cell.role,
+            content: content.trim(),
+          });
           // Add outputs if they exist
           if (cell.output && cell.output.length > 0) {
-            content += "\n<observation>\n";
+            content = "\n<observation>\n";
             for (const output of cell.output) {
               switch (output.type) {
                 case "stdout":
@@ -1364,13 +1371,14 @@ export class CellManager {
               }
             }
             content += "\n</observation>\n";
+            history.push({
+                role: "user",
+                content: content.trim(),
+            });
           }
         }
 
-        history.push({
-          role: cell.role,
-          content: content.trim(),
-        });
+       
       }
     }
 
