@@ -1,8 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DefaultAgentConfig, AgentSettings } from '../../utils/chatCompletion';
 
-// Add localStorage key constant
+// Add localStorage key constants
 const AGENT_SETTINGS_STORAGE_KEY = 'agent_settings';
+const AGENT_PRESETS_STORAGE_KEY = 'agent_presets';
+
+// Define preset interface
+interface AgentPreset extends AgentSettings {
+  name: string;
+  description?: string;
+}
 
 // Export helper functions for localStorage
 export const loadSavedAgentSettings = (): AgentSettings => {
@@ -24,14 +31,51 @@ export const saveAgentSettings = (settings: AgentSettings): void => {
   }
 };
 
-// Define interfaces for our settings
+// Add preset management functions
+export const loadSavedPresets = (): AgentPreset[] => {
+  try {
+    const stored = localStorage.getItem(AGENT_PRESETS_STORAGE_KEY);
+    if (!stored) return [];
+    return JSON.parse(stored) as AgentPreset[];
+  } catch (error) {
+    console.error('Error loading presets from localStorage:', error);
+    return [];
+  }
+};
 
+export const savePreset = (preset: AgentPreset): void => {
+  try {
+    const presets = loadSavedPresets();
+    const existingIndex = presets.findIndex(p => p.name === preset.name);
+    
+    if (existingIndex >= 0) {
+      presets[existingIndex] = preset;
+    } else {
+      presets.push(preset);
+    }
+    
+    localStorage.setItem(AGENT_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  } catch (error) {
+    console.error('Error saving preset to localStorage:', error);
+  }
+};
+
+export const deletePreset = (presetName: string): void => {
+  try {
+    const presets = loadSavedPresets();
+    const filteredPresets = presets.filter(p => p.name !== presetName);
+    localStorage.setItem(AGENT_PRESETS_STORAGE_KEY, JSON.stringify(filteredPresets));
+  } catch (error) {
+    console.error('Error deleting preset from localStorage:', error);
+  }
+};
+
+// Define interfaces for our settings
 interface AgentSettingsProps {
   settings?: AgentSettings;
   onSettingsChange?: (settings: AgentSettings) => void;
   className?: string;
 }
-
 
 export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({ 
   settings,
@@ -40,8 +84,17 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [localSettings, setLocalSettings] = useState<AgentSettings>(settings || DefaultAgentConfig);
+  const [presets, setPresets] = useState<AgentPreset[]>([]);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetDescription, setNewPresetDescription] = useState('');
+  const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Load presets on mount
+  useEffect(() => {
+    setPresets(loadSavedPresets());
+  }, []);
 
   // Update local settings when prop changes
   useEffect(() => {
@@ -127,6 +180,64 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
     }, 2000);
   };
 
+  // Handle saving preset
+  const handleSavePreset = () => {
+    const name = prompt('Enter preset name:');
+    if (!name) return;
+    
+    const preset: AgentPreset = {
+      ...localSettings,
+      name,
+    };
+    
+    savePreset(preset);
+    setPresets(loadSavedPresets());
+
+    // Show success message
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
+    messageDiv.textContent = 'Preset saved successfully';
+    document.body.appendChild(messageDiv);
+    setTimeout(() => {
+      messageDiv.style.opacity = '0';
+      setTimeout(() => document.body.removeChild(messageDiv), 500);
+    }, 2000);
+  };
+
+  // Handle loading preset
+  const handleLoadPreset = (preset: AgentPreset) => {
+    const { name, description, ...settings } = preset;
+    setLocalSettings(settings);
+    saveAgentSettings(settings);
+    onSettingsChange(settings);
+
+    // Show success message
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
+    messageDiv.textContent = `Loaded preset: ${name}`;
+    document.body.appendChild(messageDiv);
+    setTimeout(() => {
+      messageDiv.style.opacity = '0';
+      setTimeout(() => document.body.removeChild(messageDiv), 500);
+    }, 2000);
+  };
+
+  // Handle deleting preset
+  const handleDeletePreset = (presetName: string) => {
+    deletePreset(presetName);
+    setPresets(loadSavedPresets());
+
+    // Show success message
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
+    messageDiv.textContent = `Deleted preset: ${presetName}`;
+    document.body.appendChild(messageDiv);
+    setTimeout(() => {
+      messageDiv.style.opacity = '0';
+      setTimeout(() => document.body.removeChild(messageDiv), 500);
+    }, 2000);
+  };
+
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       {/* Settings button */}
@@ -160,20 +271,64 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
 
       {/* Settings panel */}
       {isOpen && (
-        <div className="absolute right-0 bottom-full mb-2 w-[500px] bg-white rounded-lg shadow-xl z-[100] border border-gray-200">
+        <div className="absolute right-0 bottom-full mb-2 w-[600px] bg-white rounded-lg shadow-xl z-[100] border border-gray-200">
           <form ref={formRef} onSubmit={handleSubmit} className="divide-y divide-gray-200">
             <div className="px-4 py-3 bg-gray-50 rounded-t-lg flex justify-between items-center">
               <h3 className="text-lg font-medium text-gray-900">Agent Settings</h3>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="text-sm text-gray-600 hover:text-gray-900"
-              >
-                Reset to defaults
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSavePreset}
+                  className="text-sm text-blue-600 hover:text-blue-700"
+                >
+                  Save as Preset
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Reset to defaults
+                </button>
+              </div>
             </div>
 
-            <div className="p-4 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+            {/* Presets Section */}
+            <div className="p-4 space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-sm font-medium text-gray-900">Saved Presets</h4>
+              </div>
+              <div className="space-y-2">
+                {presets.map((preset) => (
+                  <div key={preset.name} className="flex items-center justify-between p-2 bg-gray-50 rounded-md hover:bg-gray-100">
+                    <div className="text-sm font-medium">{preset.name}</div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleLoadPreset(preset)}
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                      >
+                        Load
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePreset(preset.name)}
+                        className="text-xs text-red-600 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {presets.length === 0 && (
+                  <div className="text-sm text-gray-500 text-center py-4">
+                    No presets saved yet
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 space-y-4 max-h-[calc(100vh-400px)] overflow-y-auto">
               {/* Model Settings Section */}
               <div className="space-y-4">
                 <h4 className="text-sm font-medium text-gray-900">Model Configuration</h4>
@@ -338,4 +493,4 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
       )}
     </div>
   );
-}; 
+};
