@@ -6,6 +6,7 @@ import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Editor } from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
 import { RoleSelector, CellRole } from './RoleSelector';
+import { MdOutlineTextFields } from 'react-icons/md';
 
 interface MonacoEditor {
   getValue: () => string;
@@ -32,6 +33,9 @@ interface MarkdownCellProps {
   isActive?: boolean;
   parent?: string; // ID of parent cell (user message that triggered this cell)
   onRegenerateResponse?: () => void; // New prop for regenerating response
+  staged?: boolean; // Whether this is a staged (uncommitted) cell
+  hideContent?: boolean; // Whether to hide the cell content
+  onVisibilityChange?: (isVisible: boolean) => void; // Callback to toggle visibility
 }
 
 const MarkdownCell: React.FC<MarkdownCellProps> = ({ 
@@ -45,7 +49,10 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   editorRef,
   isActive = false,
   parent,
-  onRegenerateResponse
+  onRegenerateResponse,
+  staged = false,
+  hideContent = false,
+  onVisibilityChange
 }) => {
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
@@ -55,6 +62,10 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   const paddingHeight = 16;
   const monacoRef = useRef<any>(null);
   const [isFocused, setIsFocused] = useState(false);
+  
+  // Add a check for staged cells
+  const isStagedCell = staged && parent;
+  const isFullyCollapsed = isStagedCell && hideContent;
 
   // Function to handle regenerate response
   const handleRegenerateResponse = useCallback(() => {
@@ -62,6 +73,13 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
       onRegenerateResponse();
     }
   }, [onRegenerateResponse]);
+
+  // Function to handle visibility toggle
+  const handleVisibilityToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onVisibilityChange?.(!hideContent);
+  };
 
   // Update effect to handle edit mode based on active state and empty content
   useEffect(() => {
@@ -243,11 +261,24 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
     };
   }, [isEditing, onChange, onEditingChange]);
 
+  // Get a preview of the markdown content
+  const getContentPreview = () => {
+    if (!content) return '';
+    
+    // Get first line that has content
+    const firstLine = content.split('\n')
+      .find(line => line.trim().length > 0) || '';
+    
+    // Truncate if too long
+    return firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
+  };
+
   return (
     <div 
-      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''} ${parent ? 'child-cell' : 'parent-cell'}`}
+      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''} ${parent ? 'child-cell' : 'parent-cell'} ${staged ? 'staged-cell bg-gray-50/50 border-l-2 border-gray-200' : ''}`}
       tabIndex={-1} // Make the container focusable
       data-parent={parent || undefined}
+      data-staged={staged || undefined}
       onFocus={() => setIsFocused(true)}
       onBlur={(e) => {
         // Only set unfocused if the focus is leaving the entire cell
@@ -256,102 +287,172 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
         }
       }}
     >
-      <div 
-        className="jupyter-cell-flex-container" 
-        ref={editorDivRef}
-        tabIndex={-1} // Make the inner container focusable
-      >
-        {/* Add a placeholder for the execution count to match code cell alignment */}
-        <div className="execution-count flex-shrink-0 flex flex-col items-end gap-1">
-          {/* Empty placeholder for consistent alignment */}
-          <div></div>
-          {role !== undefined && onRoleChange && (
-            <div className="pr-2">
-              <RoleSelector role={role} onChange={onRoleChange} />
-            </div>
-          )}
+      {isFullyCollapsed ? (
+        // Minimal view for collapsed staged markdown cells
+        <div 
+          className="flex items-center justify-center cursor-pointer rounded transition-colors mx-2 my-0.5 py-0.5 hover:bg-slate-100 border-l border-slate-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            onVisibilityChange?.(!hideContent);
+          }}
+          role="button"
+          tabIndex={0}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onVisibilityChange?.(!hideContent);
+            }
+          }}
+          title="Staged markdown (click to expand)"
+        >
+          <div className="flex items-center gap-2 transition-opacity opacity-60 hover:opacity-100">
+            <MdOutlineTextFields className="w-3 h-3 text-slate-500" />
+            <span className="text-xs text-slate-500">
+              Staged markdown
+            </span>
+          </div>
         </div>
-        <div className="editor-container w-full overflow-hidden">
-          {isEditing ? (
-            <Editor
-              height={editorHeight}
-              defaultLanguage="markdown"
-              value={content}
-              onChange={handleEditorChange}
-              onMount={handleEditorDidMount}
-              beforeMount={handleBeforeMount}
-              options={{
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                lineNumbers: 'off',
-                renderWhitespace: 'selection',
-                folding: true,
-                fontSize: 13,
-                fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-                lineHeight: 1.5,
-                padding: { top: 8, bottom: 8 },
-                glyphMargin: false,
-                lineDecorationsWidth: 0,
-                lineNumbersMinChars: 3,
-                renderLineHighlight: 'none',
-                overviewRulerBorder: false,
-                scrollbar: {
-                  vertical: 'auto',
-                  horizontalSliderSize: 4,
-                  verticalSliderSize: 4,
-                  horizontal: 'auto',
-                  useShadows: false,
-                  verticalHasArrows: false,
-                  horizontalHasArrows: false,
-                  alwaysConsumeMouseWheel: false
-                },
-                overviewRulerLanes: 0,
-                hideCursorInOverviewRuler: true,
-                contextmenu: false,
-                fixedOverflowWidgets: true,
-                automaticLayout: true
-              }}
-              className="jupyter-editor w-full"
-            />
-          ) : (
-            <div 
-              className="markdown-preview group relative overflow-x-auto w-[calc(100%-24px)] pt-2"
-              onDoubleClick={() => onEditingChange?.(true)}
-              tabIndex={0} // Make preview area focusable
-              onFocus={() => setIsFocused(true)}
-            >
-              <div className="markdown-body py-2 overflow-auto break-words min-h-[60px]">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    code({ className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      return match ? (
-                        <SyntaxHighlighter
-                          style={oneLight}
-                          language={match[1]}
-                          PreTag="div"
-                          wrapLines={true}
-                          wrapLongLines={true}
-                        >
-                          {String(children).replace(/\n$/, '')}
-                        </SyntaxHighlighter>
-                      ) : (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      );
-                    }
-                  }}
-                >
-                  {content}
-                </ReactMarkdown>
+      ) : (
+        <div 
+          className="jupyter-cell-flex-container" 
+          ref={editorDivRef}
+          tabIndex={-1} // Make the inner container focusable
+        >
+          {/* Add a placeholder for the execution count to match code cell alignment */}
+          <div className="execution-count flex-shrink-0 flex flex-col items-end gap-1">
+            {/* Empty placeholder for consistent alignment */}
+            <div></div>
+            {role !== undefined && onRoleChange && (
+              <div className="pr-2">
+                <RoleSelector role={role} onChange={onRoleChange} />
               </div>
-            </div>
-          )}
+            )}
+          </div>
+          <div className={`editor-container w-full overflow-hidden ${staged ? 'border-l-2 border-slate-200 pl-2' : ''}`}>
+            {/* Staged indicator for expanded cells */}
+            {staged && (
+              <div className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                <span className="inline-block w-1.5 h-1.5 bg-slate-300 rounded-full"></span>
+                <span>Staged markdown (uncommitted)</span>
+              </div>
+            )}
+            
+            {/* Collapsed MarkdownCell Header */}
+            {hideContent && !isFullyCollapsed && (
+              <div 
+                className="flex items-center gap-2 p-2 bg-gray-50 rounded-t-md cursor-pointer hover:bg-gray-100 transition-colors relative"
+                onClick={handleVisibilityToggle}
+                role="button"
+                tabIndex={0}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleVisibilityToggle(e as any);
+                  }
+                }}
+              >
+                <svg 
+                  className={`w-4 h-4 text-gray-500 transform transition-transform ${hideContent ? 'rotate-0' : 'rotate-90'}`}
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="text-sm text-gray-600">
+                  Markdown {getContentPreview() && ` • ${getContentPreview()}`}
+                </span>
+                {staged && (
+                  <span className="ml-2 px-1.5 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
+                    Staged
+                  </span>
+                )}
+              </div>
+            )}
+            
+            {(!hideContent || isEditing) && (
+              isEditing ? (
+                <Editor
+                  height={editorHeight}
+                  defaultLanguage="markdown"
+                  value={content}
+                  onChange={handleEditorChange}
+                  onMount={handleEditorDidMount}
+                  beforeMount={handleBeforeMount}
+                  options={{
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'on',
+                    lineNumbers: 'off',
+                    renderWhitespace: 'selection',
+                    folding: true,
+                    fontSize: 13,
+                    fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+                    lineHeight: 1.5,
+                    padding: { top: 8, bottom: 8 },
+                    glyphMargin: false,
+                    lineDecorationsWidth: 0,
+                    lineNumbersMinChars: 3,
+                    renderLineHighlight: 'none',
+                    overviewRulerBorder: false,
+                    scrollbar: {
+                      vertical: 'auto',
+                      horizontalSliderSize: 4,
+                      verticalSliderSize: 4,
+                      horizontal: 'auto',
+                      useShadows: false,
+                      verticalHasArrows: false,
+                      horizontalHasArrows: false,
+                      alwaysConsumeMouseWheel: false
+                    },
+                    overviewRulerLanes: 0,
+                    hideCursorInOverviewRuler: true,
+                    contextmenu: false,
+                    fixedOverflowWidgets: true,
+                    automaticLayout: true
+                  }}
+                  className="jupyter-editor w-full"
+                />
+              ) : (
+                <div 
+                  className="markdown-preview group relative overflow-x-auto w-[calc(100%-24px)] pt-2"
+                  onDoubleClick={() => onEditingChange?.(true)}
+                  tabIndex={0} // Make preview area focusable
+                  onFocus={() => setIsFocused(true)}
+                >
+                  <div className="markdown-body py-2 overflow-auto break-words min-h-[60px]">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({ className, children, ...props }) {
+                          const match = /language-(\w+)/.exec(className || '');
+                          return match ? (
+                            <SyntaxHighlighter
+                              style={oneLight}
+                              language={match[1]}
+                              PreTag="div"
+                              wrapLines={true}
+                              wrapLongLines={true}
+                            >
+                              {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
+                          ) : (
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          );
+                        }
+                      }}
+                    >
+                      {content}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

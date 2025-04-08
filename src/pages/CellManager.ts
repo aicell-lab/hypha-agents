@@ -72,6 +72,7 @@ interface NotebookCell {
     hasOutput?: boolean;
     userModified?: boolean;
     parent?: string; // ID of the parent cell (for tracking agent responses to user messages)
+    staged?: boolean;
   };
 }
 
@@ -124,8 +125,11 @@ const saveToLocalStorage = async (
   cells: NotebookCell[],
   metadata: NotebookMetadata
 ) => {
+  // Filter out thinking cells before saving
+  const nonThinkingCells = cells.filter(cell => cell.type !== 'thinking');
+
   const data: StoredNotebookData = {
-    cells: cells.map((cell) => {
+    cells: nonThinkingCells.map((cell) => {
       // Preserve all metadata including parent
       const cellMetadata = {
         ...cell.metadata,
@@ -155,8 +159,8 @@ const saveToLocalStorage = async (
   try {
     await localforage.setItem(STORAGE_KEY, data);
     console.log("[DEBUG] Saved notebook state:", {
-      cellCount: cells.length,
-      cells: cells.map(c => ({ id: c.id, parent: c.metadata?.parent }))
+      cellCount: nonThinkingCells.length,
+      cells: nonThinkingCells.map(c => ({ id: c.id, parent: c.metadata?.parent }))
     });
   } catch (error) {
     console.error("Error saving to localforage:", error);
@@ -778,7 +782,10 @@ export class CellManager {
 
   // Get current state of cells with editor content
   getCurrentCellsContent(): NotebookCell[] {
-    return this.cells.map((cell) => {
+    // First filter out thinking cells
+    const nonThinkingCells = this.cells.filter(cell => cell.type !== 'thinking');
+    
+    return nonThinkingCells.map((cell) => {
       if (cell.type === "code") {
         // Get current content from editor ref if visible, otherwise use stored content
         const editorRef = this.editorRefs.current[cell.id];
@@ -951,11 +958,16 @@ export class CellManager {
     return this.cells.filter((cell) => cell.metadata?.parent === parentId);
   }
 
+  // Get IDs of all children cells of a given cell ID
+  getCellChildrenIds(parentId: string | undefined): string[] {
+    return this.findChildrenCells(parentId).map(cell => cell.id);
+  }
+
   // Helper method to focus a cell
   private focusCell(cellId: string): void {
     const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
     if (cellElement) {
-      cellElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      // cellElement.scrollIntoView({ behavior: "smooth", block: "center" });
 
       const editor = this.editorRefs.current[cellId]?.current;
       if (editor) {
@@ -1075,13 +1087,6 @@ export class CellManager {
     // Set the thinking cell reference for anchoring responses
     this.setCurrentAgentCell(thinkingCellId);
 
-    // Scroll to the thinking message
-    const cellElement = document.querySelector(
-      `[data-cell-id="${thinkingCellId}"]`
-    );
-    if (cellElement) {
-      cellElement.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
 
     // Signal that we want to regenerate a response
     return {
@@ -1310,6 +1315,9 @@ export class CellManager {
     for (const cell of cells) {
       // Skip cells without a role (they're not part of the conversation)
       if (!cell.role) continue;
+      
+      // Skip cells that are marked as staged
+      if (cell.metadata?.staged === true) continue;
 
       if (cell.type === "markdown") {
         history.push({

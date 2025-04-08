@@ -26,8 +26,8 @@ export interface ChatCompletionOptions {
   systemPrompt?: string;
   model?: string;
   temperature?: number;
-  onToolCall?: (completionId: string, toolCall: any) => Promise<string>;
-  onMessage?: (completionId: string, message: string) => void;
+  onExecuteCode?: (completionId: string, scriptContent: string) => Promise<string>;
+  onMessage?: (completionId: string, message: string, commitIds?: string[]) => void;
   onStreaming?: (completionId: string, message: string) => void;
   maxSteps?: number; // Maximum number of tool call steps before stopping
   baseURL?: string; // Base URL for the API
@@ -60,11 +60,18 @@ RUNTIME ENVIRONMENT:
 - HTTP requests can be made using the patched 'requests' module as normal
 - Some system-level or binary-dependent packages may not be available
 
+IMPORTANT NOTE ON CODE EXECUTION:
+- All intermediate py-script code blocks will be DISCARDED unless explicitly committed
+- To preserve code cells, use the commit property in your final response: <finalResponse commit="id1,id2,...">
+- Only code cells with IDs listed in the commit property will be kept
+- Temporary debugging code or code with errors will be removed automatically
+- Each code block gets a unique ID, visible in the XML tag: <py-script id="abc123">
+
 Example responses:
 
 When executing code:
 <thoughts>Plotting sine wave with numpy</thoughts>
-<py-script>
+<py-script id="123">
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -81,7 +88,7 @@ plt.show()
 
 When providing a final response:
 <thoughts>Explaining the sine plot</thoughts>
-<finalResponse>
+<finalResponse commit="123">
 I've created a basic sine wave plot. The graph shows one complete cycle of the sine function from 0 to 2π. The wave oscillates between -1 and 1 on the y-axis. Would you like to modify any aspects of the plot?
 </finalResponse>
 
@@ -108,6 +115,7 @@ INTERACTION GUIDELINES:
    - Give clear error messages
    - Document complex operations
    - Install required packages using micropip when needed
+   - Use commit property to preserve important code: <finalResponse commit="id1,id2">
 `;
 
 // Update defaultAgentConfig to use the AgentSettings interface
@@ -120,9 +128,34 @@ export const DefaultAgentConfig: AgentSettings = {
   };
 
 // Helper function to extract final response from script
-function extractFinalResponse(script: string): string | null {
-  const match = script.match(/<finalResponse>([\s\S]*?)<\/finalResponse>/);
-  return match ? match[1].trim() : null;
+interface FinalResponseResult {
+  content: string;
+  properties: Record<string, string>;
+}
+
+function extractFinalResponse(script: string): FinalResponseResult | null {
+  // Match <finalResponse> with optional attributes, followed by content, then closing tag
+  const match = script.match(/<finalResponse(?:\s+([^>]*))?>([\s\S]*?)<\/finalResponse>/);
+  if (!match) return null;
+
+  // Extract properties from attributes if they exist
+  const properties: Record<string, string> = {};
+  const [, attrs, content] = match;
+  
+  if (attrs) {
+    // Match all key="value" or key='value' pairs
+    const propRegex = /(\w+)=["']([^"']*)["']/g;
+    let propMatch;
+    while ((propMatch = propRegex.exec(attrs)) !== null) {
+      const [, key, value] = propMatch;
+      properties[key] = value;
+    }
+  }
+
+  return {
+    content: content.trim(),
+    properties
+  };
 }
 
 // Helper function to extract thoughts from script
@@ -133,7 +166,8 @@ function extractThoughts(script: string): string | null {
 
 // Helper function to extract script content
 function extractScript(script: string): string | null {
-  const match = script.match(/<py\-script>([\s\S]*?)<\/py\-script>/);
+  // Match <py-script> with optional attributes, followed by content, then closing tag
+  const match = script.match(/<py-script(?:\s+[^>]*)?>([\s\S]*?)<\/py-script>/);
   return match ? match[1].trim() : null;
 }
 
@@ -142,7 +176,7 @@ export async function* structuredChatCompletion({
   systemPrompt,
   model = 'qwen2.5-coder:7b',
   temperature = 0.7,
-  onToolCall,
+  onExecuteCode,
   onMessage,
   onStreaming,
   maxSteps = 10,
@@ -253,21 +287,26 @@ export async function* structuredChatCompletion({
         const finalResponse = extractFinalResponse(accumulatedResponse);
         if (finalResponse) {
           if(onMessage){
-              onMessage(completionId, finalResponse);
+              // Extract commit IDs from properties and pass them as an array
+              const commitIds = finalResponse.properties.commit ? 
+                finalResponse.properties.commit.split(',').map(id => id.trim()) : 
+                [];
+              
+              onMessage(completionId, finalResponse.content, commitIds);
           }
           yield {
             type: 'text',
-            content: finalResponse
+            content: finalResponse.content
           };
           // Exit the loop since we have a final response
           return;
         }
         
         // Handle script execution
-        if(!onToolCall){
-          throw new Error('onToolCall is not defined');
+        if(!onExecuteCode){
+          throw new Error('onExecuteCode is not defined');
         }
-        const toolCallId = `tool_${Date.now()}`;
+
 
         // Extract script content if it exists
         const scriptContent = extractScript(accumulatedResponse);
@@ -284,13 +323,13 @@ export async function* structuredChatCompletion({
             arguments: {
               code: scriptContent,
             },
-            call_id: toolCallId
+            call_id: completionId
           };
 
           // Add the tool call to messages with XML format
           messages.push({
             role: 'assistant',
-            content: `${accumulatedResponse}`
+            content: `<thoughts>${thoughts}</thoughts>\n<py-script id="${completionId}">${scriptContent}</py-script>`
           });
 
           // on Streaming about executing the code
@@ -299,22 +338,16 @@ export async function* structuredChatCompletion({
           }
 
           // Execute the tool call
-          const result = await onToolCall(
+          const result = await onExecuteCode(
             completionId,
-            {
-              name: 'runCode',
-              arguments: {
-                code: scriptContent,
-              },
-              call_id: toolCallId
-            }
+            scriptContent
           );
 
           // Yield the tool call output
           yield {
             type: 'function_call_output',
             content: result,
-            call_id: toolCallId
+            call_id: completionId
           };
 
           // Add tool response to messages
@@ -335,7 +368,7 @@ export async function* structuredChatCompletion({
         if (loopCount >= maxSteps) {
           console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
           if(onMessage){
-            onMessage(completionId, `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.</finalResponse>`);
+            onMessage(completionId, `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.</finalResponse>`, []);
           }
           yield {
             type: 'text',

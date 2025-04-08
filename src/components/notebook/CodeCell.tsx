@@ -86,6 +86,7 @@ interface CodeCellProps {
   onOutputVisibilityChange?: (isVisible: boolean) => void;
   parent?: string;
   output?: OutputItem[];
+  staged?: boolean; // Whether this is a staged (uncommitted) cell
 }
 
 export const CodeCell: React.FC<CodeCellProps> = ({ 
@@ -104,7 +105,8 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   hideOutput = false,
   onOutputVisibilityChange,
   parent,
-  output
+  output,
+  staged = false
 }) => {
   const { status, isReady } = useThebe();
   const [codeValue, setCodeValue] = useState(code);
@@ -119,6 +121,10 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const hasFinalDomOutput = useRef<boolean>(false);
   const styleTagRef = useRef<HTMLStyleElement | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+
+  // Add a check for staged cells
+  const isStagedCell = staged && parent;
+  const isFullyCollapsed = (role === 'system' && hideCode) || (isStagedCell && hideCode);
 
   // Calculate initial height based on content
   const calculateInitialHeight = useCallback((content: string) => {
@@ -345,23 +351,23 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     return firstLine.length > 50 ? firstLine.slice(0, 47) + '...' : firstLine;
   };
 
-  // Add a check for fully collapsed system cell
-  const isFullyCollapsed = role === 'system' && hideCode;
-
   return (
     <div 
       ref={editorDivRef}
-      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${parent ? 'child-cell' : 'parent-cell'} ${role === 'system' ? 'bg-gray-50' : ''}`}
+      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${parent ? 'child-cell' : 'parent-cell'} ${role === 'system' ? 'bg-gray-50' : ''} ${staged ? 'staged-cell bg-gray-50/50 border-l-2 border-gray-200' : ''}`}
       onClick={handleEditorClick}
       data-parent={parent || undefined}
+      data-staged={staged || undefined}
     >
       {isFullyCollapsed ? (
-        // Minimal icon view for collapsed system cells
+        // Minimal icon view for collapsed system or staged cells
         <div 
           className={`flex items-center justify-center cursor-pointer rounded transition-colors mx-2 my-0.5 ${
             isExecuting 
               ? 'py-2 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 shadow-sm' 
-              : 'py-0.5 hover:bg-gray-100'
+              : isStagedCell
+                ? 'py-0.5 hover:bg-slate-100 border-l border-slate-200'
+                : 'py-0.5 hover:bg-gray-100'
           }`}
           onClick={(e) => {
             e.stopPropagation();
@@ -377,20 +383,24 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               onOutputVisibilityChange?.(!hideOutput);
             }
           }}
-          title={isExecuting ? "Executing system configuration" : "System Configuration"}
+          title={isExecuting ? "Executing system configuration" : isStagedCell ? "Staged code (click to expand)" : "System Configuration"}
         >
           <div className={`flex items-center gap-2 transition-opacity ${
             isExecuting ? 'opacity-100' : 'opacity-60 hover:opacity-100'
           }`}>
             {isExecuting ? (
               <FaSpinner className="w-4 h-4 text-yellow-600 animate-spin" />
+            ) : isStagedCell ? (
+              <VscCode className="w-3 h-3 text-slate-500" />
             ) : (
               <RiRobot2Line className="w-3 h-3 text-gray-500" />
             )}
             <span className={`${
-              isExecuting ? 'text-sm font-medium text-yellow-700' : 'text-xs text-gray-500'
+              isExecuting ? 'text-sm font-medium text-yellow-700' : 
+              isStagedCell ? 'text-xs text-slate-500' : 'text-xs text-gray-500'
             }`}>
-              {isExecuting ? "Executing startup script..." : "System Configuration"}
+              {isExecuting ? "Executing startup script..." : 
+               isStagedCell ? "Staged code" : "System Configuration"}
             </span>
           </div>
         </div>
@@ -415,7 +425,15 @@ export const CodeCell: React.FC<CodeCellProps> = ({
           </div>
           
           {/* Editor */}
-          <div className={`editor-container mt-2 w-full overflow-hidden ${isActive ? 'editor-container-active' : ''}`}>
+          <div className={`editor-container mt-2 w-full overflow-hidden ${isActive ? 'editor-container-active' : ''} ${staged ? 'border-l-2 border-slate-200 pl-2' : ''}`}>
+            {/* Staged indicator for expanded cells */}
+            {staged && !hideCode && (
+              <div className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                <span className="inline-block w-1.5 h-1.5 bg-slate-300 rounded-full"></span>
+                <span>Staged code (uncommitted)</span>
+              </div>
+            )}
+            
             {/* Collapsed Code Cell Header */}
             {hideCode && (
               <div 
@@ -442,6 +460,11 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                   {language === 'python' ? 'Python Code' : language}
                   {getCodePreview() && ` • ${getCodePreview()}`}
                 </span>
+                {staged && (
+                  <span className="ml-2 px-1.5 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
+                    Staged
+                  </span>
+                )}
               </div>
             )}
 

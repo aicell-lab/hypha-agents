@@ -63,6 +63,7 @@ interface NotebookCell {
     hasOutput?: boolean;
     userModified?: boolean;
     parent?: string; // ID of the parent cell (for tracking agent responses to user messages)
+    staged?: boolean; // Whether this is a staged (uncommitted) cell
   };
 }
 
@@ -295,12 +296,14 @@ const NotebookPage: React.FC = () => {
           const savedState = await cellManager.loadFromLocalStorage();
           if (savedState) {
             console.log('Restored notebook state from localStorage');
-            cellManager.setCells(savedState.cells);
+            // Filter out thinking cells from the restored state
+            const nonThinkingCells = savedState.cells.filter(cell => cell.type !== 'thinking');
+            cellManager.setCells(nonThinkingCells);
             setNotebookMetadata(savedState.metadata);
 
             // Find the highest execution count to continue from
             let maxExecutionCount = 0;
-            savedState.cells.forEach(cell => {
+            nonThinkingCells.forEach(cell => {
               if (cell.executionCount && cell.executionCount > maxExecutionCount) {
                 maxExecutionCount = cell.executionCount;
               }
@@ -328,6 +331,18 @@ const NotebookPage: React.FC = () => {
     loadInitialState();
   }, [cellManager]);
 
+  // Add a separate useEffect to clean up any thinking cells
+  useEffect(() => {
+    // Remove all thinking cells
+    if (cells.length > 0) {
+      const nonThinkingCells = cells.filter(cell => cell.type !== 'thinking');
+      if (nonThinkingCells.length !== cells.length) {
+        console.log('Removing thinking cells');
+        setCells(nonThinkingCells);
+      }
+    }
+  }, []); // Only run once on component mount
+
   // Update auto-save effect to use a debounce
   useEffect(() => {
     // Clear any pending auto-save
@@ -354,7 +369,7 @@ const NotebookPage: React.FC = () => {
 
 
   // Update handleExecuteCode to use isExecutingCode instead of isProcessingAgentResponse
-  const handleExecuteCode = useCallback(async (code: string, cellId?: string): Promise<string> => {
+  const handleExecuteCode = useCallback(async (completionId: string, code: string, cellId?: string): Promise<string> => {
     try {
       setIsExecutingCode(true);
       let actualCellId = cellId;
@@ -371,20 +386,22 @@ const NotebookPage: React.FC = () => {
       }
       else {
         // Insert code cell after the agent cell with proper parent reference
+        // Use the completionId as the cell ID to ensure it matches the py-script ID
         actualCellId = cellManager.addCell(
           'code',
           code,
           'assistant',
           cellManager.getCurrentAgentCell() || undefined,
-          lastUserCellRef.current || undefined
+          lastUserCellRef.current || undefined,
+          undefined, // insertIndex
+          completionId // Pass the completionId as the cellId
         );
-        console.log('[DEBUG] Added code cell:', actualCellId, 'with parent:', lastUserCellRef.current);
+        console.log('[DEBUG] Added code cell:', actualCellId, 'with parent:', lastUserCellRef.current, 'and ID:', completionId);
         //collapse the code cell
         cellManager.collapseCodeCell(actualCellId);
         // Set the active cell to the new code cell
         cellManager.setActiveCell(actualCellId);
         cellManager.setCurrentAgentCell(actualCellId);
-
       }
       // wait for the next tick
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -480,14 +497,13 @@ const NotebookPage: React.FC = () => {
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
         abortController, // Add the abort controller
-        onToolCall: async (completionId: string, toolCall) => {
-          if (toolCall.name === 'runCode') {
-            return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
-          }
-          return `Tool ${toolCall.name} not implemented`;
+        onExecuteCode: async (completionId: string, scriptContent: string) => {
+          return await handleExecuteCode(completionId, scriptContent);
         },
-        onMessage: (completionId: string, message: string) => {
-          console.debug('[DEBUG] New Message:', completionId, message);
+        onMessage: (completionId: string, message: string, commitIds?: string[]) => {
+          console.debug('[DEBUG] New Message:', completionId, message, commitIds);
+          
+          // First, create the markdown cell with the final response
           cellManager.updateCellById(
             completionId,
             message,
@@ -495,6 +511,37 @@ const NotebookPage: React.FC = () => {
             'assistant',
             lastUserCellRef.current || undefined
           );
+          
+          // Instead of deleting cells, mark them as staged or not staged (committed)
+          if (lastUserCellRef.current) {
+            // Get all child cells of the current user message
+            const childrenIds = cellManager.getCellChildrenIds(lastUserCellRef.current);
+            
+            // For each child cell, update its status
+            childrenIds.forEach(id => {
+              // Skip the final response cell
+              if (id === completionId) return;
+              
+              // Check if this is a committed cell
+              const isCommitted = commitIds && commitIds.includes(id);
+              
+              // Update cell properties
+              setCells(prev => prev.map(cell => {
+                if (cell.id === id) {
+                  return {
+                    ...cell,
+                    metadata: {
+                      ...cell.metadata,
+                      staged: !isCommitted, // Mark as staged if not committed
+                      isCodeVisible: isCommitted, // Collapse non-committed cells
+                      isOutputVisible: isCommitted // Hide output for non-committed cells
+                    }
+                  };
+                }
+                return cell;
+              }));
+            });
+          }
         },
         onStreaming: (completionId: string, message: string) => {
           // Update the thinking cell content while streaming
@@ -518,10 +565,14 @@ const NotebookPage: React.FC = () => {
     } finally {
       setIsProcessingAgentResponse(false);
       setActiveAbortController(null);
-      if (thinkingCellId !== '') {
-        // remove the thinking cell
+      
+      // Always remove the thinking cell if it exists
+      if (thinkingCellId) {
         cellManager.deleteCell(thinkingCellId);
       }
+      
+      // Also clean up any other thinking cells that might be lingering
+      setCells(prev => prev.filter(cell => cell.type !== 'thinking'));
     }
   }, [activeCellId, cellManager, isReady, server, getConversationHistory, handleExecuteCode, agentSettings]);
 
@@ -622,14 +673,13 @@ const NotebookPage: React.FC = () => {
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
         abortController, // Add the abort controller
-        onToolCall: async (completionId: string, toolCall) => {
-          if (toolCall.name === 'runCode') {
-            return await handleExecuteCode(toolCall.arguments.code, toolCall.arguments.cell_id);
-          }
-          return `Tool ${toolCall.name} not implemented`;
+        onExecuteCode: async (completionId: string, scriptContent: string) => {
+          return await handleExecuteCode(completionId, scriptContent);
         },
-        onMessage: (completionId: string, message: string) => {
-          console.debug('[DEBUG] New Message:', message);
+        onMessage: (completionId: string, message: string, commitIds?: string[]) => {
+          console.debug('[DEBUG] New Message:', message, commitIds);
+          
+          // Create the final response cell
           cellManager.updateCellById(
             completionId,
             message,
@@ -637,6 +687,36 @@ const NotebookPage: React.FC = () => {
             'assistant',
             lastUserCellRef.current || undefined
           );
+          
+          // Instead of deleting cells, mark them as staged or not staged (committed)
+          if (lastUserCellRef.current) {
+            // Get all child cells of the current user message
+            const childrenIds = cellManager.getCellChildrenIds(lastUserCellRef.current);
+            // For each child cell, update its status
+            childrenIds.forEach(id => {
+              // Skip the final response cell
+              if (id === completionId) return;
+              
+              // Check if this is a committed cell
+              const isCommitted = commitIds && commitIds.includes(id);
+              
+              // Update cell properties
+              setCells(prev => prev.map(cell => {
+                if (cell.id === id) {
+                  return {
+                    ...cell,
+                    metadata: {
+                      ...cell.metadata,
+                      staged: !isCommitted, // Mark as staged if not committed
+                      isCodeVisible: isCommitted, // Collapse non-committed cells
+                      isOutputVisible: isCommitted // Hide output for non-committed cells
+                    }
+                  };
+                }
+                return cell;
+              }));
+            });
+          }
         },
         onStreaming: (completionId: string, message: string) => {
           // Update the thinking cell content while streaming
@@ -658,12 +738,16 @@ const NotebookPage: React.FC = () => {
       console.error('[DEBUG] Error regenerating responses:', error);
       setInitializationError("Error regenerating response. Please try again.");
     } finally {
-      if (thinkingCellId !== '') {
-        // remove the thinking cell
-        cellManager.deleteCell(thinkingCellId);
-      }
       setIsProcessingAgentResponse(false);
       setActiveAbortController(null);
+      
+      // Always remove the thinking cell if it exists
+      if (thinkingCellId) {
+        cellManager.deleteCell(thinkingCellId);
+      }
+      
+      // Also clean up any other thinking cells that might be lingering
+      setCells(prev => prev.filter(cell => cell.type !== 'thinking'));
     }
   };
 
@@ -712,15 +796,7 @@ const NotebookPage: React.FC = () => {
         break;
     }
 
-    // Scroll to the newly created cell
-    if (newCellId) {
-      setTimeout(() => {
-        const cellElement = document.querySelector(`[data-cell-id="${newCellId}"]`);
-        if (cellElement) {
-          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 50);
-    }
+
   }, [cellManager, hasInitialized]);
 
   // Handle markdown cell rendering
@@ -764,10 +840,6 @@ const NotebookPage: React.FC = () => {
         const nextCell = cells[nextIndex];
         if (nextCell) {
           cellManager.setActiveCell(nextCell.id);
-          const cellElement = document.querySelector(`[data-cell-id="${nextCell.id}"]`);
-          if (cellElement) {
-            cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
         }
         return;
       }
@@ -964,9 +1036,12 @@ const NotebookPage: React.FC = () => {
 
         setNotebookMetadata(metadata);
 
+        // Filter out any thinking cells
+        const filteredCells = notebookData.cells.filter(cell => cell.type !== 'thinking');
+
         // Find the highest execution count to continue from
         let maxExecutionCount = 0;
-        notebookData.cells.forEach(cell => {
+        filteredCells.forEach(cell => {
           if (cell.executionCount && cell.executionCount > maxExecutionCount) {
             maxExecutionCount = cell.executionCount;
           }
@@ -983,7 +1058,7 @@ const NotebookPage: React.FC = () => {
         // Add a small delay to ensure cells are cleared before adding new ones
         setTimeout(() => {
           // First pass: Create all cells and build ID mapping
-          notebookData.cells.forEach((cell) => {
+          filteredCells.forEach((cell) => {
             const oldId = cell.id;
             const newCellId = cellManager.addCell(
               cell.type,
@@ -994,7 +1069,7 @@ const NotebookPage: React.FC = () => {
           });
 
           // Second pass: Update parent references and other cell properties
-          notebookData.cells.forEach((cell, index) => {
+          filteredCells.forEach((cell, index) => {
             const newCellId = idMapping[cell.id];
             if (!newCellId) return;
 
@@ -1030,7 +1105,7 @@ const NotebookPage: React.FC = () => {
             }
 
             // If it's the last cell, make it active
-            if (index === notebookData.cells.length - 1) {
+            if (index === filteredCells.length - 1) {
               cellManager.setActiveCell(newCellId);
             }
           });
@@ -1268,6 +1343,7 @@ const NotebookPage: React.FC = () => {
                         onOutputVisibilityChange={() => cellManager.toggleOutputVisibility(cell.id)}
                         parent={cell.metadata?.parent}
                         output={cell.output}
+                        staged={cell.metadata?.staged === true}
                       />
                     ) : (
                       <MarkdownCell
@@ -1282,6 +1358,9 @@ const NotebookPage: React.FC = () => {
                         isActive={activeCellId === cell.id}
                         parent={cell.metadata?.parent}
                         onRegenerateResponse={cell.role === 'user' ? () => handleRegenerateClick(cell.id) : undefined}
+                        staged={cell.metadata?.staged === true}
+                        hideContent={cell.metadata?.isCodeVisible === false}
+                        onVisibilityChange={() => cellManager.toggleCodeVisibility(cell.id)}
                       />
                     )}
                   </div>
@@ -1297,11 +1376,21 @@ const NotebookPage: React.FC = () => {
                         <span className="flex items-center gap-1">
                           <VscCode className="w-3 h-3" />
                           Code
+                          {cell.metadata?.staged && (
+                            <span className="ml-1 px-1 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
+                              Staged
+                            </span>
+                          )}
                         </span>
                       ) : (
                         <span className="flex items-center gap-1">
                           <MdOutlineTextFields className="w-3 h-3" />
                           Markdown
+                          {cell.metadata?.staged && (
+                            <span className="ml-1 px-1 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
+                              Staged
+                            </span>
+                          )}
                         </span>
                       )}
                     </span>
