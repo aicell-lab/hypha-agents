@@ -8,8 +8,8 @@
 /**
  * Site configuration
  */
-export const SITE_ID = process.env.REACT_APP_SITE_ID || 'hypha-agent-platform';
-export const SITE_NAME = process.env.REACT_APP_SITE_NAME || 'Hypha Agent Platform';
+export const SITE_ID = process.env.REACT_APP_SITE_ID || 'hypha-agents';
+export const SITE_NAME = process.env.REACT_APP_SITE_NAME || 'Hypha Agents';
 
 /**
  * Server configuration

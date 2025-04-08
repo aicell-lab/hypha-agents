@@ -54,7 +54,7 @@ const MyArtifacts: React.FC = () => {
       };
       
       const response = await artifactManager.list({
-        parent_id: "hypha-agent-platform/agents",
+        parent_id: "hypha-agents/agents",
         filters: filters,
         limit: 100,
         _rkwargs: true

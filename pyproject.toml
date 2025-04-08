@@ -3,12 +3,12 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [project]
-name = "hypha-agent-engine"
+name = "hypha-agents"
 version = "0.1.0"
 authors = [
     {name = "Wei Ouyang", email = "oeway007@gmail.com"},
 ]
-description = "Hypha Agent Platform Backend Engine for LLM Services and Tool Runtime"
+description = "Hypha Agents Backend Engine for LLM Services and Tool Runtime"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -43,7 +43,7 @@ dependencies = [
 ]
 
 [tool.poetry]
-name = "hypha-agent-engine"
+name = "hypha-agents"
 version = "0.1.0"
 description = "Backend service for AI agent runtime"
 authors = ["Your Name <your.email@example.com>"]
@@ -56,4 +56,4 @@ click = "*"
 pydantic = "*"
 
 [tool.poetry.scripts]
-hypha-agent-engine = "hypha_agent_engine.__main__:cli"
+hypha-agents = "hypha_agents.__main__:cli"

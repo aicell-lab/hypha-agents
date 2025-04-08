@@ -1,3 +1,3 @@
 """
-Test suite for hypha-agent-engine
+Test suite for hypha-agents
 """

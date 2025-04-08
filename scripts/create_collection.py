@@ -6,8 +6,8 @@ from hypha_rpc import connect_to_server
 load_dotenv()
 
 SERVER_URL = os.getenv("SERVER_URL", "https://hypha.aicell.io")
-SITE_ID = os.getenv("REACT_APP_SITE_ID", "hypha-agent-platform")
-SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Agent Platform")
+SITE_ID = os.getenv("REACT_APP_SITE_ID", "hypha-agents")
+SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Agents")
 
 async def create_collection():
     server = await connect_to_server({

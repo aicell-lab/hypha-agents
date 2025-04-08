@@ -1,10 +1,10 @@
-# Hypha Agent Platform
+# Hypha Agents
 
-An enterprise-grade platform for building and deploying customizable AI agents.
+An open source platform for building and deploying customizable AI agents.
 
 ## 🎯 Overview
 
-Hypha Agent Platform is a comprehensive solution for creating, managing, and deploying AI agents. The platform provides:
+Hypha Agents is a comprehensive solution for creating, managing, and deploying AI agents. The platform provides:
 
 - 🤖 **Customizable AI Agents**: Build specialized agents with domain knowledge
 - 📚 **Knowledge Integration**: Upload and manage domain-specific knowledge bases
@@ -24,12 +24,12 @@ Hypha Agent Platform is a comprehensive solution for creating, managing, and dep
 
 ```bash
 # Clone the repository
-git clone https://github.com/aicell-lab/hypha-agent-platform.git
-cd hypha-agent-platform
+git clone https://github.com/aicell-lab/hypha-agents.git
+cd hypha-agents
 
 # Create and activate conda environment
-conda create -n hypha-agent-platform python=3.11
-conda activate hypha-agent-platform
+conda create -n hypha-agents python=3.11
+conda activate hypha-agents
 
 # Install Python dependencies
 pip install -e .
@@ -52,10 +52,10 @@ cp .env.example .env
 
 ```bash
 # Start the hypha engine using the CLI command
-hypha-agent-engine serve
+hypha-agents serve
 
 # Or using Python module
-python -m hypha_agent_engine serve
+python -m hypha_agents serve
 
 # In another terminal, start the frontend
 pnpm start
@@ -79,11 +79,11 @@ pnpm start
 ## 🏗️ Project Structure
 
 ```
-hypha-agent-platform/
+hypha-agents/
 ├── src/                  # React + TypeScript frontend
 │   ├── components/      # React components
 │   └── types/          # TypeScript definitions
-├── hypha_agent_engine/         # Core engine implementation
+├── hypha_agents/         # Core engine implementation
 │   ├── services/       # Hypha services
 │   ├── models/        # Pydantic models
 │   └── utils/         # Shared utilities
@@ -125,5 +125,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-Made with ❤️ by the Hypha Agent Platform Team
+Made with ❤️ by the Hypha Agents Team
 </div>

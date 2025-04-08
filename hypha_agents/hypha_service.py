@@ -1,4 +1,4 @@
-"""Hypha service integration module for the Hypha Agent Platform.
+"""Hypha service integration module for the Hypha Agents.
 
 This module provides functionality to integrate with the Hypha service,
 including agent service registration, tool creation, and OpenAI token handling.
@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Agent Platform")
+SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Agents")
 
 EXAMPLE_CODE = """
 

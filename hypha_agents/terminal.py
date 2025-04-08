@@ -1,4 +1,4 @@
-"""Terminal service implementation for the Hypha Agent Platform.
+"""Terminal service implementation for the Hypha Agents.
 
 This module provides functionality to create and manage PTY-based terminal sessions
 that can be accessed remotely through the Hypha service. It supports creating sessions,

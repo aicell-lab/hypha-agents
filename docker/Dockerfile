@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 RUN npm install -g pnpm@8
 
 # Create a non-root user
-RUN groupadd -r hypha_agent_platform && useradd -r -g hypha_agent_platform hypha_agent_platform
+RUN groupadd -r hypha_agents && useradd -r -g hypha_agents hypha_agents
 
 # Upgrade pip
 RUN pip install --upgrade pip
@@ -36,7 +36,7 @@ RUN pip install -e .
 # Create logs directory and set permissions
 RUN mkdir -p /app/logs && \
     chmod 777 -R /app /app/logs && \
-    chown -R hypha_agent_platform:hypha_agent_platform /app /app/logs
+    chown -R hypha_agents:hypha_agents /app /app/logs
 
 # Install frontend dependencies and build
 RUN pnpm install
@@ -51,7 +51,7 @@ RUN pnpm build
 RUN git config --global --add safe.directory /app
 
 # Switch to the non-root user
-USER hypha_agent_platform
+USER hypha_agents
 
 # Entry point for the application
-CMD ["python", "-m", "hypha_agent_engine", "serve"]
+CMD ["python", "-m", "hypha_agents", "serve"]

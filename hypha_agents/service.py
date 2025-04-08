@@ -1,7 +1,7 @@
-"""Service module for Hypha Agent Platform.
+"""Service module for Hypha Agents.
 
 This module provides functionality to connect to a Hypha server and
-register agent services for the Hypha Agent Platform.
+register agent services for the Hypha Agents.
 """
 
 import os
@@ -9,10 +9,10 @@ import logging
 
 from dotenv import load_dotenv
 from hypha_rpc import connect_to_server, login
-from hypha_agent_engine.hypha_service import register_agent_service
-from hypha_agent_engine.asgi_service import register_frontend_service
+from hypha_agents.hypha_service import register_agent_service
+from hypha_agents.asgi_service import register_frontend_service
 
-# from hypha_agent_engine.services.plotting import register_plotting_service
+# from hypha_agents.services.plotting import register_plotting_service
 
 # Load environment variables
 load_dotenv(override=True)
