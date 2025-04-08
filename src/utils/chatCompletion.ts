@@ -237,7 +237,7 @@ export async function* structuredChatCompletion({
           // Add the tool call to messages with XML format
           messages.push({
             role: 'assistant',
-            content: `<thoughts>${extractThoughts(accumulatedResponse)}</thoughts>\n<python>${scriptContent}</python>`
+            content: `${accumulatedResponse}`
           });
 
           // on Streaming about executing the code
@@ -268,6 +268,13 @@ export async function* structuredChatCompletion({
           messages.push({
             role: 'user',
             content: `<observation>I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.</observation>`
+          });
+        }
+        else{
+          // if no thoughts or python tag produced
+          messages.push({
+            role: 'assistant',
+            content: `<thoughts>${accumulatedResponse} (Reminder: I need to use python tag to execute script or finalResponse tag to conclude the session)</thoughts>`
           });
         }
 
