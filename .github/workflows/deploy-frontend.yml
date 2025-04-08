@@ -47,6 +47,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      - name: Setup build cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            build
+            node_modules/.cache
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: Configure swap space
+        run: |
+          sudo swapoff -a
+          sudo fallocate -l 10G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
       - name: Install dependencies
         run: pnpm install
 
@@ -54,7 +72,8 @@ jobs:
         run: pnpm build
         env:
           CI: false # This prevents treating warnings as errors
-          NODE_OPTIONS: "--max-old-space-size=8192" # Increase heap size to 8GB
+          NODE_OPTIONS: "--max-old-space-size=16384" # Increase heap size to 16GB
+          GENERATE_SOURCEMAP: "false" # Disable source maps to reduce memory usage
 
       - name: Ensure .nojekyll file exists
         run: touch build/.nojekyll
