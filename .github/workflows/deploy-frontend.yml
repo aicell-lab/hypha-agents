@@ -54,6 +54,7 @@ jobs:
         run: pnpm build
         env:
           CI: false # This prevents treating warnings as errors
+          NODE_OPTIONS: "--max-old-space-size=8192" # Increase heap size to 8GB
 
       - name: Ensure .nojekyll file exists
         run: touch build/.nojekyll
