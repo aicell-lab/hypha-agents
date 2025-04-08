@@ -389,9 +389,11 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
                     <select
                       name="model"
                       value={[
-                        'gpt-4',
-                        'gpt-3.5-turbo',
-                        'llama2',
+                        'o3-mini',
+                        'gpt-4o',
+                        'gpt-4o-mini',
+                        'llama3.1',
+                        'qwen2.5-coder',
                         'codellama',
                         'mistral',
                       ].includes(localSettings.model) ? localSettings.model : 'custom'}
@@ -411,9 +413,11 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
                       title="Select AI model"
                       aria-label="Select AI model"
                     >
-                      <option value="gpt-4">gpt-4</option>
-                      <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-                      <option value="llama2">llama2</option>
+                      <option value="o3-mini">o3-mini</option>
+                      <option value="gpt-4o">gpt-4o</option>
+                      <option value="gpt-4o-mini">gpt-4o-mini</option>
+                      <option value="llama3.1">llama3.1</option>
+                      <option value="qwen2.5-coder">qwen2.5-coder</option>
                       <option value="codellama">codellama</option>
                       <option value="mistral">mistral</option>
                       <option value="custom">Custom</option>
