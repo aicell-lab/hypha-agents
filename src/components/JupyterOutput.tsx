@@ -22,12 +22,17 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
   useEffect(() => {
     if (containerRef.current) {
       // Execute any scripts and process ANSI codes
-      executeScripts(containerRef.current);
-      // Only process ANSI codes for elements that haven't been pre-processed
-      const nonProcessedElements = containerRef.current.querySelectorAll('.output-item:not(.ansi-processed)');
-      nonProcessedElements.forEach(el => {
-        processAnsiInOutputElement(el as HTMLElement);
-      });
+      try{
+        executeScripts(containerRef.current);
+        // Only process ANSI codes for elements that haven't been pre-processed
+        const nonProcessedElements = containerRef.current.querySelectorAll('.output-item:not(.ansi-processed)');
+        nonProcessedElements.forEach(el => {
+          processAnsiInOutputElement(el as HTMLElement);
+        });
+      }
+      catch(e){
+        console.error(e)
+      }
     }
   }, [outputs]);
   
