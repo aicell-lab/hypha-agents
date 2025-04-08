@@ -74,6 +74,9 @@ jobs:
           CI: false # This prevents treating warnings as errors
           NODE_OPTIONS: "--max-old-space-size=16384" # Increase heap size to 16GB
           GENERATE_SOURCEMAP: "false" # Disable source maps to reduce memory usage
+          REACT_APP_SITE_ID: "hypha-agents"
+          REACT_APP_SITE_NAME: "Hypha Agents"
+          REACT_APP_SERVER_URL: "https://hypha.aicell.io"
 
       - name: Ensure .nojekyll file exists
         run: touch build/.nojekyll
