@@ -46,7 +46,7 @@ const RESPONSE_INSTRUCTIONS = `
 You must respond with thoughts tag:
 <thoughts>Brief thoughts in max 5 words</thoughts>
 
-Then EITHER:
+Then it MUST followed by one of the following tags:
 1. Python code to execute (wrapped in <python> tags), or
 2. A final response (wrapped in <finalResponse> tags)
 
