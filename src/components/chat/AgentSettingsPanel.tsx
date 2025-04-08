@@ -339,18 +339,13 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
                     <select
                       name="baseURLPreset"
                       onChange={(e) => {
-                        let value = e.target.value;
+                        const value = e.target.value;
                         if (value === 'custom') {
-                          // Keep current custom URL if switching to custom
                           return;
                         }
-                        if(!value.endsWith('/')) {
-                          value = value + '/';
-                        }
-                        // Update baseURL when selecting a preset
                         setLocalSettings({
                           ...localSettings,
-                          baseURL: value
+                          baseURL: value.endsWith('/') ? value : value + '/'
                         });
                       }}
                       value={[
@@ -361,8 +356,8 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
                       title="Select API endpoint"
                       aria-label="Select API endpoint"
                     >
-                      <option value="https://api.openai.com/v1">OpenAI</option>
-                      <option value="http://localhost:11434/v1">Ollama</option>
+                      <option value="https://api.openai.com/v1/">OpenAI</option>
+                      <option value="http://localhost:11434/v1/">Ollama</option>
                       <option value="custom">Custom</option>
                     </select>
                     <input
