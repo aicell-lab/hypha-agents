@@ -180,14 +180,45 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
                 
                 <div className="space-y-2">
                   <label className="block text-sm text-gray-700">Base URL</label>
-                  <input
-                    type="text"
-                    name="baseURL"
-                    value={localSettings.baseURL}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                    placeholder="Enter API base URL"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      name="baseURLPreset"
+                      onChange={(e) => {
+                        let value = e.target.value;
+                        if (value === 'custom') {
+                          // Keep current custom URL if switching to custom
+                          return;
+                        }
+                        if(!value.endsWith('/')) {
+                          value = value + '/';
+                        }
+                        // Update baseURL when selecting a preset
+                        setLocalSettings({
+                          ...localSettings,
+                          baseURL: value
+                        });
+                      }}
+                      value={[
+                        'https://api.openai.com/v1/',
+                        'http://localhost:11434/v1/',
+                      ].includes(localSettings.baseURL) ? localSettings.baseURL : 'custom'}
+                      className="w-1/3 px-3 py-2 border rounded-md text-sm"
+                      title="Select API endpoint"
+                      aria-label="Select API endpoint"
+                    >
+                      <option value="https://api.openai.com/v1">OpenAI</option>
+                      <option value="http://localhost:11434/v1">Ollama</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    <input
+                      type="text"
+                      name="baseURL"
+                      value={localSettings.baseURL}
+                      onChange={handleChange}
+                      className="flex-1 px-3 py-2 border rounded-md text-sm"
+                      placeholder="Enter API base URL"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -204,22 +235,48 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
 
                 <div className="space-y-2">
                   <label className="block text-sm text-gray-700">Model</label>
-                  <select
-                    name="model"
-                    value={localSettings.model}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                    title="Select AI model"
-                    aria-label="Select AI model"
-                  >
-                    <option value="llama3.1:latest">Llama 3.1</option>
-                    <option value="qwen2.5-coder:7b">Qwen 2.5 Coder</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="gpt-4o">GPT-4o</option>
-                    <option value="o3-mini">O3 Mini</option>
-                    <option value="mistral">Mistral</option>
-                    <option value="codellama">Code Llama</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      name="model"
+                      value={[
+                        'gpt-4',
+                        'gpt-3.5-turbo',
+                        'llama2',
+                        'codellama',
+                        'mistral',
+                      ].includes(localSettings.model) ? localSettings.model : 'custom'}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === 'custom') {
+                          // Keep current custom model if switching to custom
+                          return;
+                        }
+                        // Update model when selecting a preset
+                        setLocalSettings({
+                          ...localSettings,
+                          model: value
+                        });
+                      }}
+                      className="w-1/3 px-3 py-2 border rounded-md text-sm"
+                      title="Select AI model"
+                      aria-label="Select AI model"
+                    >
+                      <option value="gpt-4">gpt-4</option>
+                      <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                      <option value="llama2">llama2</option>
+                      <option value="codellama">codellama</option>
+                      <option value="mistral">mistral</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    <input
+                      type="text"
+                      name="model"
+                      value={localSettings.model}
+                      onChange={handleChange}
+                      className="flex-1 px-3 py-2 border rounded-md text-sm"
+                      placeholder="Enter model ID"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
