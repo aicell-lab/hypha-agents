@@ -141,7 +141,7 @@ const defaultNotebookMetadata: NotebookMetadata = {
     name: 'python',
     version: '3.10'
   },
-  title: 'Untitled Notebook',
+  title: 'Untitled Chat',
   created: new Date().toISOString(),
   modified: new Date().toISOString()
 };
@@ -1033,7 +1033,7 @@ const NotebookPage: React.FC = () => {
         const metadata = {
           ...defaultNotebookMetadata,
           ...notebookData.metadata,
-          title: notebookData.metadata?.title || 'Untitled Notebook',
+          title: notebookData.metadata?.title || 'Untitled Chat',
           modified: new Date().toISOString()
         };
 
@@ -1262,14 +1262,14 @@ const NotebookPage: React.FC = () => {
               <div className="h-5 w-px bg-gray-200 mx-1"></div>
               <input
                 type="text"
-                value={notebookMetadata.title || 'Untitled Notebook'}
+                value={notebookMetadata.title || 'Untitled Chat'}
                 onChange={(e) => setNotebookMetadata(prev => ({
                   ...prev,
-                  title: e.target.value || 'Untitled Notebook',
+                  title: e.target.value || 'Untitled Chat',
                   modified: new Date().toISOString()
                 }))}
                 className="text-lg font-medium bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
-                placeholder="Untitled Notebook"
+                placeholder="Untitled Chat"
               />
             </div>
 
