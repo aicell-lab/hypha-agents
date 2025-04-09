@@ -1706,15 +1706,14 @@ const NotebookPage: React.FC = () => {
   );
 };
 
-const NotebookPageWithThebe: React.FC = () => {
+const AgentLab: React.FC = () => {
   return (
     <ThebeProvider>
       <ToolProvider>
             <NotebookPage />
-         
       </ToolProvider>
     </ThebeProvider>
   );
 };
 
-export default NotebookPageWithThebe; 
+export default AgentLab; 

@@ -2,11 +2,9 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import LoginButton from './LoginButton';
 import { BiCube } from 'react-icons/bi';
-import { BsDatabase, BsCollection } from 'react-icons/bs';
-import { HiOutlineBeaker } from 'react-icons/hi';
-import { IoDocumentTextOutline, IoCloudUploadOutline } from 'react-icons/io5';
+import { IoDocumentTextOutline, IoCloudUploadOutline, IoFlaskOutline } from 'react-icons/io5';
 import { AiOutlineInfoCircle } from 'react-icons/ai';
-import { RiLoginBoxLine } from 'react-icons/ri';
+import { BsCollection } from 'react-icons/bs';
 import { useHyphaStore } from '../store/hyphaStore';
 import { SITE_NAME } from '../utils/env';
 
@@ -89,11 +87,11 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
                 </Link>
               )}
               <Link
-                to="/notebook"
+                to="/lab"
                 className="hover:bg-gray-50 px-4 py-2 rounded-md flex items-center"
               >
-                <IoDocumentTextOutline className="mr-2" size={18} />
-                Notebook
+                <IoFlaskOutline className="mr-2" size={18} />
+                Agent Lab
               </Link>
               <LoginButton />
             </div>
@@ -133,12 +131,12 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
               Create
             </Link>
             <Link 
-              to="/notebook" 
-              className={mobileNavLinkClasses("/notebook")}
+              to="/lab" 
+              className={mobileNavLinkClasses("/lab")}
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              <IoDocumentTextOutline className="mr-2" size={18} />
-              Notebook
+              <IoFlaskOutline className="mr-2" size={18} />
+              Agent Lab
             </Link>
             <Link 
               to="/about" 

@@ -1,12 +1,10 @@
 import React, { useEffect } from 'react';
-import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 
 import ResourceGrid from './components/ResourceGrid';
 import ResourceDetails from './components/ResourceDetails';
-import Snackbar from './components/Snackbar';
 import About from './components/About';
-import Footer from './components/Footer';
 import Upload from './components/Upload';
 import MyArtifacts from './components/MyArtifacts';
 import Edit from './components/Edit';
@@ -15,7 +13,7 @@ import './github-markdown.css'
 import Create from './components/Create';
 import Chat from './components/chat/Chat';
 import ChatPage from './pages/ChatPage';
-import NotebookPage from './pages/NotebookPage';
+import AgentLab from './pages/AgentLab';
 import CollabTest from './pages/CollabTest';
 
 // Create a wrapper component that uses Router hooks
@@ -25,7 +23,7 @@ const AppContent: React.FC = () => {
   const hasResourceId = searchParams.has('id');
   const isChatRoute = location.pathname === '/chat';
   const isChatDetailRoute = location.pathname.startsWith('/chat/');
-  const isNotebookRoute = location.pathname === '/notebook';
+  const isAgentLabRoute = location.pathname === '/lab' || location.pathname === '/notebook';
 
   // Add state for Snackbar
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
@@ -59,12 +57,13 @@ const AppContent: React.FC = () => {
   }
 
   // For notebook route, don't show the Navbar
-  if (isNotebookRoute) {
+  if (isAgentLabRoute) {
     return (
       <div className="flex flex-col h-screen">
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <Routes>
-            <Route path="/notebook" element={<NotebookPage />} />
+            <Route path="/lab" element={<AgentLab />} />
+            <Route path="/notebook" element={<Navigate to="/lab" replace />} />
           </Routes>
         </main>
       </div>
