@@ -184,6 +184,14 @@ export const setupNotebookService = async ({
 server = await connect_to_server(server_url="${server.config.public_base_url}", token="${token}")
 api = await server.get_service("${svc.id}")
 print("Hypha Core service connected in kernel.")
+
+# Set environment variables
+import os
+os.environ['CURRENT_URL'] = '${window.location.href}'
+os.environ['HYPHA_SERVER_URL'] = '${server.config.public_base_url}'
+os.environ['HYPHA_WORKSPACE'] = '${server.config.workspace}'
+os.environ['HYPHA_TOKEN'] = '${token}'
+print("Environment variables set successfully.")
     `, {
       onOutput: (output: any) => {
         console.log(output);

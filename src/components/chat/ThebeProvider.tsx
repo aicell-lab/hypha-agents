@@ -427,7 +427,6 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
       // Only install packages if not already installed
       if (!globalThebeState.kernelInfo.pythonVersion) {
         console.log('Installing packages...');
-        const hyphaConfig = await getHyphaConfig();
         // First install required packages
         const installFuture = kernel.requestExecute({
           code: `
@@ -437,9 +436,7 @@ import pyodide_http
 pyodide_http.patch_all()
 %matplotlib inline
 import os
-os.environ['HYPHA_SERVER_URL'] = '${hyphaConfig?.serverUrl}'
-os.environ['HYPHA_WORKSPACE'] = '${hyphaConfig?.workspace}'
-os.environ['HYPHA_TOKEN'] = '${hyphaConfig?.token}'
+os.environ['CURRENT_URL'] = '${window.location.href}'
 `
         });
         await installFuture.done;
@@ -643,29 +640,6 @@ print(f"{sys.version.split()[0]}")
     }
   };
 
-  // Function to get Hypha configuration
-  const getHyphaConfig = async () => {
-    console.log('Getting Hypha config, server:', hyphaServer);
-    
-    if (!hyphaServer) {
-      console.log('No Hypha server available');
-      return null;
-    }
-
-    try {
-      const token = await hyphaServer.generateToken();
-      const config = {
-        serverUrl: hyphaServer.config.public_base_url,
-        workspace: hyphaServer.config.workspace,
-        token: token
-      };
-      console.log('Generated Hypha config:', config);
-      return config;
-    } catch (error) {
-      console.error('Error generating Hypha config:', error);
-      return null;
-    }
-  };
 
   // Update executeCode function to include short_content
   const executeCode = async (
