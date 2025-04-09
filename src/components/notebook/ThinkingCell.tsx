@@ -2,7 +2,14 @@ import React, { useMemo } from 'react';
 import { FaSpinner, FaStop } from 'react-icons/fa';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import { RoleSelector, CellRole } from './RoleSelector';
+import type { CodeComponent } from 'react-markdown/lib/ast-to-react';
+
+// Register languages
+SyntaxHighlighter.registerLanguage('python', python);
 
 interface ThinkingCellProps {
   content: string;
@@ -10,19 +17,127 @@ interface ThinkingCellProps {
   onStop?: () => void; // New callback for stopping the completion
 }
 
+// Helper function to extract thoughts from script
+function extractThoughts(script: string): string | null {
+  const match = script.match(/<thoughts>([\s\S]*?)<\/thoughts>/);
+  return match ? match[1].trim() : null;
+}
+
+// Helper function to extract script content and ID
+interface ScriptContent {
+  content: string;
+  id?: string;
+}
+
+function extractScript(script: string): ScriptContent | null {
+  // Match <py-script> with optional attributes, followed by content, then closing tag
+  const match = script.match(/<py-script(?:\s+([^>]*))?>([\s\S]*?)<\/py-script>/);
+  if (!match) return null;
+
+  const [, attrs, content] = match;
+  let id: string | undefined;
+  
+  if (attrs) {
+    const idMatch = attrs.match(/id=["']([^"']*)["']/);
+    if (idMatch) {
+      id = idMatch[1];
+    }
+  }
+
+  return {
+    content: content.trim(),
+    id
+  };
+}
+
+// Helper function to extract final response
+interface FinalResponseResult {
+  content: string;
+  properties: Record<string, string>;
+}
+
+function extractFinalResponse(script: string): FinalResponseResult | null {
+  const match = script.match(/<finalResponse(?:\s+([^>]*))?>([\s\S]*?)<\/finalResponse>/);
+  if (!match) return null;
+
+  const properties: Record<string, string> = {};
+  const [, attrs, content] = match;
+  
+  if (attrs) {
+    const propRegex = /(\w+)=["']([^"']*)["']/g;
+    let propMatch;
+    while ((propMatch = propRegex.exec(attrs)) !== null) {
+      const [, key, value] = propMatch;
+      properties[key] = value;
+    }
+  }
+
+  return {
+    content: content.trim(),
+    properties
+  };
+}
+
+// Helper function to handle incomplete tags
+function completeIncompleteTag(content: string): string {
+  // Handle incomplete <thoughts> tag
+  if (content.includes('<thoughts>') && !content.includes('</thoughts>')) {
+    content += '</thoughts>';
+  }
+  
+  // Handle incomplete <py-script> tag
+  if (content.includes('<py-script') && !content.includes('</py-script>')) {
+    // Check if we need to close the opening tag first
+    if (!content.includes('>')) {
+      content += '>';
+    }
+    content += '</py-script>';
+  }
+  
+  // Handle incomplete <finalResponse> tag
+  if (content.includes('<finalResponse') && !content.includes('</finalResponse>')) {
+    // Check if we need to close the opening tag first
+    if (!content.includes('>')) {
+      content += '>';
+    }
+    content += '</finalResponse>';
+  }
+  
+  return content;
+}
+
 const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) => {
   // Fixed role for thinking cells
   const role: CellRole = 'assistant';
 
-  // Process content to replace markers and wrap with code block
+  // Process content to extract and format different parts
   const processedContent = useMemo(() => {
-    let processed = content
-      .replace(/#Thoughts:/g, '# 🤔')
-      .replace(/#FinalResponse:/g, '# ✨');
+    // Complete any incomplete tags for display purposes
+    const completedContent = completeIncompleteTag(content);
     
-    // Only wrap with python code block if it's not already wrapped
-    if (!processed.startsWith('```') && !processed.endsWith('```')) {
-      processed = '```python\n' + processed + '\n```';
+    let processed = '';
+    
+    // Extract thoughts
+    const thoughts = extractThoughts(completedContent);
+    if (thoughts) {
+      processed += `**🤔 ${thoughts}**\n`;
+    }
+    
+    // Extract script if present
+    const script = extractScript(completedContent);
+    if (script) {
+      processed += '```python\n' + script.content + '\n```\n\n';
+    }
+    
+    // Extract final response if present
+    const finalResponse = extractFinalResponse(completedContent);
+    if (finalResponse) {
+      processed += `**✨ ${finalResponse.content}**\n`;
+    }
+    
+    // If no tags were found, wrap the entire content in a code block
+    if (!thoughts && !script && !finalResponse) {
+      processed = '```\n' + completedContent + '\n```';
     }
     
     return processed;
@@ -34,8 +149,6 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
       data-parent={parent || undefined}
     >
       <div className="jupyter-cell-flex-container">
-        {/* Add a placeholder for the execution count to match code cell alignment */}
-     
         <div className="w-full overflow-hidden">
           {/* Stop Button centered at the top */}
           {onStop && (
@@ -60,13 +173,37 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
                 <FaSpinner className="animate-spin h-6 w-6 text-blue-500" />
               </div>
               <div className="flex-grow">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    code: React.memo(({ inline, className, children }: { inline: boolean, className: string, children: React.ReactNode }) => {
+                      const match = /language-(\w+)/.exec(className || '');
+                      const language = match ? match[1] : 'text';
+                      
+                      return !inline ? (
+                        <SyntaxHighlighter
+                          language={language}
+                          style={oneLight}
+                          customStyle={{ 
+                            margin: '0',
+                            padding: '1rem'
+                          }}
+                          showLineNumbers={true}
+                        >
+                          {String(children).replace(/\n$/, '')}
+                        </SyntaxHighlighter>
+                      ) : (
+                        <code className={className}>
+                          {children}
+                        </code>
+                      );
+                    }) as CodeComponent
+                  }}
+                >
                   {processedContent}
                 </ReactMarkdown>
               </div>
             </div>
-            
-            {/* Removed the stop button from here */}
           </div>
         </div>
       </div>

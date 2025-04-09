@@ -533,8 +533,8 @@ const NotebookPage: React.FC = () => {
                     metadata: {
                       ...cell.metadata,
                       staged: !isCommitted, // Mark as staged if not committed
-                      isCodeVisible: isCommitted, // Collapse non-committed cells
-                      isOutputVisible: isCommitted // Hide output for non-committed cells
+                      isCodeVisible: false, // Keep code collapsed for both staged and committed
+                      isOutputVisible: isCommitted // Show output only for committed cells
                     }
                   };
                 }
@@ -708,8 +708,8 @@ const NotebookPage: React.FC = () => {
                     metadata: {
                       ...cell.metadata,
                       staged: !isCommitted, // Mark as staged if not committed
-                      isCodeVisible: isCommitted, // Collapse non-committed cells
-                      isOutputVisible: isCommitted // Hide output for non-committed cells
+                      isCodeVisible: false, // Keep code collapsed for both staged and committed
+                      isOutputVisible: isCommitted // Show output only for committed cells
                     }
                   };
                 }

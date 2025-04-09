@@ -118,7 +118,6 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
         client: null,
         server: null,
         artifactManager: null,
-        schemaAgents: null,
         isConnected: false,
         isAuthenticated: false,
         isLoggedIn: false,

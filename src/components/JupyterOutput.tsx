@@ -60,7 +60,12 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
   );
   
   return (
-    <div ref={containerRef} className={`jupyter-output-container output-area ${className} bg-gray-50 rounded-b-md`}>
+    <div 
+      ref={containerRef} 
+      className={`jupyter-output-container output-area ${className} bg-gray-50 rounded-b-md`}
+      // Stop click propagation to allow text selection
+      onClick={(e) => e.stopPropagation()} 
+    >
       {/* Render text outputs first */}
       {textOutputs.length > 0 && (
         <div className="output-text-group">
