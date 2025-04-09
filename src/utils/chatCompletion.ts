@@ -1,6 +1,4 @@
 import OpenAI from 'openai';
-import { z } from 'zod';
-import { zodResponseFormat } from 'openai/helpers/zod';
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
 
@@ -115,6 +113,50 @@ from html_to_markdown import convert_to_markdown
 response = requests.get('https://www.google.com')
 markdown = convert_to_markdown(response.text)
 print(markdown)
+\`\`\`
+
+INTERNAL API ACCESS:
+- You have access to an \`api\` object to call pre-defined internal functions.
+- Example (Vision): Use \`await api.inspectImages(images=[{'url': 'data:image/png;base64,...'}], query='Describe this image')\` to visually inspect images under certain context using vision-capable models.
+- Example (Chat): Use \`await api.chatCompletion(messages=[{'role': 'system', 'content': 'You are a helpful assistant.'}, {'role': 'user', 'content': 'Hello! How are you?'}], max_tokens=50)\` to perform a direct chat completion using the agent's configured model and settings. It takes a list of messages (including optional system messages) and optional max_tokens.
+- Example (Chat with JSON Schema): Use \`await api.chatCompletion(messages=[{'role': 'user', 'content': 'Extract the name and age from this text: John Doe is 30 years old.'}], response_format={type: 'json_schema', json_schema: {name: 'user_info', schema: {type: 'object', properties: {name: {type: 'string'}, age: {type: 'integer'}}, required: ['name', 'age']}}})\` to force the chat response into a specific JSON structure.
+
+IMAGE ENCODING EXAMPLE (NumPy to Base64 for API):
+\`\`\`python
+<thoughts>Need to encode a NumPy array image to base64 and inspect it.</thoughts>
+<py-script id="img_encode_inspect">
+import numpy as np
+import base64
+from io import BytesIO
+from PIL import Image # Assuming PIL is available or installed
+
+# Create a dummy numpy array (replace with your actual image data)
+img_array = np.random.randint(0, 256, (100, 100, 3), dtype=np.uint8)
+
+# Convert numpy array to PIL Image
+pil_img = Image.fromarray(img_array)
+
+# Save PIL image to a bytes buffer
+buffer = BytesIO()
+pil_img.save(buffer, format="PNG") # Or JPEG, etc.
+
+# Encode bytes buffer to base64
+base64_encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+# Create the data URL
+data_url = f"data:image/png;base64,{base64_encoded}"
+
+# --- Now you can use data_url with api.inspectImages ---
+# Example (will be executed by the system if api is available):
+# await api.inspectImages(images=[{'url': data_url}], query='Describe this generated image.')
+# Optionally, pass a JSON schema to force the output to follow a specific schema:
+# await api.inspectImages(images=[{'url': data_url}], query='find the bounding box of the image', outputSchema={...})
+
+# Print the data URL (or parts of it) if needed for observation
+print(f"Generated data URL (truncated): {data_url[:50]}...") 
+print("Image encoded successfully.")
+
+</py-script>
 \`\`\`
 
 `;

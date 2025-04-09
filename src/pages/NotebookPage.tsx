@@ -276,6 +276,7 @@ const NotebookPage: React.FC = () => {
             onAddWindow: addWindowCallback,
             server,
             executeCode,
+            agentSettings
           });
           setHyphaCoreApi(api);
         } catch (error) {
