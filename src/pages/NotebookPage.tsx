@@ -371,9 +371,9 @@ const NotebookPage: React.FC = () => {
 
   // Update handleExecuteCode to use isExecutingCode instead of isProcessingAgentResponse
   const handleExecuteCode = useCallback(async (completionId: string, code: string, cellId?: string): Promise<string> => {
+    let actualCellId = cellId;
     try {
       setIsExecutingCode(true);
-      let actualCellId = cellId;
 
       if (actualCellId) {
         // Update the existing code cell with the new code
@@ -398,8 +398,6 @@ const NotebookPage: React.FC = () => {
           completionId // Pass the completionId as the cellId
         );
         console.log('[DEBUG] Added code cell:', actualCellId, 'with parent:', lastUserCellRef.current, 'and ID:', completionId);
-        //collapse the code cell
-        cellManager.collapseCodeCell(actualCellId);
         // Set the active cell to the new code cell
         cellManager.setActiveCell(actualCellId);
         cellManager.setCurrentAgentCell(actualCellId);
@@ -412,6 +410,10 @@ const NotebookPage: React.FC = () => {
       return `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
     }
     finally {
+      if (actualCellId) {
+        //collapse the code cell
+        cellManager.collapseCodeCell(actualCellId);
+      }
       setIsExecutingCode(false);
     }
   }, [cellManager, executeCode, lastAgentCellRef, lastUserCellRef]);
