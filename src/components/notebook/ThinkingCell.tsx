@@ -139,8 +139,7 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
     if (!thoughts && !script && !finalResponse) {
       processed = '```\n' + completedContent + '\n```';
     }
-    
-    return processed;
+    return processed || '🤔 Thinking...';
   }, [content]);
 
   return (
