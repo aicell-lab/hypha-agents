@@ -1422,4 +1422,26 @@ export class CellManager {
 
     return history;
   }
+
+  // Toggle the commit status of a cell (staged vs. committed)
+  toggleCellCommitStatus(id: string): void {
+    this.setCells((prev) =>
+      prev.map((cell) => {
+        if (cell.id === id && cell.metadata) {
+          const newStagedStatus = !cell.metadata.staged;
+          return {
+            ...cell,
+            metadata: {
+              ...cell.metadata,
+              staged: newStagedStatus,
+              isOutputVisible: !newStagedStatus, // Output visible only if committed
+              userModified: true, // Mark that user manually changed status
+            },
+          };
+        }
+        return cell;
+      })
+    );
+    console.log(`[DEBUG] Toggled commit status for cell ${id}`);
+  }
 }

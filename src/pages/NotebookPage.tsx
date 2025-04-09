@@ -14,7 +14,7 @@ import { ToolProvider, useTools } from '../components/chat/ToolProvider';
 import { structuredChatCompletion } from '../utils/chatCompletion';
 import { NotebookToolbar } from '../components/notebook/NotebookToolbar';
 // Import icons
-import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaCopy } from 'react-icons/fa';
+import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaCopy, FaCheckCircle, FaUndo } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -1395,6 +1395,39 @@ const NotebookPage: React.FC = () => {
                         </span>
                       )}
                     </span>
+
+                    {/* --- Conditional Commit/Uncommit Buttons --- */}
+                    {cell.role === 'assistant' && typeof cell.metadata?.staged === 'boolean' && cell.metadata?.parent && cell.metadata?.isCodeVisible !== false && (
+                      <>
+                        {cell.metadata.staged ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              cellManager.toggleCellCommitStatus(cell.id);
+                            }}
+                            className="p-1 hover:bg-green-100 rounded text-green-600 flex items-center gap-1"
+                            title="Commit this staged cell"
+                          >
+                            <FaCheckCircle className="w-3.5 h-3.5" />
+                            <span className="text-xs">Commit</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              cellManager.toggleCellCommitStatus(cell.id);
+                            }}
+                            className="p-1 hover:bg-yellow-100 rounded text-yellow-600 flex items-center gap-1"
+                            title="Uncommit this cell (mark as staged)"
+                          >
+                            <FaUndo className="w-3.5 h-3.5" />
+                            <span className="text-xs">Uncommit</span>
+                          </button>
+                        )}
+                        <div className="h-4 w-px bg-gray-200 mx-1"></div> {/* Separator */}
+                      </>
+                    )}
+                    {/* --- End Commit/Uncommit Buttons --- */}
 
                     {cell.type === 'code' && (
                       <>
