@@ -29,15 +29,6 @@ interface NotebookContentProps {
   isReady: boolean;
   activeAbortController: AbortController | null;
   showCanvasPanel: boolean;
-  canvasWindows: Array<{
-    id: string;
-    src: string;
-    name?: string;
-  }>;
-  onCanvasTabChange: (tabId: string) => void;
-  onCanvasTabClose: (tabId: string) => void;
-  activeCanvasTab: string;
-  onCanvasPanelClose: () => void;
 }
 
 const NotebookContent: React.FC<NotebookContentProps> = ({
@@ -60,11 +51,6 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
   isReady,
   activeAbortController,
   showCanvasPanel,
-  canvasWindows,
-  onCanvasTabChange,
-  onCanvasTabClose,
-  activeCanvasTab,
-  onCanvasPanelClose,
 }) => {
   const endRef = useRef<HTMLDivElement>(null);
   const editorRefs = useRef<Record<string, any>>({});
@@ -452,22 +438,6 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
           <div ref={endRef} />
         </div>
       </div>
-
-      {/* Canvas panel */}
-      {showCanvasPanel && (
-        <div className="w-full md:w-1/2 lg:w-2/5 border-l border-gray-200 flex flex-col bg-white">
-          <CanvasPanel
-            windows={canvasWindows}
-            isVisible={showCanvasPanel}
-            width={400}
-            activeTab={activeCanvasTab}
-            onResize={() => {}}
-            onClose={onCanvasPanelClose}
-            onTabChange={onCanvasTabChange}
-            onTabClose={onCanvasTabClose}
-          />
-        </div>
-      )}
     </div>
   );
 };

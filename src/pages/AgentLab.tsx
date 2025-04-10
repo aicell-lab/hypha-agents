@@ -856,6 +856,7 @@ const NotebookPage: React.FC = () => {
                       getEditorRef={getEditorRef}
                       isReady={isReady}
                       activeAbortController={activeAbortController}
+                      showCanvasPanel={showCanvasPanel}
                     />
                   </div>
                 </div>
