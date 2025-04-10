@@ -443,37 +443,75 @@ const NotebookPage: React.FC = () => {
       role: msg.role as ChatRole
     }));
   }, [cells]);
-  // Update handleSendMessage to use AbortController
-  const handleSendMessage = useCallback(async (message: string) => {
-    // If not ready, show error
-    if (!isReady) {
-      setInitializationError("AI assistant is not ready. Please wait.");
-      return;
-    }
 
-    // If the message starts with / or #, it's a command
-    if (message.startsWith('/') || message.startsWith('#')) {
-      handleCommand(message);
-      return;
-    }
+  // Handle special commands
+  const handleCommand = useCallback((command: string) => {
+    const normalizedCommand = command.toLowerCase().trim();
+    let newCellId = '';
 
+    // Parse command and arguments
+    const [cmd, ...args] = normalizedCommand.split(/\s+/);
+    const content = args.join(' ');
+
+    switch (cmd) {
+      case '/code':
+      case '#code':
+        // Add new code cell with content if provided
+        newCellId = cellManager.addCell('code', content, 'user');
+        break;
+
+      case '/markdown':
+      case '#markdown':
+        // Add new markdown cell with content if provided
+        newCellId = cellManager.addCell('markdown', content, 'user');
+        break;
+
+      case '/clear':
+        // Clear all cells
+        hasInitialized.current = true; // Prevent auto-initialization
+        cellManager.clearAllCells(); // Use cellManager to clear cells
+
+        // Add a single empty code cell after clearing
+        setTimeout(() => {
+          const cellId = cellManager.addCell('code', '', 'user');
+         
+        }, 100);
+        return; // Exit early since we handle scrolling separately
+
+      case '/run':
+        // Run all cells
+        cellManager.runAllCells();
+        break;
+
+      default:
+        // If command not recognized, treat as markdown content
+        newCellId = cellManager.addCell('markdown', command, 'user');
+        break;
+    }
+  }, [cellManager, hasInitialized]);
+
+  // Extract common chat completion logic into a reusable function
+  const processChatCompletion = useCallback(async ({
+    messages,
+    userCellId,
+    skipMessageEntry = false,
+    errorSource = 'chat'
+  }: {
+    messages: ChatMessage[],
+    userCellId: string,
+    skipMessageEntry?: boolean,
+    errorSource?: 'chat' | 'regenerate'
+  }) => {
     // Initialize thinkingCellId with empty string
     let thinkingCellId = '';
 
     try {
       setIsProcessingAgentResponse(true);
-
-      const normalizedActiveCellId = cellManager.getActiveCellWithChildren();
-      const history = getConversationHistory(normalizedActiveCellId || undefined);
-      history.push({
-        role: 'user',
-        content: message,
-      });
-
-      const userCellId = cellManager.addCell('markdown', message, 'user', normalizedActiveCellId || undefined);
+      
+      // Set references to the current user cell
+      lastUserCellRef.current = userCellId;
       cellManager.setActiveCell(userCellId);
       cellManager.setCurrentAgentCell(userCellId);
-      lastUserCellRef.current = userCellId;
 
       // Add a thinking cell right after the user's message
       thinkingCellId = cellManager.addCell(
@@ -492,14 +530,14 @@ const NotebookPage: React.FC = () => {
 
       // Use agent settings in chat completion
       const completion = structuredChatCompletion({
-        messages: history,
+        messages,
         systemPrompt: agentSettings.instructions,
         model: agentSettings.model,
         temperature: agentSettings.temperature,
         maxSteps: 15,
         baseURL: agentSettings.baseURL,
         apiKey: agentSettings.apiKey,
-        abortController, // Add the abort controller
+        abortController,
         onExecuteCode: async (completionId: string, scriptContent: string) => {
           return await handleExecuteCode(completionId, scriptContent);
         },
@@ -563,8 +601,25 @@ const NotebookPage: React.FC = () => {
         console.debug('[DEBUG] New Response Item:', item);
       }
     } catch (error) {
-      console.error('Error in chat completion:', error);
-      setInitializationError("Error communicating with AI assistant. Please try again.");
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[DEBUG] Error in ${errorSource} completion:`, error);
+      
+      // Set appropriate error message based on the source
+      if (errorSource === 'regenerate') {
+        setInitializationError(`Error regenerating response: ${errorMsg}. Please try again.`);
+      } else {
+        setInitializationError(`Error communicating with AI assistant: ${errorMsg}. Please try again.`);
+      }
+      
+      // Add error message as a cell for better visibility
+      if (lastUserCellRef.current) {
+        cellManager.addCell(
+          'markdown',
+          `⚠️ **Error:** ${errorMsg}`,
+          'assistant',
+          lastUserCellRef.current
+        );
+      }
     } finally {
       setIsProcessingAgentResponse(false);
       setActiveAbortController(null);
@@ -576,8 +631,45 @@ const NotebookPage: React.FC = () => {
       
       // Also clean up any other thinking cells that might be lingering
       setCells(prev => prev.filter(cell => cell.type !== 'thinking'));
+      
+      // Clear error message after a delay
+      setTimeout(() => {
+        setInitializationError(null);
+      }, 5000);
     }
-  }, [activeCellId, cellManager, isReady, server, getConversationHistory, handleExecuteCode, agentSettings]);
+  }, [cellManager, handleExecuteCode, agentSettings]);
+
+  // Update handleSendMessage to use AbortController
+  const handleSendMessage = useCallback(async (message: string) => {
+    // If not ready, show error
+    if (!isReady) {
+      setInitializationError("AI assistant is not ready. Please wait.");
+      return;
+    }
+
+    // If the message starts with / or #, it's a command
+    if (message.startsWith('/') || message.startsWith('#')) {
+      handleCommand(message);
+      return;
+    }
+
+    const normalizedActiveCellId = cellManager.getActiveCellWithChildren();
+    const history = getConversationHistory(normalizedActiveCellId || undefined);
+    history.push({
+      role: 'user',
+      content: message,
+    });
+
+    const userCellId = cellManager.addCell('markdown', message, 'user', normalizedActiveCellId || undefined);
+    
+    // Process the chat completion with the new message
+    await processChatCompletion({
+      messages: history,
+      userCellId,
+      errorSource: 'chat'
+    });
+    
+  }, [isReady, cellManager, getConversationHistory, processChatCompletion, handleCommand]);
 
   // Add a function to handle stopping the chat completion
   const handleStopChatCompletion = useCallback(() => {
@@ -619,188 +711,38 @@ const NotebookPage: React.FC = () => {
       return;
     }
 
-    // Initialize thinkingCellId with empty string
-    let thinkingCellId = '';
-    try {
-      setIsProcessingAgentResponse(true);
-      // Get the message content and position info before deletion
-      const messageContent = userCell.content;
+    // Get the message content and position info before deletion
+    const messageContent = userCell.content;
 
-      // Find the cell's current index before deletion
-      const currentIndex = cells.findIndex(cell => cell.id === cellId);
+    // Find the cell's current index before deletion
+    const currentIndex = cells.findIndex(cell => cell.id === cellId);
 
-      // Delete the cell and its responses first
-      cellManager.deleteCellWithChildren(cellId);
+    // Delete the cell and its responses first
+    cellManager.deleteCellWithChildren(cellId);
 
-      // Wait a small tick to ensure deletion is complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+    // Wait a small tick to ensure deletion is complete
+    await new Promise(resolve => setTimeout(resolve, 0));
 
-      // Add the new cell at the same position as the old one
-      const newCellId = cellManager.addCell(
-        'markdown',
-        messageContent,
-        'user',
-        undefined,
-        undefined,
-        currentIndex
-      );
+    // Add the new cell at the same position as the old one
+    const newCellId = cellManager.addCell(
+      'markdown',
+      messageContent,
+      'user',
+      undefined,
+      undefined,
+      currentIndex
+    );
 
-      lastUserCellRef.current = newCellId;
-      cellManager.setActiveCell(newCellId);
-      cellManager.setCurrentAgentCell(newCellId);
-
-      // Add a thinking cell right after the user's message
-      thinkingCellId = cellManager.addCell(
-        'thinking',
-        '🤔 Thinking...',
-        'assistant',
-        newCellId,
-        newCellId
-      );
-      
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      const history = getConversationHistory(cellId || undefined);
-
-      // Create an abort controller for this chat completion
-      const abortController = new AbortController();
-      setActiveAbortController(abortController);
-
-      // Start chat completion
-      const completion = structuredChatCompletion({
-        messages: history,
-        systemPrompt: agentSettings.instructions,
-        model: agentSettings.model,
-        temperature: agentSettings.temperature,
-        maxSteps: 15,
-        baseURL: agentSettings.baseURL,
-        apiKey: agentSettings.apiKey,
-        abortController, // Add the abort controller
-        onExecuteCode: async (completionId: string, scriptContent: string) => {
-          return await handleExecuteCode(completionId, scriptContent);
-        },
-        onMessage: (completionId: string, message: string, commitIds?: string[]) => {
-          console.debug('[DEBUG] New Message:', message, commitIds);
-          
-          // Create the final response cell
-          cellManager.updateCellById(
-            completionId,
-            message,
-            'markdown',
-            'assistant',
-            lastUserCellRef.current || undefined
-          );
-          
-          // Instead of deleting cells, mark them as staged or not staged (committed)
-          if (lastUserCellRef.current) {
-            // Get all child cells of the current user message
-            const childrenIds = cellManager.getCellChildrenIds(lastUserCellRef.current);
-            // For each child cell, update its status
-            childrenIds.forEach(id => {
-              // Skip the final response cell
-              if (id === completionId) return;
-              
-              // Check if this is a committed cell
-              const isCommitted = commitIds && commitIds.includes(id);
-              
-              // Update cell properties
-              setCells(prev => prev.map(cell => {
-                if (cell.id === id) {
-                  return {
-                    ...cell,
-                    metadata: {
-                      ...cell.metadata,
-                      staged: !isCommitted, // Mark as staged if not committed
-                      isCodeVisible: false, // Keep code collapsed for both staged and committed
-                      isOutputVisible: isCommitted // Show output only for committed cells
-                    }
-                  };
-                }
-                return cell;
-              }));
-            });
-          }
-        },
-        onStreaming: (completionId: string, message: string) => {
-          // Update the thinking cell content while streaming
-          cellManager.updateCellById(
-            thinkingCellId,
-            message,
-            'thinking',
-            'assistant',
-            lastUserCellRef.current || undefined
-          );
-        }
-      });
-
-      // Process the completion stream
-      for await (const item of completion) {
-        console.debug('[DEBUG] New Response Item:', item);
-      }
-    } catch (error) {
-      console.error('[DEBUG] Error regenerating responses:', error);
-      setInitializationError("Error regenerating response. Please try again.");
-    } finally {
-      setIsProcessingAgentResponse(false);
-      setActiveAbortController(null);
-      
-      // Always remove the thinking cell if it exists
-      if (thinkingCellId) {
-        cellManager.deleteCell(thinkingCellId);
-      }
-      
-      // Also clean up any other thinking cells that might be lingering
-      setCells(prev => prev.filter(cell => cell.type !== 'thinking'));
-    }
+    // Get conversation history up to this point
+    const history = getConversationHistory(cellId || undefined);
+    
+    // Process the chat completion with existing history
+    await processChatCompletion({
+      messages: history, 
+      userCellId: newCellId,
+      errorSource: 'regenerate'
+    });
   };
-
-  // Handle special commands
-  const handleCommand = useCallback((command: string) => {
-    const normalizedCommand = command.toLowerCase().trim();
-    let newCellId = '';
-
-    // Parse command and arguments
-    const [cmd, ...args] = normalizedCommand.split(/\s+/);
-    const content = args.join(' ');
-
-    switch (cmd) {
-      case '/code':
-      case '#code':
-        // Add new code cell with content if provided
-        newCellId = cellManager.addCell('code', content, 'user');
-        break;
-
-      case '/markdown':
-      case '#markdown':
-        // Add new markdown cell with content if provided
-        newCellId = cellManager.addCell('markdown', content, 'user');
-        break;
-
-      case '/clear':
-        // Clear all cells
-        hasInitialized.current = true; // Prevent auto-initialization
-        cellManager.clearAllCells(); // Use cellManager to clear cells
-
-        // Add a single empty code cell after clearing
-        setTimeout(() => {
-          const cellId = cellManager.addCell('code', '', 'user');
-         
-        }, 100);
-        return; // Exit early since we handle scrolling separately
-
-      case '/run':
-        // Run all cells
-        cellManager.runAllCells();
-        break;
-
-      default:
-        // If command not recognized, treat as markdown content
-        newCellId = cellManager.addCell('markdown', command, 'user');
-        break;
-    }
-
-
-  }, [cellManager, hasInitialized]);
 
   // Handle markdown cell rendering
   const handleMarkdownRender = useCallback((id: string) => {
