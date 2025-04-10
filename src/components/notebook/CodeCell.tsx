@@ -338,7 +338,11 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   return (
     <div 
       ref={editorDivRef}
-      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${parent ? 'child-cell' : 'parent-cell'} ${role === 'system' ? 'bg-gray-50' : ''} ${staged ? 'staged-cell bg-gray-50/50 border-l-2 border-gray-200' : ''}`}
+      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${
+        parent ? 'child-cell' : 'parent-cell'
+      } ${role === 'system' ? 'system-cell' : ''} ${
+        staged ? 'staged-cell bg-gray-50/50 border-l-2 border-gray-200' : ''
+      }`}
       onClick={handleEditorClick}
       data-parent={parent || undefined}
       data-staged={staged || undefined}
@@ -436,7 +440,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
         <div className="jupyter-cell-flex-container items-start w-full max-w-full">
           {/* Execution count with role icon */}
           <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-            {!isExecuting &&role !== undefined && onRoleChange && (
+            {!isExecuting && role !== undefined && onRoleChange && (
               <div className="pr-1">
                 <RoleSelector role={role} onChange={onRoleChange} />
               </div>
@@ -453,7 +457,11 @@ export const CodeCell: React.FC<CodeCellProps> = ({
           </div>
           
           {/* Editor */}
-          <div className={`editor-container mt-2 w-full overflow-hidden ${isActive ? 'editor-container-active' : ''} ${staged ? 'border-l-2 border-slate-200 pl-2' : ''}`}>
+          <div className={`editor-container mt-2 w-full overflow-hidden ${
+            isActive ? 'editor-container-active' : ''
+          } ${staged ? 'border-l-2 border-slate-200 pl-2' : ''} ${
+            role === 'system' ? 'bg-gray-50/50' : ''
+          }`}>
             {/* Staged indicator for expanded cells */}
             {staged && !hideCode && (
               <div className="text-xs text-slate-500 mb-1 flex items-center gap-1">
