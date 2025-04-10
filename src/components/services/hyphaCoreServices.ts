@@ -79,7 +79,7 @@ export const setupNotebookService = async ({
   }
 
   // Remove existing event handler if any
-  window._hyphaCorePromise.instance.off("add_window", onAddWindow);
+  window._hyphaCorePromise.instance.off("add_window");
 
   // Register the event handler on the instance
   window._hyphaCorePromise.instance.on("add_window", onAddWindow);
