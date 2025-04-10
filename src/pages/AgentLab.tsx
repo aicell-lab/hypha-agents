@@ -44,6 +44,9 @@ import { showToast, downloadNotebook } from '../utils/notebookUtils';
 import { useChatCompletion } from '../hooks/useChatCompletion';
 import { useNotebookCommands } from '../hooks/useNotebookCommands';
 
+// Add imports for Sidebar components
+import Sidebar from '../components/notebook/Sidebar';
+
 const convert = new Convert({
   fg: '#000',
   bg: '#fff',
@@ -80,6 +83,10 @@ const NotebookPage: React.FC = () => {
 
   // Initialize the cell manager
   const cellManager = useRef<CellManager | null>(null);
+
+  // Simplified sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeSidebarTab, setActiveSidebarTab] = useState('agent');
 
   if (!cellManager.current) {
     cellManager.current = new CellManager(
@@ -782,6 +789,14 @@ const NotebookPage: React.FC = () => {
     setNotebookMetadata(metadata);
   };
 
+  // Add wrapper function for settings change
+  const handleAgentSettingsChange = useCallback((settings: Partial<AgentSettings>) => {
+    setAgentSettings(prev => ({
+      ...prev,
+      ...settings
+    }));
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Main notebook content */}
@@ -808,46 +823,56 @@ const NotebookPage: React.FC = () => {
 
           {/* Main content area with notebook and canvas panel */}
           <div className="flex-1 flex overflow-hidden">
-            {/* Left side: Notebook Content + Chat Input */}
-            <div className="flex-1 min-w-0 flex flex-col relative">
+            {/* Left side: Sidebar + Notebook Content + Chat Input */}
+            <div className="flex-1 min-w-0 flex relative">
+              {/* Sidebar */}
+              <Sidebar
+                isOpen={isSidebarOpen}
+                onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+                activeTab={activeSidebarTab}
+                onTabChange={setActiveSidebarTab}
+              />
+
               {/* Notebook Content Area */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden">
-                <div className="max-w-5xl mx-auto px-4 py-1 pb-48">
-                  <NotebookContent
-                    cells={cells}
-                    activeCellId={activeCellId}
-                    onActiveCellChange={handleActiveCellChange}
-                    onExecuteCell={handleExecuteCell}
-                    onUpdateCellContent={handleUpdateCellContent}
-                    onToggleCellEditing={handleToggleCellEditing}
-                    onToggleCodeVisibility={handleToggleCodeVisibility}
-                    onToggleOutputVisibility={handleToggleOutputVisibility}
-                    onChangeCellType={handleCellTypeChange}
-                    onUpdateCellRole={handleUpdateCellRole}
-                    onDeleteCell={handleDeleteCell}
-                    onDeleteCellWithChildren={handleDeleteCellWithChildren}
-                    onToggleCellCommitStatus={handleToggleCellCommitStatus}
-                    onRegenerateClick={handleRegenerateClick}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                  <div className="max-w-5xl mx-auto px-4 py-1 pb-48">
+                    <NotebookContent
+                      cells={cells}
+                      activeCellId={activeCellId}
+                      onActiveCellChange={handleActiveCellChange}
+                      onExecuteCell={handleExecuteCell}
+                      onUpdateCellContent={handleUpdateCellContent}
+                      onToggleCellEditing={handleToggleCellEditing}
+                      onToggleCodeVisibility={handleToggleCodeVisibility}
+                      onToggleOutputVisibility={handleToggleOutputVisibility}
+                      onChangeCellType={handleCellTypeChange}
+                      onUpdateCellRole={handleUpdateCellRole}
+                      onDeleteCell={handleDeleteCell}
+                      onDeleteCellWithChildren={handleDeleteCellWithChildren}
+                      onToggleCellCommitStatus={handleToggleCellCommitStatus}
+                      onRegenerateClick={handleRegenerateClick}
+                      onStopChatCompletion={handleStopChatCompletion}
+                      getEditorRef={getEditorRef}
+                      isReady={isReady}
+                      activeAbortController={activeAbortController}
+                    />
+                  </div>
+                </div>
+
+                {/* Footer with chat input */}
+                <div className="absolute bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md">
+                  <NotebookFooter
+                    onSendMessage={handleSendMessage}
                     onStopChatCompletion={handleStopChatCompletion}
-                    getEditorRef={getEditorRef}
-                    isReady={isReady}
-                    activeAbortController={activeAbortController}
+                    isProcessing={isProcessingAgentResponse}
+                    isThebeReady={isReady}
+                    isAIReady={isAIReady}
+                    initializationError={initializationError}
+                    agentSettings={agentSettings}
+                    onSettingsChange={handleAgentSettingsChange}
                   />
                 </div>
-              </div>
-
-              {/* Footer with chat input - Only on notebook side */}
-              <div className="absolute bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md">
-                <NotebookFooter
-                  onSendMessage={handleSendMessage}
-                  onStopChatCompletion={handleStopChatCompletion}
-                  isProcessing={isProcessingAgentResponse}
-                  isThebeReady={isReady}
-                  isAIReady={isAIReady}
-                  initializationError={initializationError}
-                  agentSettings={agentSettings}
-                  onSettingsChange={setAgentSettings}
-                />
               </div>
             </div>
 
