@@ -179,7 +179,7 @@ const NotebookPage: React.FC = () => {
   const {
     isProcessingAgentResponse,
     activeAbortController,
-    handleSendMessage: handleSendChatMessage,
+    handleSendChatMessage,
     handleRegenerateClick,
     handleStopChatCompletion,
     setInitializationError: setChatInitializationError
