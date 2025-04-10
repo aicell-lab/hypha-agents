@@ -48,7 +48,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
 
   return (
     <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
-      <div className="px-4 py-2">
+      
         <div className="max-w-full mx-auto flex items-center justify-between">
           {/* Title and Logo */}
           <div className="flex items-center gap-3">
@@ -97,7 +97,6 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           />
         </div>
       </div>
-    </div>
   );
 };
 
