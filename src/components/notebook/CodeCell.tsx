@@ -568,21 +568,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               {isExecuting ? (
                 <div className="text-gray-500 pr-2 flex items-center gap-2">
                   <FaSpinner className="w-4 h-4 animate-spin text-yellow-500" />
-                  {onAbort && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAbort();
-                      }}
-                      className="px-1.5 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600 rounded border border-red-200 transition-colors duration-150 flex items-center gap-1"
-                      title="Stop execution"
-                    >
-                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                      <span>Stop</span>
-                    </button>
-                  )}
                 </div>
               ) : (
                 <div className="text-gray-500">
