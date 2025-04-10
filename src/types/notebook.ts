@@ -12,7 +12,7 @@ export interface NotebookCell {
   content: string;
   language?: string;
   executionCount?: number;
-  executionState?: 'idle' | 'running' | 'error';
+  executionState: ExecutionState;
   output?: OutputItem[];
   role?: CellRole;
   metadata?: {

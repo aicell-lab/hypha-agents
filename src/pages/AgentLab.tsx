@@ -1,23 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ThebeProvider, useThebe } from '../components/chat/ThebeProvider';
-import { CodeCell } from '../components/notebook/CodeCell';
-import { ChatInput } from '../components/chat/ChatInput';
-import { OutputItem } from '../components/chat/Chat';
-import MarkdownCell from '../components/notebook/MarkdownCell';
-import { Dialog } from '@headlessui/react';
-import Convert from 'ansi-to-html';
 import '../styles/ansi.css';
 import '../styles/notebook.css';
 import { useHyphaStore } from '../store/hyphaStore';
-import { ToolProvider, useTools } from '../components/chat/ToolProvider';
-import { chatCompletion } from '../utils/chatCompletion';
-import { NotebookToolbar } from '../components/notebook/NotebookToolbar';
-// Import icons
-import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaCopy, FaCheckCircle, FaUndo } from 'react-icons/fa';
-import { AiOutlinePlus } from 'react-icons/ai';
-import { VscCode } from 'react-icons/vsc';
-import { MdOutlineTextFields } from 'react-icons/md';
 import { CellManager } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
@@ -25,10 +11,7 @@ import { AgentSettings } from '../utils/chatCompletion';
 import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
 import { CanvasPanel } from '../components/notebook/CanvasPanel';
 import { setupNotebookService, HyphaCoreWindow } from '../components/services/hyphaCoreServices';
-import ThinkingCell from '../components/notebook/ThinkingCell';
-
-// Add type imports from chatCompletion
-import { ChatRole, ChatMessage } from '../utils/chatCompletion';
+import { ChatMessage } from '../utils/chatCompletion';
 
 // Import components
 import NotebookHeader from '../components/notebook/NotebookHeader';
@@ -46,14 +29,6 @@ import { useNotebookCommands } from '../hooks/useNotebookCommands';
 
 // Add imports for Sidebar components
 import Sidebar from '../components/notebook/Sidebar';
-
-const convert = new Convert({
-  fg: '#000',
-  bg: '#fff',
-  newline: true,
-  escapeXML: true,
-  stream: false
-});
 
 const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
@@ -749,7 +724,9 @@ const NotebookPage: React.FC = () => {
 
   // Handler functions for NotebookContent component
   const handleActiveCellChange = (id: string) => cellManager.current?.setActiveCell(id);
-  const handleExecuteCell = (id: string) => cellManager.current?.executeCell(id);
+  const handleExecuteCell = (id: string): Promise<string> => {
+    return cellManager.current?.executeCell(id) || Promise.resolve('');
+  };
   const handleUpdateCellContent = (id: string, content: string) => cellManager.current?.updateCellContent(id, content);
   const handleToggleCellEditing = (id: string, isEditing: boolean) => cellManager.current?.toggleCellEditing(id, isEditing);
   const handleToggleCodeVisibility = (id: string) => cellManager.current?.toggleCodeVisibility(id);
@@ -906,9 +883,7 @@ const NotebookPage: React.FC = () => {
 const AgentLab: React.FC = () => {
   return (
     <ThebeProvider>
-      <ToolProvider>
         <NotebookPage />
-      </ToolProvider>
     </ThebeProvider>
   );
 };
