@@ -6,6 +6,7 @@ import { MdOutlineTextFields } from 'react-icons/md';
 import { RiRobot2Line } from 'react-icons/ri';
 import { TbLayoutSidebarRightExpand } from 'react-icons/tb';
 import LoginButton from '../LoginButton';
+import { NotebookMetadata } from '../../types/notebook';
 
 interface FileOperationsProps {
   onSave: () => void;
@@ -150,6 +151,8 @@ export const LoginSection: React.FC = () => (
 );
 
 interface NotebookToolbarProps {
+  metadata: NotebookMetadata;
+  onMetadataChange: (metadata: NotebookMetadata) => void;
   onSave: () => void;
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -165,23 +168,14 @@ interface NotebookToolbarProps {
   isReady: boolean;
 }
 
-interface ToolbarDropdownProps {
-  onSave: () => void;
-  onDownload: () => void;
-  onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onRunAll: () => void;
-  onClearOutputs: () => void;
-  onRestartKernel: () => void;
-  onAddCodeCell: () => void;
-  onAddMarkdownCell: () => void;
-  onShowKeyboardShortcuts: () => void;
-  onToggleCanvasPanel: () => void;
-  showCanvasPanel: boolean;
-  isProcessing: boolean;
-  isReady: boolean;
+interface ToolbarDropdownProps extends NotebookToolbarProps {
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
+  metadata,
+  onMetadataChange,
   onSave,
   onDownload,
   onLoad,
@@ -194,126 +188,181 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onToggleCanvasPanel,
   showCanvasPanel,
   isProcessing,
-  isReady
+  isReady,
+  isOpen,
+  onClose
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [tempTitle, setTempTitle] = useState(metadata.title || 'Untitled Chat');
+
+  const handleTitleClick = () => {
+    setIsEditingTitle(true);
+    setTempTitle(metadata.title || 'Untitled Chat');
+  };
+
+  const handleTitleSave = () => {
+    onMetadataChange({
+      ...metadata,
+      title: tempTitle || 'Untitled Chat',
+      modified: new Date().toISOString()
+    });
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleTitleSave();
+    } else if (e.key === 'Escape') {
+      setIsEditingTitle(false);
+      setTempTitle(metadata.title || 'Untitled Chat');
+    }
+  };
+
+  if (!isOpen) return null;
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
-        title="Menu"
+    <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200">
+      {/* Title Section - Only visible on mobile */}
+      <div className="md:hidden px-2 py-2 border-b border-gray-200">
+        {isEditingTitle ? (
+          <div className="flex items-center">
+            <input
+              type="text"
+              value={tempTitle}
+              onChange={(e) => setTempTitle(e.target.value)}
+              onKeyDown={handleTitleKeyDown}
+              onBlur={handleTitleSave}
+              className="flex-1 text-sm px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+              aria-label="Notebook title"
+              placeholder="Enter notebook title"
+            />
+          </div>
+        ) : (
+          <button
+            onClick={handleTitleClick}
+            className="w-full text-left px-2 py-1 text-sm text-gray-900 hover:bg-gray-100 rounded"
+          >
+            <div className="font-medium truncate">{metadata.title || 'Untitled Chat'}</div>
+            <div className="text-xs text-gray-500">Click to rename</div>
+          </button>
+        )}
+      </div>
+
+      {/* Rest of the menu items */}
+      <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">File Operations</div>
+      <label
+        htmlFor="notebook-file-mobile"
+        className="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
       >
-        <FaBars className="w-3.5 h-3.5" />
+        <FaFolder className="w-3.5 h-3.5 mr-2" />
+        Open
+      </label>
+      <input
+        type="file"
+        accept=".ipynb"
+        onChange={(e) => {
+          onLoad(e);
+          onClose();
+        }}
+        className="hidden"
+        id="notebook-file-mobile"
+      />
+      <button
+        onClick={() => {
+          onSave();
+          onClose();
+        }}
+        className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+      >
+        <FaSave className="w-3.5 h-3.5 mr-2" />
+        Save
+      </button>
+      <button
+        onClick={() => {
+          onDownload();
+          onClose();
+        }}
+        className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+      >
+        <FaDownload className="w-3.5 h-3.5 mr-2" />
+        Download
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200">
-          <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">File Operations</div>
-          <label
-            htmlFor="notebook-file-mobile"
-            className="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
-          >
-            <FaFolder className="w-3.5 h-3.5 mr-2" />
-            Open
-          </label>
-          <input
-            type="file"
-            accept=".ipynb"
-            onChange={onLoad}
-            className="hidden"
-            id="notebook-file-mobile"
-          />
-          <button
-            onClick={onSave}
-            className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-          >
-            <FaSave className="w-3.5 h-3.5 mr-2" />
-            Save
-          </button>
-          <button
-            onClick={onDownload}
-            className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-          >
-            <FaDownload className="w-3.5 h-3.5 mr-2" />
-            Download
-          </button>
+      <div className="border-t border-gray-200 mt-1 pt-1">
+        <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Cells</div>
+        <button
+          onClick={onAddCodeCell}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+        >
+          <VscCode className="w-3.5 h-3.5 mr-2" />
+          Add Code Cell
+        </button>
+        <button
+          onClick={onAddMarkdownCell}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+        >
+          <MdOutlineTextFields className="w-3.5 h-3.5 mr-2" />
+          Add Markdown Cell
+        </button>
+      </div>
 
-          <div className="border-t border-gray-200 mt-1 pt-1">
-            <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Cells</div>
-            <button
-              onClick={onAddCodeCell}
-              className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <VscCode className="w-3.5 h-3.5 mr-2" />
-              Add Code Cell
-            </button>
-            <button
-              onClick={onAddMarkdownCell}
-              className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <MdOutlineTextFields className="w-3.5 h-3.5 mr-2" />
-              Add Markdown Cell
-            </button>
-          </div>
+      <div className="border-t border-gray-200 mt-1 pt-1">
+        <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Kernel</div>
+        <button
+          onClick={onRunAll}
+          disabled={isProcessing}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+        >
+          {isProcessing ? (
+            <FaSpinner className="w-3.5 h-3.5 mr-2 animate-spin" />
+          ) : (
+            <FaPlay className="w-3.5 h-3.5 mr-2" />
+          )}
+          Run All
+        </button>
+        <button
+          onClick={onClearOutputs}
+          disabled={isProcessing}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+        >
+          <FaTrash className="w-3.5 h-3.5 mr-2" />
+          Clear Outputs
+        </button>
+        <button
+          onClick={onRestartKernel}
+          disabled={!isReady || isProcessing}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+        >
+          <FaRedo className="w-3.5 h-3.5 mr-2" />
+          Restart Kernel
+        </button>
+      </div>
 
-          <div className="border-t border-gray-200 mt-1 pt-1">
-            <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Kernel</div>
-            <button
-              onClick={onRunAll}
-              disabled={isProcessing}
-              className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-            >
-              {isProcessing ? (
-                <FaSpinner className="w-3.5 h-3.5 mr-2 animate-spin" />
-              ) : (
-                <FaPlay className="w-3.5 h-3.5 mr-2" />
-              )}
-              Run All
-            </button>
-            <button
-              onClick={onClearOutputs}
-              disabled={isProcessing}
-              className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-            >
-              <FaTrash className="w-3.5 h-3.5 mr-2" />
-              Clear Outputs
-            </button>
-            <button
-              onClick={onRestartKernel}
-              disabled={!isReady || isProcessing}
-              className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-            >
-              <FaRedo className="w-3.5 h-3.5 mr-2" />
-              Restart Kernel
-            </button>
-          </div>
-
-          <div className="border-t border-gray-200 mt-1 pt-1">
-            <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Other</div>
-            <button
-              onClick={onShowKeyboardShortcuts}
-              className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <FaKeyboard className="w-3.5 h-3.5 mr-2" />
-              Keyboard Shortcuts
-            </button>
-            <button
-              onClick={onToggleCanvasPanel}
-              className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <TbLayoutSidebarRightExpand className="w-3.5 h-3.5 mr-2" />
-              {showCanvasPanel ? 'Hide' : 'Show'} Canvas
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="border-t border-gray-200 mt-1 pt-1">
+        <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Other</div>
+        <button
+          onClick={onShowKeyboardShortcuts}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+        >
+          <FaKeyboard className="w-3.5 h-3.5 mr-2" />
+          Keyboard Shortcuts
+        </button>
+        <button
+          onClick={onToggleCanvasPanel}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+        >
+          <TbLayoutSidebarRightExpand className="w-3.5 h-3.5 mr-2" />
+          {showCanvasPanel ? 'Hide' : 'Show'} Canvas
+        </button>
+      </div>
     </div>
   );
 };
 
 export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
+  metadata,
+  onMetadataChange,
   onSave,
   onDownload,
   onLoad,
@@ -378,7 +427,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           </button>
         </div>
 
-        {/* Mobile dropdown menu */}
+        {/* Mobile menu button and dropdown */}
         <div className="relative">
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -388,94 +437,25 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             <FaBars className="w-4 h-4" />
           </button>
 
-          {isDropdownOpen && (
-            <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-200">
-              <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">File</div>
-              <button
-                onClick={() => {
-                  onSave();
-                  setIsDropdownOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                Save Notebook
-              </button>
-              <button
-                onClick={() => {
-                  onDownload();
-                  setIsDropdownOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                Download Notebook
-              </button>
-              <label
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 block cursor-pointer"
-                onClick={() => setIsDropdownOpen(false)}
-              >
-                Open Notebook
-                <input
-                  type="file"
-                  accept=".ipynb"
-                  onChange={(e) => {
-                    onLoad(e);
-                    setIsDropdownOpen(false);
-                  }}
-                  className="hidden"
-                />
-              </label>
-
-              <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200 mt-2">Cells</div>
-              <button
-                onClick={() => {
-                  onAddMarkdownCell();
-                  setIsDropdownOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                Add Markdown Cell
-              </button>
-              <button
-                onClick={() => {
-                  onClearOutputs();
-                  setIsDropdownOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                Clear All Outputs
-              </button>
-              <button
-                onClick={() => {
-                  onRestartKernel();
-                  setIsDropdownOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                disabled={!isReady || isProcessing}
-              >
-                Restart Kernel
-              </button>
-
-              <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200 mt-2">View</div>
-              <button
-                onClick={() => {
-                  onToggleCanvasPanel();
-                  setIsDropdownOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                {showCanvasPanel ? 'Hide' : 'Show'} Canvas
-              </button>
-              <button
-                onClick={() => {
-                  onShowKeyboardShortcuts();
-                  setIsDropdownOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                Keyboard Shortcuts
-              </button>
-            </div>
-          )}
+          <ToolbarDropdown
+            metadata={metadata}
+            onMetadataChange={onMetadataChange}
+            onSave={onSave}
+            onDownload={onDownload}
+            onLoad={onLoad}
+            onRunAll={onRunAll}
+            onClearOutputs={onClearOutputs}
+            onRestartKernel={onRestartKernel}
+            onAddCodeCell={onAddCodeCell}
+            onAddMarkdownCell={onAddMarkdownCell}
+            onShowKeyboardShortcuts={onShowKeyboardShortcuts}
+            onToggleCanvasPanel={onToggleCanvasPanel}
+            showCanvasPanel={showCanvasPanel}
+            isProcessing={isProcessing}
+            isReady={isReady}
+            isOpen={isDropdownOpen}
+            onClose={() => setIsDropdownOpen(false)}
+          />
         </div>
       </div>
     </div>
