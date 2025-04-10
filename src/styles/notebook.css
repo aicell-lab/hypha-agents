@@ -206,6 +206,14 @@
   font-weight: bold;
 }
 
+@media (max-width: 640px) {
+  .execution-count {
+    width: 48px;
+    min-width: 48px;
+    padding-right: 4px;
+  }
+}
+
 /* Markdown Cell Styling */
 .markdown-cell:not(.editing) .editor-container {
   border: none;

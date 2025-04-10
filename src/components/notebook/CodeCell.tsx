@@ -402,9 +402,9 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               )}
               <span className={`${
                 isExecuting ? 'text-sm font-medium text-yellow-700' : 
-                isStagedCell ? 'text-xs text-slate-500' : 
-                hasErrors() ? 'text-xs font-medium text-red-700' :
-                'text-xs text-gray-500'
+                isStagedCell ? 'text-sm text-slate-500' : 
+                hasErrors() ? 'text-sm font-medium text-red-800' :
+                'text-sm text-blue-800'
               }`}>
                 {isExecuting ? "Executing startup script..." : 
                  isStagedCell ? "Staged code" : 
@@ -422,14 +422,12 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                   {executionCount ? `[${executionCount}]:` : '[*]:'}
                 </div>
               </div>
-              <div className="w-[calc(100%-28px)] ml-4 overflow-visible">
-                <div className="output-area-container bg-red-50 rounded-md border border-red-200">
-                  <JupyterOutput 
-                    outputs={output.filter(item => item.type === 'stderr' || item.type === 'error')} 
-                    className="output-area ansi-enabled" 
-                    wrapLongLines={true} 
-                  />
-                </div>
+              <div className="w-[calc(100%-28px)] overflow-visible bg-red-50 rounded-md">
+                <JupyterOutput 
+                  outputs={output.filter(item => item.type === 'stderr' || item.type === 'error')} 
+                  className="output-area ansi-enabled" 
+                  wrapLongLines={true} 
+                />
               </div>
             </div>
           )}
@@ -441,7 +439,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
           {/* Execution count with role icon */}
           <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
             {!isExecuting && role !== undefined && onRoleChange && (
-              <div className="pr-1">
+              <div className="pr-2">
                 <RoleSelector role={role} onChange={onRoleChange} />
               </div>
             )}
@@ -576,7 +574,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               )}
             </div>
           )}
-          <div className="w-[calc(100%-28px)] ml-4 overflow-visible relative group">
+          <div className="w-[calc(100%-28px)] overflow-visible relative group">
             {/* Hide button - only shown when output is visible */}
             {!hideOutput && (
               <div className="absolute left-1/2 -translate-x-1/2 -top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">

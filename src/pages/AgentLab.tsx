@@ -815,8 +815,6 @@ const NotebookPage: React.FC = () => {
             onAddCodeCell={handleAddCodeCell}
             onAddMarkdownCell={handleAddMarkdownCell}
             onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
-            onToggleCanvasPanel={() => setShowCanvasPanel(!showCanvasPanel)}
-            showCanvasPanel={showCanvasPanel}
             isProcessing={isProcessingAgentResponse}
             isReady={isReady}
           />
@@ -878,20 +876,18 @@ const NotebookPage: React.FC = () => {
             </div>
 
             {/* Right side: Canvas Panel */}
-            {showCanvasPanel && (
-              <div className="border-l border-gray-200 h-full relative" style={{ width: canvasPanelWidth }}>
-                <CanvasPanel
-                  windows={hyphaCoreWindows}
-                  isVisible={showCanvasPanel}
-                  width={canvasPanelWidth}
-                  activeTab={activeCanvasTab}
-                  onResize={setCanvasPanelWidth}
-                  onClose={() => setShowCanvasPanel(false)}
-                  onTabChange={setActiveCanvasTab}
-                  onTabClose={handleTabClose}
-                />
-              </div>
-            )}
+            <div className="h-full relative" style={{ width: showCanvasPanel ? canvasPanelWidth : 36 }}>
+              <CanvasPanel
+                windows={hyphaCoreWindows}
+                isVisible={showCanvasPanel}
+                width={canvasPanelWidth}
+                activeTab={activeCanvasTab}
+                onResize={setCanvasPanelWidth}
+                onClose={() => setShowCanvasPanel(!showCanvasPanel)}
+                onTabChange={setActiveCanvasTab}
+                onTabClose={handleTabClose}
+              />
+            </div>
           </div>
 
           {/* Keyboard Shortcuts Dialog */}

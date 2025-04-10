@@ -15,8 +15,6 @@ interface NotebookHeaderProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
-  onToggleCanvasPanel: () => void;
-  showCanvasPanel: boolean;
   isProcessing: boolean;
   isReady: boolean;
 }
@@ -33,8 +31,6 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
-  onToggleCanvasPanel,
-  showCanvasPanel,
   isProcessing,
   isReady
 }) => {
@@ -96,8 +92,6 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           onAddCodeCell={onAddCodeCell}
           onAddMarkdownCell={onAddMarkdownCell}
           onShowKeyboardShortcuts={onShowKeyboardShortcuts}
-          onToggleCanvasPanel={onToggleCanvasPanel}
-          showCanvasPanel={showCanvasPanel}
           isProcessing={isProcessing}
           isReady={isReady}
         />

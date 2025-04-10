@@ -497,87 +497,161 @@ print(f"{sys.version.split()[0]}")
     setStatus('starting');
     globalThebeState.status = 'starting';
     
-    try {
-      // Configure JupyterLite settings
-      const jupyterLiteConfig = {
-        litePluginSettings: {
-          '@jupyterlite/server-extension:service-worker': {
-            enabled: true,
-            path: '/service-worker.js',
-            workerUrl: '/worker.js'
-          },
-          "@jupyterlite/pyodide-kernel-extension:kernel": {
-            "pyodideUrl": "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/pyodide.js",
-            "pipliteUrls": ["https://cdn.jsdelivr.net/npm/@jupyterlite/pyodide-kernel@0.5.2/pypi/all.json"],
-            "pipliteWheelUrl": "https://cdn.jsdelivr.net/npm/@jupyterlite/pyodide-kernel@0.5.2/pypi/piplite-0.5.2-py3-none-any.whl"
+    // Add retry logic for kernel initialization
+    const maxRetries = 3;
+    let retryCount = 0;
+    let lastError: Error | null = null;
+
+    while (retryCount < maxRetries) {
+      try {
+        // Configure JupyterLite settings
+        const jupyterLiteConfig = {
+          litePluginSettings: {
+            '@jupyterlite/server-extension:service-worker': {
+              enabled: true,
+              path: '/service-worker.js',
+              workerUrl: '/worker.js'
+            },
+            "@jupyterlite/pyodide-kernel-extension:kernel": {
+              "pyodideUrl": "https://cdn.jsdelivr.net/pyodide/v0.27.4/full/pyodide.js",
+              "pipliteUrls": ["https://cdn.jsdelivr.net/npm/@jupyterlite/pyodide-kernel@0.5.2/pypi/all.json"],
+              "pipliteWheelUrl": "https://cdn.jsdelivr.net/npm/@jupyterlite/pyodide-kernel@0.5.2/pypi/piplite-0.5.2-py3-none-any.whl"
+            }
           }
-        }
-      };
+        };
 
-      // Start JupyterLite server with configuration
-      const server = await window.thebeLite.startJupyterLiteServer({
-        ...jupyterLiteConfig,
-        baseUrl: '/',
-        appUrl: '/',
-        assetsUrl: '/thebe/',
-        fullMathjaxUrl: 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js',
-      });
-
-      setServiceManager(server);
-      globalThebeState.serviceManager = server;
-
-      // Create a new session
-      const session = await server.sessions.startNew({
-        name: '',
-        path: 'test.ipynb',
-        type: 'notebook',
-        kernel: { name: 'python' }
-      });
-
-      setSession(session);
-      globalThebeState.session = session;
-
-      // Wait for kernel to be ready
-      const kernel = session.kernel;
-      if (!kernel) throw new Error('Kernel not found');
-
-      setKernel(kernel);
-      globalThebeState.kernel = kernel;
-
-      // Wait for kernel to be ready using a Promise
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Kernel startup timeout'));
-        }, 1200000);
-
-        kernel.statusChanged.connect((_: unknown, status: 'idle' | 'busy' | 'starting' | 'error') => {
-          console.log('Kernel status changed:', status);
-          setStatus(status);
-          globalThebeState.status = status;
-          
-          if (status === 'idle') {
-            clearTimeout(timeout);
-            setIsReady(true);
-            globalThebeState.isReady = true;
-            resolve();
-          } else if (status === 'error') {
-            clearTimeout(timeout);
-            reject(new Error('Kernel failed to start'));
-          }
+        // Start JupyterLite server with configuration
+        const server = await window.thebeLite.startJupyterLiteServer({
+          ...jupyterLiteConfig,
+          baseUrl: '/',
+          appUrl: '/',
+          assetsUrl: '/thebe/',
+          fullMathjaxUrl: 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js',
         });
-      });
-      
-      // After kernel is ready, get kernel info
-      await getKernelInfo(kernel);
-      
-      return kernel;
-    } catch (error) {
-      console.error('Error connecting to kernel:', error);
-      setStatus('error');
-      globalThebeState.status = 'error';
-      setError(error as Error);
-      throw error;
+
+        setServiceManager(server);
+        globalThebeState.serviceManager = server;
+
+        // Create a new session
+        const session = await server.sessions.startNew({
+          name: '',
+          path: 'test.ipynb',
+          type: 'notebook',
+          kernel: { name: 'python' }
+        });
+
+        setSession(session);
+        globalThebeState.session = session;
+
+        // Wait for kernel to be ready
+        const kernel = session.kernel;
+        if (!kernel) throw new Error('Kernel not found');
+
+        setKernel(kernel);
+        globalThebeState.kernel = kernel;
+
+        // Add error detection for Pyodide fatal errors
+        const pyodideErrorHandler = (event: ErrorEvent) => {
+          if (event.message.includes('Pyodide has suffered a fatal error')) {
+            console.error('Detected Pyodide fatal error:', event);
+            throw new Error('Pyodide fatal error detected');
+          }
+        };
+        window.addEventListener('error', pyodideErrorHandler);
+
+        // Wait for kernel to be ready using a Promise with timeout and error detection
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            window.removeEventListener('error', pyodideErrorHandler);
+            reject(new Error('Kernel startup timeout'));
+          }, 120000);
+
+          // Add a flag to track if we've detected a fatal error
+          let hasFatalError = false;
+
+          // Monitor console for Pyodide fatal errors
+          const consoleErrorHandler = (event: any) => {
+            const errorMsg = event?.message || event;
+            if (typeof errorMsg === 'string' && 
+                (errorMsg.includes('Pyodide has suffered a fatal error') || 
+                 errorMsg.includes('t.push is not a function'))) {
+              hasFatalError = true;
+              console.error('Detected Pyodide fatal error in console:', errorMsg);
+              clearTimeout(timeout);
+              window.removeEventListener('error', pyodideErrorHandler);
+              reject(new Error('Pyodide fatal error detected'));
+            }
+          };
+
+          const originalConsoleError = console.error;
+          console.error = (...args) => {
+            consoleErrorHandler(args[0]);
+            originalConsoleError.apply(console, args);
+          };
+
+          kernel.statusChanged.connect((_: unknown, status: 'idle' | 'busy' | 'starting' | 'error') => {
+            console.log('Kernel status changed:', status);
+            setStatus(status);
+            globalThebeState.status = status;
+            
+            if (status === 'idle' && !hasFatalError) {
+              clearTimeout(timeout);
+              window.removeEventListener('error', pyodideErrorHandler);
+              console.error = originalConsoleError;
+              setIsReady(true);
+              globalThebeState.isReady = true;
+              resolve();
+            } else if (status === 'error') {
+              clearTimeout(timeout);
+              window.removeEventListener('error', pyodideErrorHandler);
+              console.error = originalConsoleError;
+              reject(new Error('Kernel failed to start'));
+            }
+          });
+        });
+        
+        // After kernel is ready, get kernel info
+        await getKernelInfo(kernel);
+        
+        return kernel;
+      } catch (error) {
+        lastError = error as Error;
+        console.error(`Error connecting to kernel (attempt ${retryCount + 1}/${maxRetries}):`, error);
+        
+        // Clean up the failed kernel instance
+        if (globalThebeState.kernel) {
+          try {
+            await globalThebeState.kernel.requestExecute({ 
+              code: 'import gc; gc.collect()' 
+            });
+          } catch (e) {
+            console.warn('Error during kernel cleanup:', e);
+          }
+          globalThebeState.kernel = null;
+        }
+        if (globalThebeState.session) {
+          globalThebeState.session = null;
+        }
+        
+        // Reset state for retry
+        setKernel(null);
+        setSession(null);
+        globalThebeState.isInitialized = false;
+        globalThebeState.isInitializing = false;
+        
+        retryCount++;
+        
+        if (retryCount < maxRetries) {
+          console.log(`Retrying kernel initialization in 2 seconds... (attempt ${retryCount + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
     }
+
+    // If we've exhausted all retries, throw the last error
+    setStatus('error');
+    globalThebeState.status = 'error';
+    throw lastError || new Error('Failed to initialize kernel after multiple attempts');
   };
 
   // Function to generate a unique key for the store

@@ -2,6 +2,8 @@ import React from 'react';
 import { Splitter } from './Splitter';
 import { VscCode } from 'react-icons/vsc';
 import { HiOutlineLightBulb } from 'react-icons/hi';
+import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import { TbLayoutBoard } from 'react-icons/tb';
 
 interface HyphaCoreWindow {
   id: string;
@@ -20,6 +22,18 @@ interface CanvasPanelProps {
   onTabClose?: (tabId: string) => void;
 }
 
+// Memoize the iframe to prevent re-renders
+const MemoizedIframe: React.FC<{ src: string; id: string; name: string }> = React.memo(({ src, id, name }) => (
+  <iframe
+    src={src}
+    id={id}
+    className="w-full h-full border-none"
+    title={name || 'Untitled'}
+  />
+));
+
+MemoizedIframe.displayName = 'MemoizedIframe';
+
 export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   windows,
   isVisible,
@@ -31,23 +45,96 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   onTabClose
 }) => {
   const [isResizing, setIsResizing] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(false);
+  
+  // Use ref to store windows to prevent unnecessary re-renders
+  const windowsRef = React.useRef<HyphaCoreWindow[]>([]);
+  React.useEffect(() => {
+    windowsRef.current = windows;
+  }, [windows]);
 
-  const handleTabClose = (e: React.MouseEvent, tabId: string) => {
+  // Check for mobile screen size
+  React.useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  const handleTabClose = React.useCallback((e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
     onTabClose?.(tabId);
-  };
+  }, [onTabClose]);
 
-  return (
-    <div 
-      className={`h-full flex flex-col bg-white border-l border-gray-200 fixed md:relative inset-0 md:inset-auto z-30 transition-transform duration-300 ease-in-out ${
-        isVisible ? 'translate-x-0' : 'translate-x-full'
-      }`}
-      style={{
-        width: isVisible ? '100%' : width,
-        maxWidth: '100vw',
-        [window.innerWidth >= 768 ? 'width' : '']: width // Only apply fixed width on desktop
-      }}
-    >
+  // Get first letter of window name for icon
+  const getWindowIcon = React.useCallback((name: string) => {
+    return (name || 'Untitled').charAt(0).toUpperCase();
+  }, []);
+
+  // Style for container visibility
+  const containerStyle = React.useMemo(() => ({
+    width: isVisible ? (isMobile ? '100%' : width) : '36px', // Reduced from 48px to 36px when collapsed
+    maxWidth: '100vw',
+    opacity: 1,
+    visibility: 'visible' as const,
+    transition: 'width 300ms ease-in-out'
+  }), [isVisible, width, isMobile]);
+
+  // Render collapsed view with icons
+  const renderCollapsedView = () => (
+    <div className="bg-white flex flex-col rounded-l-lg relative overflow-visible">
+      {/* Canvas button at the top */}
+      <button
+        onClick={onClose}
+        className="w-9 h-9 mx-auto flex items-center justify-center transition-colors rounded-lg text-gray-600 hover:bg-gray-100"
+        title="Open Canvas Panel"
+      >
+        <TbLayoutBoard className="w-5 h-5" />
+      </button>
+
+      {/* Rotated text label - only show when no windows */}
+      {windows.length < 4 && (
+        <div className="flex justify-center mb-12 mt-8">
+          <span className="transform rotate-90 text-gray-500 text-sm font-medium block whitespace-nowrap">
+            Canvas Panel
+          </span>
+        </div>
+      )}
+
+      {/* Separator */}
+      <div className="w-6 h-px bg-gray-200 mx-auto mb-4"></div>
+
+      {/* Scrollable window icons */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        {windows.map(window => (
+          <button
+            key={window.id}
+            onClick={() => {
+              onTabChange(window.id);
+              setTimeout(() => onClose(), 0);
+            }}
+            className={`w-9 h-9 mb-1 mx-auto flex items-center justify-center transition-colors rounded-lg ${
+              activeTab === window.id
+                ? 'bg-blue-50 text-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title={window.name || 'Untitled'}
+          >
+            <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium">
+              {getWindowIcon(window.name || '')}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Render expanded view with content
+  const renderExpandedView = () => (
+    <>
       {/* Only show splitter on md and larger screens */}
       <div className="hidden md:block">
         <Splitter 
@@ -103,19 +190,15 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
             className="md:hidden p-1.5 mr-2 hover:bg-gray-200 rounded-md text-gray-600"
             title="Back to notebook"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
+            <FaChevronRight className="w-5 h-5" />
           </button>
-          {/* Close button on larger screens */}
+          {/* Collapse button on larger screens */}
           <button
             onClick={onClose}
             className="hidden md:block p-1 hover:bg-gray-200 rounded-md flex-shrink-0"
-            title="Close panel"
+            title="Collapse panel"
           >
-            <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <FaChevronRight className="w-5 h-5 text-gray-500" />
           </button>
         </div>
       </div>
@@ -127,12 +210,16 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
             <div
               key={window.id}
               className={`absolute inset-0 ${activeTab === window.id ? 'block' : 'hidden'}`}
+              style={{ 
+                // Keep iframes mounted but hidden to preserve state
+                display: activeTab === window.id ? 'block' : 'none',
+                visibility: activeTab === window.id ? 'visible' : 'hidden'
+              }}
             >
-              <iframe
+              <MemoizedIframe
                 src={window.src}
                 id={window.id}
-                className="w-full h-full border-none"
-                title={window.name || 'Untitled'}
+                name={window.name || 'Untitled'}
               />
             </div>
           ))
@@ -173,6 +260,17 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
           </div>
         )}
       </div>
+    </>
+  );
+
+  return (
+    <div 
+      className={`h-full flex flex-col bg-white border-l border-gray-200 ${
+        isVisible ? 'fixed md:relative inset-0 md:inset-auto' : 'fixed right-0'
+      } z-30`}
+      style={containerStyle}
+    >
+      {isVisible ? renderExpandedView() : renderCollapsedView()}
     </div>
   );
-}; 
+};

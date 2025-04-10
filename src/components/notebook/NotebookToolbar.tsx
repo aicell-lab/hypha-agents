@@ -99,16 +99,12 @@ interface CellControlsProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
-  onToggleCanvasPanel: () => void;
-  showCanvasPanel: boolean;
 }
 
 export const CellControls: React.FC<CellControlsProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
-  onShowKeyboardShortcuts,
-  onToggleCanvasPanel,
-  showCanvasPanel
+  onShowKeyboardShortcuts
 }) => (
   <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
     <button 
@@ -126,13 +122,6 @@ export const CellControls: React.FC<CellControlsProps> = ({
     >
       <MdOutlineTextFields className="w-3.5 h-3.5" />
       <AiOutlinePlus className="w-3.5 h-3.5" />
-    </button>
-    <button
-      onClick={onToggleCanvasPanel}
-      className={`p-1.5 hover:bg-gray-100 rounded transition flex items-center ${showCanvasPanel ? 'text-blue-600' : 'text-gray-500'}`}
-      title={`${showCanvasPanel ? 'Hide' : 'Show'} canvas panel`}
-    >
-      <TbLayoutSidebarRightExpand className="w-3.5 h-3.5" />
     </button>
     <button
       onClick={onShowKeyboardShortcuts}
@@ -162,8 +151,6 @@ interface NotebookToolbarProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
-  onToggleCanvasPanel: () => void;
-  showCanvasPanel: boolean;
   isProcessing: boolean;
   isReady: boolean;
 }
@@ -185,8 +172,6 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
-  onToggleCanvasPanel,
-  showCanvasPanel,
   isProcessing,
   isReady,
   isOpen,
@@ -348,13 +333,6 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
           <FaKeyboard className="w-3.5 h-3.5 mr-2" />
           Keyboard Shortcuts
         </button>
-        <button
-          onClick={onToggleCanvasPanel}
-          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-        >
-          <TbLayoutSidebarRightExpand className="w-3.5 h-3.5 mr-2" />
-          {showCanvasPanel ? 'Hide' : 'Show'} Canvas
-        </button>
       </div>
     </div>
   );
@@ -372,8 +350,6 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
-  onToggleCanvasPanel,
-  showCanvasPanel,
   isProcessing,
   isReady
 }) => {
@@ -395,8 +371,6 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           onAddCodeCell={onAddCodeCell}
           onAddMarkdownCell={onAddMarkdownCell}
           onShowKeyboardShortcuts={onShowKeyboardShortcuts}
-          onToggleCanvasPanel={onToggleCanvasPanel}
-          showCanvasPanel={showCanvasPanel}
         />
         <LoginSection />
       </div>
@@ -449,8 +423,6 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onAddCodeCell={onAddCodeCell}
             onAddMarkdownCell={onAddMarkdownCell}
             onShowKeyboardShortcuts={onShowKeyboardShortcuts}
-            onToggleCanvasPanel={onToggleCanvasPanel}
-            showCanvasPanel={showCanvasPanel}
             isProcessing={isProcessing}
             isReady={isReady}
             isOpen={isDropdownOpen}

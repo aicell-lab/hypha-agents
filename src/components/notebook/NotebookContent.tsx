@@ -81,7 +81,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
     <div className="flex flex-1 overflow-hidden">
       {/* Main cell area - hidden on small screens when canvas is open */}
       <div className={`flex-1 overflow-y-auto ${showCanvasPanel ? 'hidden md:block' : ''}`}>
-        <div className="max-w-4xl mx-auto p-0 sm:p-4">
+        <div className="max-w-4xl mx-auto p-0 sm:p-2">
           {cells.length > 0 ? (
             cells.map((cell) => (
               <div
