@@ -18,31 +18,6 @@ import { JupyterOutput } from '../JupyterOutput';
 import { OutputItem } from '../chat/Chat';
 import { RiRobot2Line } from 'react-icons/ri';
 
-const convert = new Convert({
-  fg: '#000',
-  bg: '#fff',
-  newline: true,
-  escapeXML: true,
-  stream: false
-});
-
-// Type definitions for external modules
-type MonacoEditorProps = {
-  height?: string | number;
-  language?: string;
-  value?: string;
-  onChange?: (value: string | undefined) => void;
-  onMount?: (editor: any) => void;
-  options?: {
-    minimap?: { enabled: boolean };
-    scrollBeyondLastLine?: boolean;
-    wordWrap?: 'on' | 'off';
-    lineNumbers?: 'on' | 'off';
-    renderWhitespace?: 'none' | 'boundary' | 'selection' | 'trailing' | 'all';
-    folding?: boolean;
-    [key: string]: any;
-  };
-};
 
 // Register languages
 SyntaxHighlighter.registerLanguage('python', python);
@@ -336,6 +311,15 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     onOutputVisibilityChange?.(!hideOutput);
   };
 
+  // Add helper function to check for errors in output
+  const hasErrors = useCallback(() => {
+    if (!output || output.length === 0) return false;
+    return output.some(item => item.type === 'stderr' || item.type === 'error');
+  }, [output]);
+
+  // Check if we should show the minimal view - now always true for system/staged cells when collapsed
+  const shouldShowMinimalView = isFullyCollapsed && (role === 'system' || isStagedCell);
+
   // Get the first line of actual code for preview
   const getCodePreview = () => {
     if (!codeValue) return '';
@@ -359,52 +343,96 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       data-parent={parent || undefined}
       data-staged={staged || undefined}
     >
-      {isFullyCollapsed ? (
-        // Minimal icon view for collapsed system or staged cells
-        <div 
-          className={`flex items-center justify-center cursor-pointer rounded transition-colors mx-2 my-0.5 ${
-            isExecuting 
-              ? 'py-2 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 shadow-sm' 
-              : isStagedCell
-                ? 'py-0.5 hover:bg-slate-100 border-l border-slate-200'
-                : 'py-0.5 hover:bg-gray-100'
-          }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onVisibilityChange?.(!hideCode);
-            onOutputVisibilityChange?.(!hideOutput);
-          }}
-          role="button"
-          tabIndex={0}
-          onKeyPress={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onVisibilityChange?.(!hideCode);
-              onOutputVisibilityChange?.(!hideOutput);
-            }
-          }}
-          title={isExecuting ? "Executing system configuration" : isStagedCell ? "Staged code (click to expand)" : "System Configuration"}
-        >
-          <div className={`flex items-center gap-2 transition-opacity ${
-            isExecuting ? 'opacity-100' : 'opacity-60 hover:opacity-100'
-          }`}>
-            {isExecuting ? (
-              <FaSpinner className="w-4 h-4 text-yellow-600 animate-spin" />
-            ) : isStagedCell ? (
-              <VscCode className="w-3 h-3 text-slate-500" />
-            ) : (
-              <RiRobot2Line className="w-3 h-3 text-gray-500" />
-            )}
-            <span className={`${
-              isExecuting ? 'text-sm font-medium text-yellow-700' : 
-              isStagedCell ? 'text-xs text-slate-500' : 'text-xs text-gray-500'
+      {shouldShowMinimalView && (
+        <>
+          {/* Minimal icon view for collapsed system or staged cells */}
+          <div 
+            className={`flex items-center justify-center cursor-pointer rounded transition-colors mx-2 my-0.5 ${
+              isExecuting 
+                ? 'py-2 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 shadow-sm' 
+                : isStagedCell
+                  ? 'py-0.5 hover:bg-slate-100 border-l border-slate-200'
+                  : hasErrors()
+                    ? 'py-0.5 bg-red-50 hover:bg-red-100 border border-red-200'
+                    : 'py-0.5 hover:bg-gray-100'
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              // For system cells, expand both code and output
+              if (role === 'system') {
+                onVisibilityChange?.(true);
+                onOutputVisibilityChange?.(true);
+              } else {
+                onVisibilityChange?.(!hideCode);
+                onOutputVisibilityChange?.(!hideOutput);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                // For system cells, expand both code and output
+                if (role === 'system') {
+                  onVisibilityChange?.(true);
+                  onOutputVisibilityChange?.(true);
+                } else {
+                  onVisibilityChange?.(!hideCode);
+                  onOutputVisibilityChange?.(!hideOutput);
+                }
+              }
+            }}
+            title={isExecuting ? "Executing system configuration" : isStagedCell ? "Staged code (click to expand)" : "System Configuration"}
+          >
+            <div className={`flex items-center gap-2 transition-opacity ${
+              isExecuting ? 'opacity-100' : hasErrors() ? 'opacity-100' : 'opacity-60 hover:opacity-100'
             }`}>
-              {isExecuting ? "Executing startup script..." : 
-               isStagedCell ? "Staged code" : "System Configuration"}
-            </span>
+              {isExecuting ? (
+                <FaSpinner className="w-4 h-4 text-yellow-600 animate-spin" />
+              ) : isStagedCell ? (
+                <VscCode className="w-3 h-3 text-slate-500" />
+              ) : hasErrors() ? (
+                <span className="text-red-500">⚠</span>
+              ) : (
+                <RiRobot2Line className="w-3 h-3 text-gray-500" />
+              )}
+              <span className={`${
+                isExecuting ? 'text-sm font-medium text-yellow-700' : 
+                isStagedCell ? 'text-xs text-slate-500' : 
+                hasErrors() ? 'text-xs font-medium text-red-700' :
+                'text-xs text-gray-500'
+              }`}>
+                {isExecuting ? "Executing startup script..." : 
+                 isStagedCell ? "Staged code" : 
+                 hasErrors() ? "System Configuration (with errors)" :
+                 "System Configuration"}
+              </span>
+            </div>
           </div>
-        </div>
-      ) : (
+
+          {/* Show error outputs if they exist */}
+          {hasErrors() && output && output.length > 0 && (
+            <div className="jupyter-cell-flex-container mt-1">
+              <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
+                <div className="text-gray-500">
+                  {executionCount ? `[${executionCount}]:` : '[*]:'}
+                </div>
+              </div>
+              <div className="w-[calc(100%-28px)] ml-4 overflow-visible">
+                <div className="output-area-container bg-red-50 rounded-md border border-red-200">
+                  <JupyterOutput 
+                    outputs={output.filter(item => item.type === 'stderr' || item.type === 'error')} 
+                    className="output-area ansi-enabled" 
+                    wrapLongLines={true} 
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {!shouldShowMinimalView && (
         <div className="jupyter-cell-flex-container items-start w-full max-w-full">
           {/* Execution count with role icon */}
           <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">

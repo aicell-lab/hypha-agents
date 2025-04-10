@@ -6,7 +6,7 @@ import yaml from 'js-yaml';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Comments from './Comments';
 import ResourceCard from './ResourceCard';
-import { Resource } from '../types';
+import { Resource } from '../types/index';
 import { useDropzone } from 'react-dropzone';
 import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';

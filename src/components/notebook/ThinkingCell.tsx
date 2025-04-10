@@ -120,7 +120,7 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
     // Extract thoughts
     const thoughts = extractThoughts(completedContent);
     if (thoughts) {
-      processed += `**🤔 ${thoughts}**\n`;
+      processed += `🤔 ${thoughts}\n`;
     }
     
     // Extract script if present
@@ -132,7 +132,7 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
     // Extract final response if present
     const finalResponse = extractFinalResponse(completedContent);
     if (finalResponse) {
-      processed += `**✨ ${finalResponse.content}**\n`;
+      processed += `✨ ${finalResponse.content}\n`;
     }
     
     // If no tags were found, wrap the entire content in a code block
@@ -149,9 +149,13 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
     >
       <div className="jupyter-cell-flex-container">
         <div className="w-full overflow-hidden">
-          {/* Stop Button centered at the top */}
-          {onStop && (
-            <div className="py-1 flex justify-center">
+          {/* Status bar with Thinking indicator and Stop button */}
+          <div className="py-2 flex justify-center items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1 rounded bg-blue-50">
+              <FaSpinner className="animate-spin h-4 w-4 text-blue-500" />
+              <span className="text-xs text-blue-600 font-medium">Thinking...</span>
+            </div>
+            {onStop && (
               <button
                 onClick={onStop}
                 className="px-3 py-1 rounded text-xs font-medium bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 shadow-sm transition-colors flex items-center gap-1"
@@ -160,16 +164,13 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
                 <FaStop className="h-3 w-3" />
                 <span>Stop</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
-          <div className="ml-3 markdown-preview group relative overflow-x-auto w-[calc(100%-24px)] pt-2">
+          <div className="ml-3 markdown-preview group relative overflow-x-auto w-[calc(100%-24px)]">
             <div className="markdown-body py-2 overflow-auto break-words min-h-[60px] flex items-center gap-4">
               <div className="pr-2">
                 <RoleSelector role={role} onChange={() => {}} />
-              </div>
-              <div className="flex-shrink-0 transition-transform duration-700 ease-in-out hover:scale-110">
-                <FaSpinner className="animate-spin h-6 w-6 text-blue-500" />
               </div>
               <div className="flex-grow">
                 <ReactMarkdown

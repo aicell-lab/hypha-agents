@@ -98,8 +98,6 @@ interface CellControlsProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
-  onToggleSystemPrompts: () => void;
-  showSystemPrompts: boolean;
   onToggleCanvasPanel: () => void;
   showCanvasPanel: boolean;
 }
@@ -108,8 +106,6 @@ export const CellControls: React.FC<CellControlsProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
-  onToggleSystemPrompts,
-  showSystemPrompts,
   onToggleCanvasPanel,
   showCanvasPanel
 }) => (
@@ -120,7 +116,7 @@ export const CellControls: React.FC<CellControlsProps> = ({
       title="Add code cell (Ctrl/Cmd + B)"
     >
       <VscCode className="w-3.5 h-3.5" />
-      <AiOutlinePlus className="w-2.5 h-2.5 ml-0.5" />
+      <AiOutlinePlus className="w-3.5 h-3.5" />
     </button>
     <button 
       onClick={onAddMarkdownCell}
@@ -128,14 +124,7 @@ export const CellControls: React.FC<CellControlsProps> = ({
       title="Add markdown cell"
     >
       <MdOutlineTextFields className="w-3.5 h-3.5" />
-      <AiOutlinePlus className="w-2.5 h-2.5 ml-0.5" />
-    </button>
-    <button
-      onClick={onToggleSystemPrompts}
-      className={`p-1.5 hover:bg-gray-100 rounded transition flex items-center ${showSystemPrompts ? 'text-blue-600' : 'text-gray-500'}`}
-      title={`${showSystemPrompts ? 'Hide' : 'Show'} system prompts`}
-    >
-      <RiRobot2Line className="w-3.5 h-3.5" />
+      <AiOutlinePlus className="w-3.5 h-3.5" />
     </button>
     <button
       onClick={onToggleCanvasPanel}
@@ -170,8 +159,6 @@ interface NotebookToolbarProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
-  onToggleSystemPrompts: () => void;
-  showSystemPrompts: boolean;
   onToggleCanvasPanel: () => void;
   showCanvasPanel: boolean;
   isProcessing: boolean;
@@ -188,15 +175,33 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
-  onToggleSystemPrompts,
-  showSystemPrompts,
   onToggleCanvasPanel,
   showCanvasPanel,
   isProcessing,
   isReady
 }) => (
   <div className="flex items-center gap-1">
-    <FileOperations onSave={onSave} onDownload={onDownload} onLoad={onLoad} />
+    <div className="flex items-center">
+      <button 
+        onClick={onAddCodeCell}
+        className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition flex items-center"
+        title="Add code cell (Ctrl/Cmd + B)"
+      >
+        <VscCode className="w-3.5 h-3.5" />
+        <AiOutlinePlus className="w-3.5 h-3.5" />
+      </button>
+      <button 
+        onClick={onAddMarkdownCell}
+        className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition flex items-center"
+        title="Add markdown cell"
+      >
+        <MdOutlineTextFields className="w-3.5 h-3.5" />
+        <AiOutlinePlus className="w-3.5 h-3.5" />
+      </button>
+    </div>
+    <div className="border-l border-gray-200 pl-1">
+      <FileOperations onSave={onSave} onDownload={onDownload} onLoad={onLoad} />
+    </div>
     <KernelControls
       onRunAll={onRunAll}
       onClearOutputs={onClearOutputs}
@@ -204,15 +209,22 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
       isProcessing={isProcessing}
       isReady={isReady}
     />
-    <CellControls
-      onAddCodeCell={onAddCodeCell}
-      onAddMarkdownCell={onAddMarkdownCell}
-      onShowKeyboardShortcuts={onShowKeyboardShortcuts}
-      onToggleSystemPrompts={onToggleSystemPrompts}
-      showSystemPrompts={showSystemPrompts}
-      onToggleCanvasPanel={onToggleCanvasPanel}
-      showCanvasPanel={showCanvasPanel}
-    />
+    <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
+      <button
+        onClick={onToggleCanvasPanel}
+        className={`p-1.5 hover:bg-gray-100 rounded transition flex items-center ${showCanvasPanel ? 'text-blue-600' : 'text-gray-500'}`}
+        title={`${showCanvasPanel ? 'Hide' : 'Show'} canvas panel`}
+      >
+        <TbLayoutSidebarRightExpand className="w-3.5 h-3.5" />
+      </button>
+      <button
+        onClick={onShowKeyboardShortcuts}
+        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition ml-1"
+        title="Keyboard Shortcuts"
+      >
+        <FaKeyboard className="w-3.5 h-3.5" />
+      </button>
+    </div>
     <LoginSection />
   </div>
 ); 

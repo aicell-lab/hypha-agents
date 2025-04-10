@@ -270,4 +270,61 @@
 
 .monaco-editor .scroll-decoration {
   box-shadow: none !important;
+}
+
+/* Add styles for sidebar */
+.sidebar-enter {
+  width: 0;
+  overflow: hidden;
+}
+.sidebar-enter-active {
+  width: 240px;
+  transition: width 200ms ease-in-out;
+}
+.sidebar-exit {
+  width: 240px;
+  overflow: hidden;
+}
+.sidebar-exit-active {
+  width: 0;
+  transition: width 200ms ease-in-out;
+}
+
+/* Media queries for responsive sidebar */
+@media (max-width: 768px) {
+  .sidebar-collapsed-width {
+    width: 0 !important;
+  }
+  
+  .sidebar-expanded-width {
+    width: 100% !important;
+    position: absolute;
+    z-index: 50;
+    top: 0;
+    bottom: 0;
+    left: 0;
+  }
+}
+
+/* Styles for drag handle */
+.sidebar-resizer {
+  display: block;
+  position: absolute;
+  top: 0;
+  right: -3px;
+  height: 100%;
+  width: 6px;
+  background-color: transparent;
+  cursor: col-resize;
+  z-index: 20;
+}
+
+.sidebar-resizer:hover, 
+.sidebar-resizer:active {
+  background-color: #e5e7eb;
+}
+
+/* Adjust notebook page when sidebar is visible */
+.notebook-with-sidebar {
+  margin-left: 16px;
 } 

@@ -68,7 +68,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   const isFullyCollapsed = isStagedCell && hideContent;
 
   // Function to handle regenerate response
-  const handleRegenerateResponse = useCallback(() => {
+const handleRegenerateResponse = useCallback(() => {
     if (onRegenerateResponse) {
       onRegenerateResponse();
     }

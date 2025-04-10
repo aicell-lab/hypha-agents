@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Resource } from '../types';
+import { Resource } from '../types/index';
 import { Card, CardMedia, CardContent, IconButton, Button } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import { resolveHyphaUrl } from '../utils/urlHelpers';

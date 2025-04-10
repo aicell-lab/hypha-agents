@@ -30,15 +30,25 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 }) => {
   const [isResizing, setIsResizing] = React.useState(false);
 
-  if (!isVisible) return null;
-
   const handleTabClose = (e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
     onTabClose?.(tabId);
   };
 
   return (
-    <div className="h-full flex flex-col bg-white border-l border-gray-200 relative">
+    <div 
+      className="h-full flex flex-col bg-white border-l border-gray-200 relative"
+      style={{
+        width: width,
+        visibility: isVisible ? 'visible' : 'hidden',
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        transform: `translateX(${isVisible ? '0' : '100%'})`,
+        transition: 'transform 0.3s ease-in-out'
+      }}
+    >
       <Splitter 
         onResize={onResize} 
         onResizeStart={() => setIsResizing(true)} 
