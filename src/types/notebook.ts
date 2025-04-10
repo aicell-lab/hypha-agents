@@ -10,8 +10,9 @@ export interface NotebookCell {
   id: string;
   type: CellType;
   content: string;
+  language?: string;
   executionCount?: number;
-  executionState: ExecutionState;
+  executionState?: 'idle' | 'running' | 'error';
   output?: OutputItem[];
   role?: CellRole;
   metadata?: {

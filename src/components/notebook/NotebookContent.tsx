@@ -13,7 +13,7 @@ interface NotebookContentProps {
   cells: NotebookCell[];
   activeCellId: string;
   onActiveCellChange: (id: string) => void;
-  onExecuteCell: (id: string) => void;
+  onExecuteCell: (id: string) => Promise<string>;
   onUpdateCellContent: (id: string, content: string) => void;
   onToggleCellEditing: (id: string, isEditing: boolean) => void;
   onToggleCodeVisibility: (id: string) => void;
@@ -29,6 +29,7 @@ interface NotebookContentProps {
   isReady: boolean;
   activeAbortController: AbortController | null;
   showCanvasPanel: boolean;
+  onAbortExecution: () => void;
 }
 
 const NotebookContent: React.FC<NotebookContentProps> = ({
@@ -51,6 +52,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
   isReady,
   activeAbortController,
   showCanvasPanel,
+  onAbortExecution
 }) => {
   const endRef = useRef<HTMLDivElement>(null);
   const editorRefs = useRef<Record<string, any>>({});
@@ -110,8 +112,9 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                     ) : cell.type === 'code' ? (
                       <CodeCell
                         code={cell.content}
-                        language="python"
+                        language={cell.language || 'python'}
                         onExecute={() => onExecuteCell(cell.id)}
+                        onAbort={onAbortExecution}
                         isExecuting={cell.executionState === 'running'}
                         executionCount={cell.executionState === 'running' ? undefined : cell.executionCount}
                         blockRef={getEditorRefCallback(cell.id)}
@@ -120,9 +123,9 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                         onRoleChange={(role) => onUpdateCellRole(cell.id, role)}
                         onChange={(newCode) => onUpdateCellContent(cell.id, newCode)}
                         hideCode={cell.metadata?.isCodeVisible === false}
-                        onVisibilityChange={() => onToggleCodeVisibility(cell.id)}
+                        onVisibilityChange={(isVisible) => onToggleCodeVisibility(cell.id)}
                         hideOutput={cell.metadata?.isOutputVisible === false}
-                        onOutputVisibilityChange={() => onToggleOutputVisibility(cell.id)}
+                        onOutputVisibilityChange={(isVisible) => onToggleOutputVisibility(cell.id)}
                         parent={cell.metadata?.parent}
                         output={cell.output}
                         staged={cell.metadata?.staged === true}

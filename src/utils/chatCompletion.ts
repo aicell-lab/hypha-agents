@@ -214,7 +214,7 @@ function extractScript(script: string): string | null {
   return match ? match[1].trim() : null;
 }
 
-export async function* structuredChatCompletion({
+export async function* chatCompletion({
   messages,
   systemPrompt,
   model = 'qwen2.5-coder:7b',

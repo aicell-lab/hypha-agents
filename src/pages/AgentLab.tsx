@@ -11,7 +11,7 @@ import '../styles/ansi.css';
 import '../styles/notebook.css';
 import { useHyphaStore } from '../store/hyphaStore';
 import { ToolProvider, useTools } from '../components/chat/ToolProvider';
-import { structuredChatCompletion } from '../utils/chatCompletion';
+import { chatCompletion } from '../utils/chatCompletion';
 import { NotebookToolbar } from '../components/notebook/NotebookToolbar';
 // Import icons
 import { FaPlay, FaTrash, FaSyncAlt, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaCopy, FaCheckCircle, FaUndo } from 'react-icons/fa';
@@ -393,7 +393,8 @@ const NotebookPage: React.FC = () => {
             onAddWindow: addWindowCallback,
             server,
             executeCode,
-            agentSettings
+            agentSettings,
+            abortSignal: activeAbortController?.signal
           });
           setHyphaCoreApi(api);
         } catch (error) {
@@ -402,7 +403,7 @@ const NotebookPage: React.FC = () => {
       };
       setupService();
     }
-  }, [server, isLoggedIn, addWindowCallback, isReady, executeCode, agentSettings, hyphaCoreApi]);
+  }, [server, isLoggedIn, addWindowCallback, isReady, executeCode, agentSettings, hyphaCoreApi, activeAbortController]);
 
   // Load saved state on mount
   useEffect(() => {
@@ -837,7 +838,7 @@ const NotebookPage: React.FC = () => {
                   <div className="max-w-5xl mx-auto px-0 sm:px-4 py-1 pb-48">
                     <NotebookContent
                       cells={cells}
-                      activeCellId={activeCellId}
+                      activeCellId={activeCellId || ''}
                       onActiveCellChange={handleActiveCellChange}
                       onExecuteCell={handleExecuteCell}
                       onUpdateCellContent={handleUpdateCellContent}
@@ -855,6 +856,7 @@ const NotebookPage: React.FC = () => {
                       isReady={isReady}
                       activeAbortController={activeAbortController}
                       showCanvasPanel={showCanvasPanel}
+                      onAbortExecution={handleStopChatCompletion}
                     />
                   </div>
                 </div>

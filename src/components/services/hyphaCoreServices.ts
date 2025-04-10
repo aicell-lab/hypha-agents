@@ -1,5 +1,5 @@
 import { HyphaCore } from 'hypha-core';
-import { inspectImages, ImageInfo, VisionInspectionOptions } from '../../utils/visionInspection';
+import { inspectImages, ImageInfo } from '../../utils/visionInspection';
 import { AgentSettings, ChatMessage } from '../../utils/chatCompletion';
 import OpenAI from 'openai';
 import { JSONSchema } from 'openai/lib/jsonschema';
@@ -47,6 +47,7 @@ interface SetupNotebookServiceProps {
   server: any;
   executeCode: (code: string, options?: any) => Promise<any>;
   agentSettings: AgentSettings;
+  abortSignal?: AbortSignal;
 }
 
 // Store the HyphaCore instance and API promise globally
@@ -69,7 +70,8 @@ export const setupNotebookService = async ({
   onAddWindow,
   server,
   executeCode,
-  agentSettings // Destructure agentSettings from props
+  agentSettings,
+  abortSignal
 }: SetupNotebookServiceProps) => {
   // Initialize or get the existing HyphaCore promise
   if (!window._hyphaCorePromise) {
@@ -165,13 +167,35 @@ export const setupNotebookService = async ({
       },
     };
 
-    // Add other API methods to service
+    // Add other API methods to service with abort signal support
     for (const key of Object.keys(api)) {
       if ((service as any)[key] === undefined) {
         if (typeof api[key] === 'function') {
-          (service as any)[key] = (...args: any[]) => {
+          (service as any)[key] = async (...args: any[]) => {
             console.log(`Calling ${key} with args`, args);
-            return api[key](...args);
+            
+            // Create a wrapper Promise that can be aborted
+            return new Promise(async (resolve, reject) => {
+              try {
+                // Add abort signal handler
+                if (abortSignal) {
+                  abortSignal.addEventListener('abort', () => {
+                    reject(new Error('Operation cancelled by user'));
+                  });
+                  
+                  // If already aborted, reject immediately
+                  if (abortSignal.aborted) {
+                    reject(new Error('Operation cancelled by user'));
+                    return;
+                  }
+                }
+                
+                const result = await api[key](...args);
+                resolve(result);
+              } catch (error) {
+                reject(error);
+              }
+            });
           };
         } else {
           (service as any)[key] = api[key];

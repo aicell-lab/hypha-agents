@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { structuredChatCompletion, ChatMessage, AgentSettings } from '../utils/chatCompletion';
+import { chatCompletion, ChatMessage, AgentSettings } from '../utils/chatCompletion';
 import { CellManager } from '../pages/CellManager';
 import { showToast } from '../utils/notebookUtils';
 import { NotebookCell } from '../types/notebook';
@@ -107,7 +107,7 @@ export function useChatCompletion({
       setActiveAbortController(abortController);
 
       // Use agent settings in chat completion
-      const completion = structuredChatCompletion({
+      const completion = chatCompletion({
         messages,
         systemPrompt: agentSettings.instructions,
         model: agentSettings.model,

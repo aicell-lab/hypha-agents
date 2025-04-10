@@ -44,6 +44,7 @@ interface CodeCellProps {
   code: string;
   language?: string;
   onExecute?: () => void;
+  onAbort?: () => void;
   isExecuting?: boolean;
   executionCount?: number;
   blockRef?: React.RefObject<{
@@ -68,6 +69,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   code, 
   language = 'python',
   onExecute,
+  onAbort,
   isExecuting = false,
   executionCount,
   blockRef,
@@ -558,14 +560,29 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       )}
 
       {/* Output Area - only show if not fully collapsed */}
-      {!isFullyCollapsed && output && output.length > 0 && (
+      {!isFullyCollapsed && ((output && output.length > 0) || isExecuting) && (
         <div className={`jupyter-cell-flex-container mt-1 ${parent ? 'child-cell' : 'parent-cell'}`}>
           {/* Empty execution count to align with code - only shown when output is visible */}
           {!hideOutput && (
             <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
               {isExecuting ? (
-                <div className="text-gray-500 pr-2">
+                <div className="text-gray-500 pr-2 flex items-center gap-2">
                   <FaSpinner className="w-4 h-4 animate-spin text-yellow-500" />
+                  {onAbort && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAbort();
+                      }}
+                      className="px-1.5 py-0.5 text-xs bg-red-50 hover:bg-red-100 text-red-600 rounded border border-red-200 transition-colors duration-150 flex items-center gap-1"
+                      title="Stop execution"
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <span>Stop</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="text-gray-500">
@@ -577,7 +594,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
           <div className="w-[calc(100%-28px)] overflow-visible relative group">
             {/* Hide button - only shown when output is visible */}
             {!hideOutput && (
-              <div className="absolute left-1/2 -translate-x-1/2 -top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="absolute left-1/2 -translate-x-1/2 -top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1">
                 <button
                   onClick={handleOutputVisibilityToggle}
                   className="bg-white shadow-sm rounded text-xs flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-gray-50 border border-gray-200 text-gray-600 hover:text-gray-800"
@@ -598,6 +615,21 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                   </svg>
                   <span>Hide</span>
                 </button>
+                {isExecuting && onAbort && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAbort();
+                    }}
+                    className="bg-white shadow-sm rounded text-xs flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700"
+                    title="Stop execution"
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span>Stop</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -608,18 +640,26 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                 title="Show output"
               >
                 <div className="inline-flex gap-1 items-center text-gray-400 text-xs">
-                <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                  <span className="w-1 h-1 rounded-full bg-gray-400"></span>
                   <span className="w-1 h-1 rounded-full bg-gray-400"></span>
                   <span className="w-1 h-1 rounded-full bg-gray-400"></span>
                 </div>
               </div>
             ) : (
               <div className="output-area-container bg-gray-50 rounded-b-md border-none">
-                <JupyterOutput 
-                  outputs={output} 
-                  className="output-area ansi-enabled" 
-                  wrapLongLines={true} 
-                />
+                {isExecuting && !output?.length && (
+                  <div className="p-2 text-sm text-gray-500 flex items-center gap-2">
+                    <FaSpinner className="w-4 h-4 animate-spin" />
+                    <span>Executing...</span>
+                  </div>
+                )}
+                {output && output.length > 0 && (
+                  <JupyterOutput 
+                    outputs={output} 
+                    className="output-area ansi-enabled" 
+                    wrapLongLines={true} 
+                  />
+                )}
               </div>
             )}
           </div>
