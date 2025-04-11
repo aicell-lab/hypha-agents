@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { NotebookToolbar } from './NotebookToolbar';
 import { NotebookMetadata } from '../../types/notebook';
+import { FaBars } from 'react-icons/fa';
 
 interface NotebookHeaderProps {
   metadata: NotebookMetadata;
@@ -17,6 +18,8 @@ interface NotebookHeaderProps {
   onShowKeyboardShortcuts: () => void;
   isProcessing: boolean;
   isReady: boolean;
+  onToggleSidebar: () => void;
+  isSidebarOpen: boolean;
 }
 
 const NotebookHeader: React.FC<NotebookHeaderProps> = ({
@@ -32,7 +35,9 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
   isProcessing,
-  isReady
+  isReady,
+  onToggleSidebar,
+  isSidebarOpen
 }) => {
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onMetadataChange({
@@ -47,6 +52,13 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
       <div className="max-w-full mx-auto flex items-center justify-between">
         {/* Logo and Titles */}
         <div className="flex items-center gap-1 ml-2">
+          <button
+            onClick={onToggleSidebar}
+            className="p-2 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
+            title={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+          >
+            <FaBars className="w-5 h-5" />
+          </button>
           <Link
             to="/"
             className="flex items-center hover:opacity-80 transition"
@@ -94,6 +106,8 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           onShowKeyboardShortcuts={onShowKeyboardShortcuts}
           isProcessing={isProcessing}
           isReady={isReady}
+          onToggleSidebar={onToggleSidebar}
+          isSidebarOpen={isSidebarOpen}
         />
       </div>
     </div>

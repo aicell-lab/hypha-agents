@@ -139,7 +139,7 @@ export const LoginSection: React.FC = () => (
   </div>
 );
 
-interface NotebookToolbarProps {
+export interface NotebookToolbarProps {
   metadata: NotebookMetadata;
   onMetadataChange: (metadata: NotebookMetadata) => void;
   onSave: () => void;
@@ -153,6 +153,8 @@ interface NotebookToolbarProps {
   onShowKeyboardShortcuts: () => void;
   isProcessing: boolean;
   isReady: boolean;
+  onToggleSidebar: () => void;
+  isSidebarOpen: boolean;
 }
 
 interface ToolbarDropdownProps extends NotebookToolbarProps {
@@ -174,6 +176,8 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onShowKeyboardShortcuts,
   isProcessing,
   isReady,
+  onToggleSidebar,
+  isSidebarOpen,
   isOpen,
   onClose
 }) => {
@@ -235,6 +239,18 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
       </div>
 
       {/* Rest of the menu items */}
+      <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">View</div>
+      <button
+        onClick={() => {
+          onToggleSidebar();
+          onClose();
+        }}
+        className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+      >
+        <FaBars className="w-3.5 h-3.5 mr-2" />
+        {isSidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'}
+      </button>
+
       <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">File Operations</div>
       <label
         htmlFor="notebook-file-mobile"
@@ -351,7 +367,9 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
   isProcessing,
-  isReady
+  isReady,
+  onToggleSidebar,
+  isSidebarOpen
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -425,6 +443,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onShowKeyboardShortcuts={onShowKeyboardShortcuts}
             isProcessing={isProcessing}
             isReady={isReady}
+            onToggleSidebar={onToggleSidebar}
+            isSidebarOpen={isSidebarOpen}
             isOpen={isDropdownOpen}
             onClose={() => setIsDropdownOpen(false)}
           />

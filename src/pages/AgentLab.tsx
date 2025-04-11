@@ -29,6 +29,8 @@ import { useNotebookCommands } from '../hooks/useNotebookCommands';
 
 // Add imports for Sidebar components
 import Sidebar from '../components/notebook/Sidebar';
+import { ProjectsProvider } from '../providers/ProjectsProvider';
+import { ProjectFile } from '../providers/ProjectsProvider';
 
 const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
@@ -55,6 +57,7 @@ const NotebookPage: React.FC = () => {
   const [showCanvasPanel, setShowCanvasPanel] = useState(false);
   const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
   const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
 
   // Initialize the cell manager
   const cellManager = useRef<CellManager | null>(null);
@@ -775,6 +778,34 @@ const NotebookPage: React.FC = () => {
     }));
   }, []);
 
+  // Add handler for file selection
+  const handleFileSelect = async (file: ProjectFile) => {
+    // For now, just log the file - we'll implement proper file handling later
+    console.log('Selected file:', file);
+  };
+
+  // Add effect to check screen size and adjust canvas panel width
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const isSmall = window.innerWidth <= 480;
+      setIsSmallScreen(isSmall);
+      if (isSmall) {
+        setCanvasPanelWidth(0);
+      }
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  // Modify the canvas panel width setter to respect small screens
+  const handleCanvasPanelResize = (newWidth: number) => {
+    if (!isSmallScreen) {
+      setCanvasPanelWidth(newWidth);
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Main notebook content */}
@@ -793,8 +824,10 @@ const NotebookPage: React.FC = () => {
             onAddCodeCell={handleAddCodeCell}
             onAddMarkdownCell={handleAddMarkdownCell}
             onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
-            isProcessing={isProcessingAgentResponse}
+            isProcessing={isExecutingCode}
             isReady={isReady}
+            onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+            isSidebarOpen={isSidebarOpen}
           />
 
           {/* Main content area with notebook and canvas panel */}
@@ -802,15 +835,18 @@ const NotebookPage: React.FC = () => {
             {/* Left side: Sidebar + Notebook Content + Chat Input */}
             <div className="flex-1 min-w-0 flex relative">
               {/* Sidebar */}
-              <Sidebar
-                isOpen={isSidebarOpen}
-                onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-                activeTab={activeSidebarTab}
-                onTabChange={setActiveSidebarTab}
-              />
+              <ProjectsProvider>
+                <Sidebar
+                  isOpen={isSidebarOpen}
+                  onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+                  activeTab={activeSidebarTab}
+                  onTabChange={setActiveSidebarTab}
+                  onSelectFile={handleFileSelect}
+                />
+              </ProjectsProvider>
 
-              {/* Notebook Content Area */}
-              <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Notebook Content Area with transition */}
+              <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${isSidebarOpen ? 'ml-60' : ''}`}>
                 <div className="flex-1 overflow-y-auto overflow-x-hidden">
                   <div className="max-w-5xl mx-auto px-0 sm:px-4 py-1 pb-48">
                     <NotebookContent
@@ -838,8 +874,8 @@ const NotebookPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Footer with chat input */}
-                <div className="absolute bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md">
+                {/* Footer with chat input - now part of the transition */}
+                <div className="sticky bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md">
                   <NotebookFooter
                     onSendMessage={handleSendMessage}
                     onStopChatCompletion={handleStopChatCompletion}
@@ -855,13 +891,13 @@ const NotebookPage: React.FC = () => {
             </div>
 
             {/* Right side: Canvas Panel */}
-            <div className="h-full relative" style={{ width: showCanvasPanel ? canvasPanelWidth : 36 }}>
+            <div className="h-full relative" style={{ width: isSmallScreen ? 0 : (showCanvasPanel ? canvasPanelWidth : 36) }}>
               <CanvasPanel
                 windows={hyphaCoreWindows}
                 isVisible={showCanvasPanel}
-                width={canvasPanelWidth}
+                width={isSmallScreen ? 0 : canvasPanelWidth}
                 activeTab={activeCanvasTab}
-                onResize={setCanvasPanelWidth}
+                onResize={handleCanvasPanelResize}
                 onClose={() => setShowCanvasPanel(!showCanvasPanel)}
                 onTabChange={setActiveCanvasTab}
                 onTabClose={handleTabClose}
@@ -883,7 +919,7 @@ const NotebookPage: React.FC = () => {
 const AgentLab: React.FC = () => {
   return (
     <ThebeProvider>
-        <NotebookPage />
+      <NotebookPage />
     </ThebeProvider>
   );
 };

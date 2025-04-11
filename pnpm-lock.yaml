@@ -125,6 +125,9 @@ importers:
       react:
         specifier: ^18.2.0
         version: 18.3.1
+      react-complex-tree:
+        specifier: ^2.6.0
+        version: 2.6.0(react@18.3.1)
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
@@ -7894,6 +7897,11 @@ packages:
     peerDependencies:
       codemirror: 5.x
       react: '>=15.5 <=18.x'
+
+  react-complex-tree@2.6.0:
+    resolution: {integrity: sha512-kDDuWih5VUz9cXgTKGnDBnMMoM4lvbn3/yCPs2D0jI9Z724BNeraeA5yBqyKqbIRhESQOlCyAyYW9WUqljFP1Q==}
+    peerDependencies:
+      react: '>=16.0.0'
 
   react-dev-utils@12.0.1:
     resolution: {integrity: sha512-84Ivxmr17KjUupyqzFode6xKhjwuEJDROWKJy/BthkL7Wn6NJ8h4WE6k/exAv6ImS+0oZLRRW5j/aINMHyeGeQ==}
@@ -20571,6 +20579,10 @@ snapshots:
   react-codemirror2@8.0.1(codemirror@5.65.18)(react@18.3.1):
     dependencies:
       codemirror: 5.65.18
+      react: 18.3.1
+
+  react-complex-tree@2.6.0(react@18.3.1):
+    dependencies:
       react: 18.3.1
 
   react-dev-utils@12.0.1(eslint@8.57.1)(typescript@3.9.10)(webpack@5.97.1):
