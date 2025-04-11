@@ -215,8 +215,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       style={{ 
         width: '240px', 
         zIndex: 40,
-        marginTop: '56px', // Height of the header
-        height: 'calc(100vh - 56px)', // Full height minus header
+        marginTop: '36px', // Height of the header
+        height: 'calc(100vh - 36px)', // Full height minus header
         transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
         willChange: 'transform'
       }}
@@ -284,7 +284,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Project Details Section */}
         {selectedProject && (
           <div className="border-t border-gray-200" {...getRootProps()}>
-            <div className="p-4">
+            <div className="p-2">
               <h3 className="text-sm font-medium text-gray-900 mb-2">
                 {selectedProject.manifest.name}
               </h3>
