@@ -1,12 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { OutputItem as ChatOutputItem } from './chat/Chat';
+import { OutputItem } from '../types/notebook';
 import { executeScripts } from '../utils/script-utils';
 import { processAnsiInOutputElement } from '../utils/ansi-utils';
 
-// Export this type for other components to use
-export type OutputItem = ChatOutputItem;
-
-type OutputTypes = 'stdout' | 'stderr' | 'img' | 'display_data' | 'execute_result' | 'error' | 'html' | 'text';
 
 interface JupyterOutputProps {
   outputs: OutputItem[];

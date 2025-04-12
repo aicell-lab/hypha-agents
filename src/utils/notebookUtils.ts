@@ -42,7 +42,9 @@ export function downloadNotebook(notebook: NotebookData): void {
         trusted: true,
         parent: cell.metadata?.parent // Explicitly preserve parent key
       }
-    }))
+    })),
+    nbformat: 4,
+    nbformat_minor: 5
   };
 
   const blob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });

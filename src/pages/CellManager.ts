@@ -1,5 +1,5 @@
 import React from "react";
-import { OutputItem } from "../components/chat/Chat";
+import { OutputItem } from "../types/notebook";
 import Convert from "ansi-to-html";
 import { v4 as uuidv4 } from 'uuid';
 import localforage from 'localforage';

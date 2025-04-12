@@ -15,7 +15,7 @@ import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
 import { FaSpinner } from 'react-icons/fa';
 import { JupyterOutput } from '../JupyterOutput';
-import { OutputItem } from '../chat/Chat';
+import { OutputItem } from '../../types/notebook';
 import { RiRobot2Line } from 'react-icons/ri';
 
 

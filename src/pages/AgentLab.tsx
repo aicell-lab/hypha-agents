@@ -20,8 +20,9 @@ import NotebookFooter from '../components/notebook/NotebookFooter';
 import KeyboardShortcutsDialog from '../components/notebook/KeyboardShortcutsDialog';
 
 // Import utilities and types
-import { NotebookCell, NotebookData, NotebookMetadata, defaultNotebookMetadata, CellType, CellRole } from '../types/notebook';
+import { NotebookCell, NotebookData, NotebookMetadata, CellType, CellRole } from '../types/notebook';
 import { showToast, downloadNotebook } from '../utils/notebookUtils';
+import { OutputItem } from '../types/notebook';
 
 // Import hooks
 import { useChatCompletion } from '../hooks/useChatCompletion';
@@ -29,8 +30,29 @@ import { useNotebookCommands } from '../hooks/useNotebookCommands';
 
 // Add imports for Sidebar components
 import Sidebar from '../components/notebook/Sidebar';
-import { ProjectsProvider } from '../providers/ProjectsProvider';
+import { ProjectsProvider, useProjects } from '../providers/ProjectsProvider';
 import { ProjectFile } from '../providers/ProjectsProvider';
+
+const defaultNotebookMetadata: NotebookMetadata = {
+  modified: new Date().toISOString(),
+  kernelspec: {
+    name: 'python3',
+    display_name: 'Python 3'
+  },
+  language_info: {
+    name: 'python',
+    version: '3.9'
+  },
+  title: 'Untitled Chat',
+  created: new Date().toISOString()
+};
+
+const defaultNotebookData: NotebookData = {
+  nbformat: 4,
+  nbformat_minor: 5,
+  metadata: defaultNotebookMetadata,
+  cells: []
+};
 
 const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
@@ -52,6 +74,7 @@ const NotebookPage: React.FC = () => {
   const [isAIReady, setIsAIReady] = useState(false);
   const [agentSettings, setAgentSettings] = useState(() => loadSavedAgentSettings());
   const [hyphaCoreApi, setHyphaCoreApi] = useState<any>(null);
+  const { selectedProject, getFileContent, uploadFile } = useProjects();
 
   const [canvasPanelWidth, setCanvasPanelWidth] = useState(600);
   const [showCanvasPanel, setShowCanvasPanel] = useState(false);
@@ -191,14 +214,20 @@ const NotebookPage: React.FC = () => {
   const saveNotebook = useCallback(async () => {
     if (cellManager.current) {
       try {
-        await cellManager.current.saveToLocalStorage();
-        showToast('Notebook saved successfully', 'success');
+        if (notebookMetadata.projectId && notebookMetadata.filePath) {
+          // If we have project info, save to project
+          await saveToProject();
+        } else {
+          // Otherwise save to localStorage
+          await cellManager.current.saveToLocalStorage();
+          showToast('Notebook saved successfully', 'success');
+        }
       } catch (error) {
         console.error('Error saving notebook:', error);
         showToast('Failed to save notebook', 'error');
       }
     }
-  }, []);
+  }, [notebookMetadata.projectId, notebookMetadata.filePath]);
 
   // Handle loading notebook from file input
   const loadNotebook = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,7 +255,7 @@ const NotebookPage: React.FC = () => {
 
         // Find the highest execution count to continue from
         let maxExecutionCount = 0;
-        filteredCells.forEach(cell => {
+        filteredCells.forEach((cell: any) => {
           if (cell.executionCount && cell.executionCount > maxExecutionCount) {
             maxExecutionCount = cell.executionCount;
           }
@@ -243,18 +272,18 @@ const NotebookPage: React.FC = () => {
         // Add a small delay to ensure cells are cleared before adding new ones
         setTimeout(() => {
           // First pass: Create all cells and build ID mapping
-          filteredCells.forEach((cell) => {
+          filteredCells.forEach((cell: any) => {
             const oldId = cell.id;
             const newCellId = cellManager.current?.addCell(
-              cell.type,
+              cell.type as CellType,
               cell.content || '',
-              cell.role || (cell.metadata?.role as CellRole | undefined)
+              cell.role as CellRole | undefined
             ) || '';
             idMapping[oldId] = newCellId;
           });
 
           // Second pass: Update parent references and other cell properties
-          filteredCells.forEach((cell, index) => {
+          filteredCells.forEach((cell: any, index: number) => {
             const newCellId = idMapping[cell.id];
             if (!newCellId) return;
 
@@ -281,7 +310,7 @@ const NotebookPage: React.FC = () => {
             if (cell.executionCount) {
               const executionState = cell.executionState || 'idle';
               const outputs = cell.output ?
-                cell.output.map(output => ({
+                cell.output.map((output: any) => ({
                   ...output,
                   attrs: {
                     ...output.attrs,
@@ -322,6 +351,8 @@ const NotebookPage: React.FC = () => {
   const handleDownloadNotebook = useCallback(() => {
     if (cellManager.current) {
       const notebookData: NotebookData = {
+        nbformat: 4,
+        nbformat_minor: 5,
         metadata: {
           ...notebookMetadata,
           modified: new Date().toISOString()
@@ -780,8 +811,176 @@ const NotebookPage: React.FC = () => {
 
   // Add handler for file selection
   const handleFileSelect = async (file: ProjectFile) => {
-    // For now, just log the file - we'll implement proper file handling later
-    console.log('Selected file:', file);
+    if (!selectedProject) return;
+
+    try {
+      // Get the file content from the project
+      const content = await getFileContent(selectedProject.id, file.path);
+      
+      // If it's a notebook file, load it
+      if (file.path.endsWith('.ipynb')) {
+        try {
+          const notebookData = JSON.parse(content) as NotebookData;
+          console.log('Loading notebook data:', notebookData);
+
+          // Ensure title is always defined
+          const metadata = {
+            ...defaultNotebookMetadata,
+            ...notebookData.metadata,
+            title: notebookData.metadata?.title || file.name.replace('.ipynb', ''),
+            modified: new Date().toISOString(),
+            projectId: selectedProject.id, // Store project ID
+            filePath: file.path // Store file path
+          };
+
+          // Filter out any thinking cells
+          const filteredCells = notebookData.cells.filter((cell: NotebookCell) => cell.type !== 'thinking');
+
+          // Find the highest execution count to continue from
+          let maxExecutionCount = 0;
+          filteredCells.forEach((cell: NotebookCell) => {
+            if (cell.executionCount && cell.executionCount > maxExecutionCount) {
+              maxExecutionCount = cell.executionCount;
+            }
+          });
+
+          // Clear existing cells using cellManager
+          cellManager.current?.clearAllCells();
+
+          // Create a mapping of old cell IDs to new cell IDs
+          const idMapping: { [oldId: string]: string } = {};
+
+          // First pass: Create all cells and build ID mapping
+          filteredCells.forEach((cell: NotebookCell) => {
+            const oldId = cell.id;
+            const newCellId = cellManager.current?.addCell(
+              cell.type as CellType,
+              cell.content || '',
+              cell.role as CellRole | undefined
+            ) || '';
+            idMapping[oldId] = newCellId;
+          });
+
+          // Second pass: Update parent references and other cell properties
+          filteredCells.forEach((cell: NotebookCell, index: number) => {
+            const newCellId = idMapping[cell.id];
+            if (!newCellId) return;
+
+            // Update parent reference if it exists
+            if (cell.metadata?.parent) {
+              const newParentId = idMapping[cell.metadata.parent];
+              if (newParentId) {
+                setCells(prev => prev.map(c => {
+                  if (c.id === newCellId) {
+                    return {
+                      ...c,
+                      metadata: {
+                        ...c.metadata,
+                        parent: newParentId
+                      }
+                    };
+                  }
+                  return c;
+                }));
+              }
+            }
+
+            // Update cell with execution state and outputs if they exist
+            if (cell.executionCount) {
+              const executionState = cell.executionState || 'idle';
+              const outputs = cell.output ?
+                cell.output.map((output: OutputItem) => ({
+                  ...output,
+                  attrs: {
+                    ...output.attrs,
+                    className: `output-area ${output.type === 'stderr' ? 'error-output' : ''}`
+                  }
+                })) : undefined;
+
+              cellManager.current?.updateCellExecutionState(newCellId, executionState, outputs);
+            }
+
+            // Set code visibility based on metadata and cell role
+            if (cell.role === 'system') {
+              // Always hide system cells by default when loading
+              cellManager.current?.toggleCodeVisibility(newCellId);
+              cellManager.current?.hideCellOutput(newCellId);
+            } else if (cell.type === 'code' && cell.metadata?.isCodeVisible === false) {
+              cellManager.current?.toggleCodeVisibility(newCellId);
+            }
+
+            // If it's the last cell, make it active
+            if (index === filteredCells.length - 1) {
+              cellManager.current?.setActiveCell(newCellId);
+            }
+          });
+
+          // Update metadata after cells are loaded
+          const newMetadata = {
+            ...defaultNotebookMetadata,
+            ...notebookData.metadata,
+            title: notebookData.metadata?.title || file.name.replace('.ipynb', ''),
+            modified: new Date().toISOString(),
+            projectId: selectedProject.id,
+            filePath: file.path
+          };
+
+          setNotebookMetadata(newMetadata);
+          setExecutionCounter(maxExecutionCount + 1);
+
+          // Save to localStorage only, not to project
+          if (cellManager.current) {
+            await cellManager.current.saveToLocalStorage();
+          }
+
+          showToast('Notebook loaded successfully', 'success');
+        } catch (error) {
+          console.error('Error loading notebook:', error);
+          showToast('Failed to load notebook file', 'error');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading file:', error);
+      showToast('Failed to load file', 'error');
+    }
+  };
+
+  // Add function to save notebook to project
+  const saveToProject = async () => {
+    if (!notebookMetadata.projectId || !notebookMetadata.filePath) {
+      // If no project info, just save to localStorage
+      await cellManager.current?.saveToLocalStorage();
+      return;
+    }
+
+    try {
+      if (cellManager.current) {
+        const notebookData = {
+          nbformat: 4,
+          nbformat_minor: 5,
+          metadata: {
+            ...notebookMetadata,
+            modified: new Date().toISOString()
+          },
+          cells: cellManager.current.getCurrentCellsContent()
+        };
+
+        // Convert to string
+        const content = JSON.stringify(notebookData, null, 2);
+
+        // Create a Blob and File object
+        const blob = new Blob([content], { type: 'application/json' });
+        const file = new File([blob], notebookMetadata.filePath.split('/').pop() || 'notebook.ipynb', { type: 'application/json' });
+
+        // Upload to project
+        await uploadFile(notebookMetadata.projectId, file);
+
+        showToast('Notebook saved successfully', 'success');
+      }
+    } catch (error) {
+      console.error('Error saving notebook to project:', error);
+      showToast('Failed to save notebook to project', 'error');
+    }
   };
 
   // Add effect to check screen size and adjust canvas panel width
@@ -806,6 +1005,73 @@ const NotebookPage: React.FC = () => {
     }
   };
 
+  // Handle saving notebook
+  const handleSave = useCallback(async () => {
+    if (!cellManager.current) return;
+
+    const notebookData: NotebookData = {
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: {
+        ...notebookMetadata,
+        modified: new Date().toISOString()
+      },
+      cells: cellManager.current.getCurrentCellsContent()
+    };
+
+    // If this is a project file, save it back to the project
+    if (notebookMetadata.projectId && notebookMetadata.filePath && selectedProject) {
+      try {
+        const blob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
+        const file = new File([blob], notebookMetadata.filePath.split('/').pop() || 'notebook.ipynb', { type: 'application/json' });
+        await uploadFile(selectedProject.id, file);
+        console.info('Saved notebook to project:', notebookMetadata.filePath);
+        showToast('Notebook saved to project successfully', 'success');
+      } catch (error) {
+        console.error('Error saving notebook to project:', error);
+        showToast('Failed to save notebook to project', 'error');
+      }
+    }
+
+    // Save to local storage
+    localStorage.setItem('notebookData', JSON.stringify(notebookData));
+    console.info('Saved notebook to local storage');
+  }, [notebookMetadata, uploadFile, selectedProject]);
+
+  // Auto-save setup
+  useEffect(() => {
+    const setupAutoSave = () => {
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current);
+      }
+      
+      autoSaveTimerRef.current = setInterval(() => {
+        handleSave();
+      }, 30000); // Auto-save every 30 seconds
+    };
+
+    setupAutoSave();
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current);
+      }
+    };
+  }, [handleSave]);
+
+  // Add keyboard shortcut for saving
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleSave]);
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Main notebook content */}
@@ -815,7 +1081,7 @@ const NotebookPage: React.FC = () => {
           <NotebookHeader
             metadata={notebookMetadata}
             onMetadataChange={handleMetadataChange}
-            onSave={saveNotebook}
+            onSave={handleSave}
             onDownload={handleDownloadNotebook}
             onLoad={loadNotebook}
             onRunAll={handleRunAllCells}
@@ -824,8 +1090,8 @@ const NotebookPage: React.FC = () => {
             onAddCodeCell={handleAddCodeCell}
             onAddMarkdownCell={handleAddMarkdownCell}
             onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
-            isProcessing={isExecutingCode}
-            isReady={isReady}
+            isProcessing={isProcessingAgentResponse}
+            isReady={isReady && isAIReady}
             onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
             isSidebarOpen={isSidebarOpen}
           />
@@ -835,15 +1101,13 @@ const NotebookPage: React.FC = () => {
             {/* Left side: Sidebar + Notebook Content + Chat Input */}
             <div className="flex-1 min-w-0 flex relative">
               {/* Sidebar */}
-              <ProjectsProvider>
-                <Sidebar
-                  isOpen={isSidebarOpen}
-                  onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-                  activeTab={activeSidebarTab}
-                  onTabChange={setActiveSidebarTab}
-                  onSelectFile={handleFileSelect}
-                />
-              </ProjectsProvider>
+              <Sidebar
+                isOpen={isSidebarOpen}
+                onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+                activeTab={activeSidebarTab}
+                onTabChange={setActiveSidebarTab}
+                onSelectFile={handleFileSelect}
+              />
 
               {/* Notebook Content Area with transition */}
               <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${isSidebarOpen ? 'ml-60' : ''}`}>
@@ -919,7 +1183,9 @@ const NotebookPage: React.FC = () => {
 const AgentLab: React.FC = () => {
   return (
     <ThebeProvider>
-      <NotebookPage />
+      <ProjectsProvider>
+        <NotebookPage />
+      </ProjectsProvider>
     </ThebeProvider>
   );
 };

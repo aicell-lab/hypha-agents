@@ -1,10 +1,33 @@
-import { OutputItem } from '../components/chat/Chat';
-import { ChatRole } from '../utils/chatCompletion';
 
 // Define different types of cells in our notebook
 export type CellType = 'markdown' | 'code' | 'thinking';
 export type ExecutionState = 'idle' | 'running' | 'success' | 'error';
 export type CellRole = 'user' | 'assistant' | 'system';
+
+
+export interface OutputItem {
+  type: string;
+  content: string;
+  short_content?: string;
+  attrs?: Record<string, any>;
+} 
+
+export interface ContentItem {
+  type: 'markdown' | 'code_execution' | 'tool_call' | 'image' | 'html' | 'input_audio';
+  content: string;
+  attrs?: {
+    language?: string;
+    output?: OutputItem[];
+    status?: string;
+    transcript?: string | null;
+    [key: string]: any;
+  };
+}
+export interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: ContentItem[];
+}
+
 
 export interface NotebookCell {
   id: string;
@@ -40,12 +63,18 @@ export interface NotebookMetadata {
     name: string;
     version: string;
   };
-  title: string; // Make title required
+  title: string;
   created: string;
   modified: string;
+  projectId?: string; // ID of the project this notebook belongs to
+  filePath?: string; // Path of the file in the project
+  author?: string;
+  description?: string;
 }
 
 export interface NotebookData {
+  nbformat: number;
+  nbformat_minor: number;
   metadata: NotebookMetadata;
   cells: NotebookCell[];
 }

@@ -6,13 +6,7 @@ import { useThebe } from './ThebeProvider';
 import { useVoiceMode, VoiceModeProvider } from './VoiceModeProvider';
 import { useTextMode, TextModeProvider } from './TextModeProvider';
 import { ToolProvider, useTools } from './ToolProvider';
-
-export interface OutputItem {
-  type: string;
-  content: string;
-  short_content?: string;
-  attrs?: any;
-}
+import { OutputItem } from '../../types/notebook';
 
 export interface ContentItem {
   type: 'markdown' | 'code_execution' | 'tool_call' | 'image' | 'html' | 'input_audio';
@@ -1077,7 +1071,7 @@ print("Hello, world!")
                           : "Type your message..."
                   }
                   onSelectTool={handleToolSelect}
-                  agentInstructions={agentConfig.instructions}
+                  agentSettings={agentConfig}
                 />
               </div>
             </div>

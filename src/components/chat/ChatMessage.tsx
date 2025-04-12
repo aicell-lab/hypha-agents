@@ -3,8 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import { useThebe } from './ThebeProvider';
 import { CodeBlockSelector } from './CodeBlockSelector';
 import type { Components } from 'react-markdown';
-import type { Message, ContentItem, OutputItem } from './Chat';
 import rehypeRaw from 'rehype-raw';
+import { Message } from '../../types/notebook';
 
 interface ChatMessageProps {
   message: Message;

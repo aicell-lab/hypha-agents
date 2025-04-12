@@ -89,26 +89,26 @@
   background-color: #3b82f6;
   transition: opacity 0.2s ease-in-out;
 }
-
 /* Child Cell Relationships */
 .child-cell {
   background-color: rgba(139, 139, 139, 0.019);
 }
-.child-cell::before {
+.child-cell::before,
+.child-cell::after {
   content: '';
   position: absolute;
-  left: 8px;
   top: 0;
   height: 100%;
   width: 1px;
   background-color: rgba(156, 163, 175, 0.261); /* Tailwind gray-400 */
   transition: background-color 0.2s ease;
 }
-
-.parent-cell::after {
-
+.child-cell::before {
+  left: 8px;
 }
-
+.child-cell::after {
+  right: 8px;
+}
 
 /* Remove old styles */
 .child-cell:first-of-type::before {
