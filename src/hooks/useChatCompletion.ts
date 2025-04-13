@@ -54,10 +54,11 @@ export function useChatCompletion({
         );
         console.log('[DEBUG] Added code cell:', actualCellId, 'with parent:', lastUserCellRef.current);
       }
-
       // Wait for next tick to ensure cell is properly set up
       await new Promise(resolve => setTimeout(resolve, 0));
-
+      // set the active cell to the new code cell
+      cellManager.setActiveCell(actualCellId);
+      cellManager.setCurrentAgentCell(actualCellId);
       // Execute the code and collapse the cell
       const result = await cellManager.executeCell(actualCellId, true);
       cellManager.collapseCodeCell(actualCellId);

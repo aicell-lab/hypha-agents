@@ -341,7 +341,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     <div 
       ref={editorDivRef}
       className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${role === 'system' ? 'system-cell' : ''} ${
-        staged ? 'staged-cell bg-gray-50/50 border-l-2 border-gray-200' : ''
+        staged ? 'staged-cell bg-gray-50/50 border-gray-200' : ''
       }`}
       onClick={handleEditorClick}
       data-parent={parent || undefined}
@@ -407,7 +407,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                 'text-sm text-blue-800'
               }`}>
                 {isExecuting ? "Executing startup script..." : 
-                 isStagedCell ? "Staged code" : 
+                 isStagedCell ? "Uncommitted code" : 
                  hasErrors() ? "System Configuration (with errors)" :
                  "System Configuration"}
               </span>
@@ -415,7 +415,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
           </div>
 
           {/* Show error outputs if they exist */}
-          {hasErrors() && output && output.length > 0 && (
+          {!staged && hasErrors() && output && output.length > 0 && (
             <div className="jupyter-cell-flex-container mt-1">
               <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
                 <div className="text-gray-500">
@@ -457,7 +457,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
           {/* Editor */}
           <div className={`editor-container mt-2 w-full overflow-hidden ${
             isActive ? 'editor-container-active' : ''
-          } ${staged ? 'border-l-2 border-slate-200 pl-2' : ''} ${
+          } ${staged ? 'border-slate-200 pl-2' : ''} ${
             role === 'system' ? 'bg-gray-50/50' : ''
           }`}>
             {/* Staged indicator for expanded cells */}
