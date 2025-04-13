@@ -133,17 +133,17 @@ const NotebookPage: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // --- Define handleAddWindow callback ---
-  const handleAddWindow = useCallback((config: HyphaCoreWindow) => {
-    setHyphaCoreWindows((prev) => {
-      // Check if a window with the same id already exists
-      if (prev.some(win => win.id === config.id)) {
-        return prev; // If it exists, return the previous state unchanged
-      }
-      // If it doesn't exist, add the new window configuration
-      return [...prev, config];
-    });
+  const handleAddWindow = useCallback((config: any) => {
+    // Add the new window to our state
+    const newWindow: HyphaCoreWindow = {
+      id: config.window_id,
+      src: config.src,
+      name: config.name || `${config.src || 'Untitled Window'}`
+    };
+    
+    setHyphaCoreWindows(prev => [...prev, newWindow]);
     // Optionally, activate the new window/tab and show the panel
-    setActiveCanvasTab(config.id);
+    setActiveCanvasTab(config.window_id);
     setShowCanvasPanel(true);
   }, [setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]); // Dependencies for the callback
 

@@ -43,7 +43,7 @@ interface HyphaCoreService {
 }
 
 interface SetupNotebookServiceProps {
-  onAddWindow: (config: any) => void;
+  onAddWindow: (config: HyphaCoreWindow) => void;
   server: any;
   executeCode: (code: string, options?: any) => Promise<any>;
   agentSettings: AgentSettings;
