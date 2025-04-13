@@ -538,7 +538,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {projects.map((project) => (
               <div
                 key={project.id}
-                className={`flex items-center w-full px-4 py-2 hover:bg-gray-100 transition-colors ${
+                className={`group flex items-center w-full px-4 py-2 hover:bg-gray-100 transition-colors ${
                   selectedProject?.id === project.id ? 'bg-blue-50' : ''
                 }`}
               >
@@ -556,7 +556,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </button>
                 <button
                   onClick={(e) => handleDeleteProject(e, project.id)}
-                  className="p-1 rounded-md hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors"
+                  className="p-1 rounded-md hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors invisible group-hover:visible"
                   title="Delete project"
                 >
                   <FaTrash className="w-3 h-3" />
