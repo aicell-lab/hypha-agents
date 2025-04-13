@@ -1,4 +1,3 @@
-
 // Define different types of cells in our notebook
 export type CellType = 'markdown' | 'code' | 'thinking';
 export type ExecutionState = 'idle' | 'running' | 'success' | 'error';
@@ -55,6 +54,9 @@ export interface NotebookCell {
 }
 
 export interface NotebookMetadata {
+  modified: string;
+  created: string;
+  title: string;
   kernelspec: {
     name: string;
     display_name: string;
@@ -63,13 +65,8 @@ export interface NotebookMetadata {
     name: string;
     version: string;
   };
-  title: string;
-  created: string;
-  modified: string;
-  projectId?: string; // ID of the project this notebook belongs to
-  filePath?: string; // Path of the file in the project
-  author?: string;
-  description?: string;
+  projectId?: string;
+  filePath?: string;
 }
 
 export interface NotebookData {

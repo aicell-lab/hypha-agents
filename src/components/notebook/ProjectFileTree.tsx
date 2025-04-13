@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { UncontrolledTreeEnvironment, Tree, StaticTreeDataProvider, TreeItem as RCTTreeItem, TreeItemIndex } from 'react-complex-tree';
+import { UncontrolledTreeEnvironment, Tree, StaticTreeDataProvider, TreeItem as RCTTreeItem, TreeItemIndex, TreeItemRenderContext, TreeInformation } from 'react-complex-tree';
 import 'react-complex-tree/lib/style-modern.css';
 import { ProjectFile } from '../../providers/ProjectsProvider';
 import { FaTrash, FaFolder, FaFolderOpen, FaFile, FaCode, FaImage, FaFileAlt } from 'react-icons/fa';
@@ -9,6 +9,8 @@ import ConfirmDialog from '../common/ConfirmDialog';
 interface ProjectFileTreeProps {
   files: ProjectFile[];
   onSelectFile: (file: ProjectFile) => Promise<void>;
+  onDoubleClickFile: (file: ProjectFile) => Promise<void>;
+  onRefreshInBrowserFiles?: () => Promise<void>;
 }
 
 interface TreeItem extends Omit<RCTTreeItem<string>, 'children'> {
@@ -49,15 +51,16 @@ const getFileIcon = (filename: string, isFolder: boolean, isOpen: boolean) => {
   }
 };
 
-const ProjectFileTree: React.FC<ProjectFileTreeProps> = ({ files, onSelectFile }) => {
-  const { selectedProject, deleteFile, getProjectFiles } = useProjects();
+const ProjectFileTree: React.FC<ProjectFileTreeProps> = ({ files, onSelectFile, onDoubleClickFile, onRefreshInBrowserFiles }) => {
+  const { selectedProject, deleteFile, getProjectFiles, deleteInBrowserFile } = useProjects();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<string[]>(['root']);
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
 
   // Convert files to tree items format
   const treeItems = useMemo(() => {
-    console.info('[ProjectFileTree] Building tree items from files:', files);
+    console.log('[ProjectFileTree useMemo - treeItems] Recalculating treeItems. Input files:', files); // Debug log
     
     const items: Record<string, TreeItem> = {
       root: {
@@ -114,23 +117,26 @@ const ProjectFileTree: React.FC<ProjectFileTreeProps> = ({ files, onSelectFile }
 
   // Create data provider
   const dataProvider = useMemo(() => {
+    console.log('[ProjectFileTree useMemo - dataProvider] Recalculating dataProvider. Input treeItems:', treeItems); // Debug log
     return new StaticTreeDataProvider(treeItems, (item, data) => ({ ...item, data }));
   }, [treeItems]);
 
-  // Handle selecting a file
+  // Handle selecting a file (single click)
   const handleSelect = (items: TreeItemIndex[], treeId: string) => {
+    console.log("[ProjectFileTree] handleSelect triggered");
     if (!items.length) return;
-    
     const selectedPath = items[0].toString();
     const treeItem = treeItems[selectedPath];
-    
-    // Only handle selection of files, not directories
     if (treeItem && !treeItem.isFolder) {
-      const selectedFile = files.find(f => f.path === selectedPath);
+      const selectedFile = files.find(f => f.path === treeItem.path);
       if (selectedFile) {
-        onSelectFile(selectedFile).catch(console.error);
+        // console.log("[ProjectFileTree] Calling onSelectFile"); // Keep log commented out or remove
+        // onSelectFile(selectedFile).catch(console.error); // REMOVED: Do not load file on single click
+        console.log(`[ProjectFileTree] File selected (single click): ${selectedFile.path}`); // Log selection only
       }
     }
+    // Note: The react-complex-tree library likely handles the visual selection state automatically.
+    // If visual selection stops working, we might need to manage 'selectedItems' state here.
   };
 
   // Handle expanding items
@@ -150,17 +156,94 @@ const ProjectFileTree: React.FC<ProjectFileTreeProps> = ({ files, onSelectFile }
   };
 
   const confirmDelete = async () => {
-    if (!selectedProject || !fileToDelete) return;
+    if (!fileToDelete) return;
 
     try {
-      await deleteFile(selectedProject.id, fileToDelete);
-      await getProjectFiles(selectedProject.id);
+      if (selectedProject?.id === 'in-browser') {
+        await deleteInBrowserFile(fileToDelete);
+        // Call the refresh function if provided
+        if (onRefreshInBrowserFiles) {
+           console.log('[ProjectFileTree] Calling onRefreshInBrowserFiles...'); // Log before
+           await onRefreshInBrowserFiles(); // Ensure this is awaited
+           console.log('[ProjectFileTree] onRefreshInBrowserFiles finished.'); // Log after
+        } else {
+           console.warn('[ProjectFileTree] onRefreshInBrowserFiles not provided.');
+        }
+      } else if (selectedProject?.id) {
+        await deleteFile(selectedProject.id, fileToDelete);
+        await getProjectFiles(selectedProject.id); // Refresh remote files
+      } else {
+        console.error('No project selected or invalid project ID for deletion');
+      }
     } catch (error) {
-      console.error('Error deleting file:', error);
+      console.error('Error during delete/refresh:', error); // More specific logging
     } finally {
       setShowDeleteConfirm(false);
       setFileToDelete(null);
     }
+  };
+
+  // Rename back to handleDoubleClick and bind to onPrimaryAction
+  const handleDoubleClick = (item: RCTTreeItem<string>, treeId: string) => {
+    console.log("[ProjectFileTree] handleDoubleClick triggered");
+    const treeItem = treeItems[item.index as string];
+    if (treeItem && !treeItem.isFolder) {
+      const selectedFile = files.find(f => f.path === treeItem.path);
+      if (selectedFile) {
+        console.log("[ProjectFileTree] Calling onDoubleClickFile");
+        onDoubleClickFile(selectedFile).catch(console.error);
+      }
+    }
+  };
+
+  // Render function - remove direct click handlers
+  const renderTitle = ({ title, item, context }: { 
+    title: string; 
+    item: RCTTreeItem<string>; 
+    context: TreeItemRenderContext<"expandedItems" | "selectedItems">; 
+  }) => {
+    const isHovered = hoveredItemId === item.index.toString();
+    const isDeletable = !item.isFolder;
+    const itemData = treeItems[item.index as string];
+    const itemPath = itemData?.path;
+
+    // The main clickable area provided by react-complex-tree (likely a button internally)
+    // We put the icon and title inside this.
+    const mainContent = (
+      <div className="flex items-center gap-2 flex-1 truncate">
+        {getFileIcon(item.data as string, item.isFolder || false, expandedItems.includes(item.index.toString()))}
+        <span className="flex-1 truncate">{title}</span>
+      </div>
+    );
+
+    return (
+      // Outer container for layout (flex row)
+      <div 
+        className="flex items-center justify-between gap-2 w-full pr-2" // Use justify-between
+        onMouseEnter={() => setHoveredItemId(item.index.toString())}
+        onMouseLeave={() => setHoveredItemId(null)}
+      >
+        {/* The library handles the primary action (double-click/enter) on the item itself,
+            which internally wraps this content. We don't render a button here. */}
+        {mainContent}
+        
+        {/* Delete button rendered separately, conditionally */} 
+        {isHovered && isDeletable && itemPath && (
+          <button 
+            onClick={(e) => {
+              // Prevent the click from triggering the item's primary action (double-click)
+              e.stopPropagation(); 
+              handleDeleteFile(itemPath); 
+            }}
+            className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors duration-150 flex-shrink-0"
+            title={`Delete ${title}`}
+            aria-label={`Delete ${title}`}
+          >
+            <FaTrash className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -219,50 +302,19 @@ const ProjectFileTree: React.FC<ProjectFileTreeProps> = ({ files, onSelectFile }
         dataProvider={dataProvider}
         getItemTitle={item => item.data}
         viewState={{
-          'project-files': {
+          ['tree-1']: {
             expandedItems,
-            selectedItems: []
+            selectedItems: [],
           }
         }}
-        canDragAndDrop={false}
-        canDropOnFolder={false}
-        canReorderItems={false}
-        onSelectItems={handleSelect}
+        // Reinstate the library's event handlers
+        onSelectItems={handleSelect} 
         onExpandItem={handleExpand}
         onCollapseItem={handleCollapse}
-        renderItemTitle={({ item, title, context }) => {
-          const treeItem = item as TreeItem;
-          const isExpanded = expandedItems.includes(String(treeItem.index));
-          const isFolder = Boolean(treeItem.isFolder);
-          return (
-            <div className="flex items-center justify-between w-full group min-w-0 gap-2">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                {getFileIcon(String(treeItem.data), isFolder, isExpanded)}
-                <div className="truncate">{title}</div>
-              </div>
-              {!isFolder && treeItem.path !== 'root' && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteFile(treeItem.path);
-                  }}
-                  className="p-1 rounded-md hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-                  title="Delete file"
-                >
-                  <FaTrash className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          );
-        }}
+        onPrimaryAction={handleDoubleClick}
+        renderItemTitle={renderTitle}
       >
-        <div className="flex-1 overflow-auto h-full">
-          <Tree
-            treeId="project-files"
-            rootItem="root"
-            treeLabel="Project Files"
-          />
-        </div>
+        <Tree treeId="tree-1" rootItem="root" />
       </UncontrolledTreeEnvironment>
 
       <ConfirmDialog

@@ -19,24 +19,8 @@ import CollabTest from './pages/CollabTest';
 // Create a wrapper component that uses Router hooks
 const AppContent: React.FC = () => {
   const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const hasResourceId = searchParams.has('id');
-  const isChatRoute = location.pathname === '/chat';
   const isChatDetailRoute = location.pathname.startsWith('/chat/');
   const isAgentLabRoute = location.pathname === '/lab' || location.pathname === '/notebook';
-
-  // Add state for Snackbar
-  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
-  const [snackbarMessage, setSnackbarMessage] = React.useState('');
-
-  // Add search handlers
-  const handleSearchChange = (value: string) => {
-    // Implement search logic
-  };
-
-  const handleSearchConfirm = (value: string) => {
-    // Implement search confirmation logic
-  };
 
   useEffect(() => {
     window.scrollTo(0, 0);

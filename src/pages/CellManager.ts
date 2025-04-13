@@ -3,6 +3,9 @@ import { OutputItem } from "../types/notebook";
 import Convert from "ansi-to-html";
 import { v4 as uuidv4 } from 'uuid';
 import localforage from 'localforage';
+// REMOVE useProjects import
+// import { useProjects } from '../providers/ProjectsProvider';
+
 // Define different types of cells in our notebook
 type CellType = 'markdown' | 'code' | 'thinking';
 type ExecutionState = "idle" | "running" | "success" | "error";
@@ -17,12 +20,6 @@ const convert = new Convert({
   stream: false
 });
 
-// Configure localforage
-localforage.config({
-  name: 'notebook_storage',
-  storeName: 'notebooks',
-  description: 'Storage for notebook cells and metadata'
-});
 
 const stripAnsi = (str: string) => {
     // This regex matches ANSI escape sequences
@@ -120,52 +117,15 @@ const safeParse = (str: string | null) => {
   }
 };
 
-// Helper to save notebook state using localforage
-const saveToLocalStorage = async (
-  cells: NotebookCell[],
-  metadata: NotebookMetadata
-) => {
-  // Filter out thinking cells before saving
-  const nonThinkingCells = cells.filter(cell => cell.type !== 'thinking');
+export interface SavedState {
+  cells: NotebookCell[];
+  metadata: NotebookMetadata;
+}
 
-  const data: StoredNotebookData = {
-    cells: nonThinkingCells.map((cell) => {
-      // Preserve all metadata including parent
-      const cellMetadata = {
-        ...cell.metadata,
-        hasOutput: cell.output && cell.output.length > 0,
-      };
-
-      return {
-        ...cell,
-        output: cell.output
-          ? cell.output.map((output) => ({
-              ...output,
-              attrs: {
-                ...output.attrs,
-                className: undefined, // Remove className as it's UI-specific
-              },
-            }))
-          : undefined,
-        metadata: cellMetadata,
-      };
-    }),
-    metadata: {
-      ...metadata,
-      modified: new Date().toISOString(),
-    },
-  };
-
-  try {
-    await localforage.setItem(STORAGE_KEY, data);
-    console.log("[DEBUG] Saved notebook state:", {
-      cellCount: nonThinkingCells.length,
-      cells: nonThinkingCells.map(c => ({ id: c.id, parent: c.metadata?.parent }))
-    });
-  } catch (error) {
-    console.error("Error saving to localforage:", error);
-  }
-};
+export interface StorageLocation {
+  projectId?: string;  // If undefined, it's an in-browser file
+  filePath: string;
+}
 
 // Cell Manager utility class to encapsulate cell operations
 export class CellManager {
@@ -179,6 +139,9 @@ export class CellManager {
   notebookMetadata: NotebookMetadata;
   lastAgentCellRef: React.MutableRefObject<string | null>;
   executeCodeFn: any;
+  // REMOVE file operation functions
+  // private getFileContentFn: (projectId: string, filePath: string) => Promise<string>;
+  // private uploadFileFn: (projectId: string, file: File) => Promise<void>;
 
   constructor(
     cells: NotebookCell[],
@@ -190,7 +153,10 @@ export class CellManager {
     editorRefs: React.MutableRefObject<{ [key: string]: React.RefObject<any> }>,
     notebookMetadata: NotebookMetadata,
     lastAgentCellRef: React.MutableRefObject<string | null>,
-    executeCodeFn: any
+    executeCodeFn: any,
+    // REMOVE constructor arguments for file functions
+    // getFileContentFn: (projectId: string, filePath: string) => Promise<string>,
+    // uploadFileFn: (projectId: string, file: File) => Promise<void>
   ) {
     this.cells = cells;
     this.setCells = setCells;
@@ -202,6 +168,9 @@ export class CellManager {
     this.notebookMetadata = notebookMetadata;
     this.lastAgentCellRef = lastAgentCellRef;
     this.executeCodeFn = executeCodeFn;
+    // REMOVE assignment of file functions
+    // this.getFileContentFn = getFileContentFn;
+    // this.uploadFileFn = uploadFileFn;
   }
 
   // Generate a unique ID for cells
@@ -697,8 +666,6 @@ export class CellManager {
     // Update to running state
     this.updateCellExecutionState(id, "running");
 
-
-
     try {
       const outputs: OutputItem[] = [];
       let shortOutput = '';
@@ -711,22 +678,14 @@ export class CellManager {
         onStatus: (status: string) => {
           if (status === "Completed") {
             this.updateCellExecutionState(id, "success", outputs);
-            // Save to localStorage after successful execution
-            setTimeout(() => {
-                this.saveToLocalStorage();
-              }, 100);
           } else if (status === "Error") {
             this.updateCellExecutionState(id, "error", outputs);
-            // Save to localStorage after error
-            setTimeout(() => {
-                this.saveToLocalStorage();
-              }, 100);
           }
         },
       });
 
-          // If shouldMoveFocus is true, move to the next cell immediately before execution
-        if (shouldMoveFocus) {
+      // If shouldMoveFocus is true, move to the next cell immediately before execution
+      if (shouldMoveFocus) {
         this.moveToNextCell(id);
       }
       return `[Cell Id: ${id}]\n${stripAnsi(shortOutput.trim()) || "Code executed successfully."}`;
@@ -808,82 +767,6 @@ export class CellManager {
       }
       return cell;
     });
-  }
-
-  // Save to localStorage
-  async saveToLocalStorage(): Promise<void> {
-    const currentCells = this.getCurrentCellsContent();
-    console.log(
-      "[DEBUG] Auto-saving notebook with cells:",
-      currentCells.length
-    );
-    await saveToLocalStorage(currentCells, this.notebookMetadata);
-  }
-
-  // Helper to load notebook state from localStorage
-  async loadFromLocalStorage(): Promise<{
-    cells: NotebookCell[];
-    metadata: NotebookMetadata;
-  } | null> {
-    try {
-      const data = await localforage.getItem<StoredNotebookData>(STORAGE_KEY);
-      if (!data) return null;
-
-      // Ensure we have valid cells array and metadata
-      if (!Array.isArray(data.cells)) return null;
-      if (!data.metadata || typeof data.metadata !== "object") return null;
-
-      // Create a mapping of old IDs to new IDs to maintain parent relationships
-      const idMapping: { [oldId: string]: string } = {};
-      
-      // First pass: generate new IDs and create mapping
-      data.cells.forEach((cell: NotebookCell) => {
-        idMapping[cell.id] = uuidv4();
-      });
-
-      // Second pass: reconstruct cells with updated parent references
-      const reconstructedCells = data.cells.map((cell: NotebookCell) => {
-        const newId = idMapping[cell.id];
-        const newParentId = cell.metadata?.parent ? idMapping[cell.metadata.parent] : undefined;
-
-        return {
-          ...cell,
-          id: newId,
-          executionState: "idle" as ExecutionState,
-          output: cell.output
-            ? cell.output.map((output: OutputItem) => ({
-                ...output,
-                attrs: {
-                  ...output.attrs,
-                  className: `output-area ${
-                    output.type === "stderr" ? "error-output" : ""
-                  }`,
-                },
-              }))
-            : undefined,
-          metadata: {
-            ...cell.metadata,
-            isNew: false,
-            parent: newParentId, // Use the mapped parent ID
-            isCodeVisible: cell.metadata?.isCodeVisible ?? true,
-            isOutputVisible: cell.metadata?.isOutputVisible ?? true,
-          },
-        };
-      });
-
-      console.log("[DEBUG] Loaded notebook state:", {
-        cellCount: reconstructedCells.length,
-        cells: reconstructedCells.map(c => ({ id: c.id, parent: c.metadata?.parent }))
-      });
-
-      return {
-        cells: reconstructedCells,
-        metadata: data.metadata,
-      };
-    } catch (error) {
-      console.error("Error loading from localforage:", error);
-      return null;
-    }
   }
 
   // Run all cells

@@ -34,7 +34,7 @@ const Snackbar: React.FC<SnackbarProps> = ({
   }[type];
 
   return (
-    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
+    <div className="fixed bottom-2 left-1/2 transform -translate-x-1/2 z-50">
       <div className={`${bgColor} text-white px-6 py-3 rounded-lg shadow-lg 
         flex items-center transition-opacity duration-300 ease-in-out`}>
         <span>{message}</span>

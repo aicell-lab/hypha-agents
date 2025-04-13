@@ -1,6 +1,14 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useHyphaStore } from '../store/hyphaStore';
 import { Dialog } from '@headlessui/react';
+import localforage from 'localforage';
+
+// Configure localforage
+localforage.config({
+  name: 'agent_lab_projects',
+  storeName: 'agent_lab_projects',
+  description: 'Storage for agent lab projects'
+});
 
 export interface Project {
   id: string;
@@ -12,6 +20,7 @@ export interface Project {
     created_at: string;
   };
   files?: ProjectFile[];
+  isInBrowser?: boolean;  // New flag to identify InBrowserProject
 }
 
 export interface ProjectFile {
@@ -19,6 +28,9 @@ export interface ProjectFile {
   path: string;
   type: 'file' | 'directory';
   content?: string;
+  created_at?: string;
+  modified_at?: string;
+  size?: number;
 }
 
 interface ProjectsContextType {
@@ -37,9 +49,28 @@ interface ProjectsContextType {
   showCreateDialog: boolean;
   openCreateDialog: () => void;
   closeCreateDialog: () => void;
+  // New methods for InBrowserProject
+  getInBrowserProject: () => Project;
+  saveInBrowserFile: (filePath: string, content: any) => Promise<void>;
+  listInBrowserFiles: () => Promise<ProjectFile[]>;
+  deleteInBrowserFile: (filePath: string) => Promise<void>;
+  getInBrowserFileContent: (filePath: string) => Promise<any>;
 }
 
 const ProjectsContext = createContext<ProjectsContextType | null>(null);
+
+// Create a constant for InBrowserProject
+export const IN_BROWSER_PROJECT: Project = {
+  id: 'in-browser',
+  manifest: {
+    name: 'In-Browser Project',
+    description: 'Local files stored in your browser',
+    version: '1.0.0',
+    type: 'local',
+    created_at: new Date().toISOString()
+  },
+  isInBrowser: true
+};
 
 export const useProjects = () => {
   const context = useContext(ProjectsContext);
@@ -126,14 +157,84 @@ const CreateProjectDialog: React.FC = () => {
 
 export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { artifactManager, user } = useHyphaStore();
+
+  // Log initial values from store
+  console.log('[ProjectsProvider Mount/Render] Initial values:', {
+    hasArtifactManager: !!artifactManager,
+    userId: user?.id
+  });
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
+  // New methods for InBrowserProject (define these first)
+  const saveInBrowserFile = useCallback(async (filePath: string, content: any) => {
+    try {
+      console.info('[ProjectsProvider] Saving in-browser file:', filePath);
+      await localforage.setItem(`InBrowserProject/${filePath}`, content);
+      console.info('[ProjectsProvider] File saved successfully:', filePath);
+    } catch (err) {
+      console.error('[ProjectsProvider] Error saving in-browser file:', err);
+      throw new Error('Failed to save in-browser file');
+    }
+  }, []); // No external dependencies needed here
+
+  const listInBrowserFiles = useCallback(async (): Promise<ProjectFile[]> => {
+    try {
+      console.info('[ProjectsProvider] Listing in-browser files');
+      const files: ProjectFile[] = [];
+      await localforage.iterate((value, key) => {
+        if (key.startsWith('InBrowserProject/')) {
+          const path = key.replace('InBrowserProject/', '');
+          const name = path.split('/').pop() || path;
+          files.push({
+            name,
+            path,
+            type: 'file',
+            created_at: new Date().toISOString(),
+            modified_at: new Date().toISOString(),
+            size: 0
+          });
+        }
+      });
+      console.info('[ProjectsProvider] Found in-browser files:', files.length);
+      return files;
+    } catch (err) {
+      console.error('[ProjectsProvider] Error listing in-browser files:', err);
+      return [];
+    }
+  }, []); // No external dependencies needed here
+
+  const deleteInBrowserFile = useCallback(async (filePath: string) => {
+    try {
+      console.info('[ProjectsProvider] Deleting in-browser file:', filePath);
+      await localforage.removeItem(`InBrowserProject/${filePath}`);
+      console.info('[ProjectsProvider] File deleted successfully:', filePath);
+    } catch (err) {
+      console.error('[ProjectsProvider] Error deleting in-browser file:', err);
+      throw new Error('Failed to delete in-browser file');
+    }
+  }, []); // No external dependencies needed here
+
+  const getInBrowserFileContent = useCallback(async (filePath: string): Promise<any> => {
+    try {
+      console.info('[ProjectsProvider] Getting in-browser file content:', filePath);
+      const content = await localforage.getItem(`InBrowserProject/${filePath}`);
+      if (content === null) {
+        throw new Error('File not found');
+      }
+      return content;
+    } catch (err) {
+      console.error('[ProjectsProvider] Error getting in-browser file content:', err);
+      throw new Error('Failed to get in-browser file content');
+    }
+  }, []); // No external dependencies needed here
+
   // Ensure projects collection exists
-  const ensureProjectsCollection = async () => {
+  const ensureProjectsCollection = useCallback(async () => {
     if (!artifactManager || !user) {
       console.warn('[ProjectsProvider] No artifactManager or user available');
       return;
@@ -171,13 +272,22 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         throw createError;
       }
     }
-  };
+  }, [artifactManager, user]);
 
   // Fetch all projects
-  const refreshProjects = async () => {
+  const refreshProjects = useCallback(async () => {
+    // Log values at the start of refresh
+    console.log('[ProjectsProvider refreshProjects Start] Values:', {
+      hasArtifactManager: !!artifactManager,
+      userId: user?.id
+    });
     if (!artifactManager || !user) {
-      console.warn('[ProjectsProvider] Cannot refresh projects - no artifactManager or user');
-      return;
+      const errorMsg = 'Cannot refresh projects: Artifact manager or user not available.';
+      console.error(`[ProjectsProvider] ${errorMsg}`);
+      setError(errorMsg);
+      setIsLoading(false);
+      setProjects([]); // Keep projects empty
+      throw new Error(errorMsg);
     }
 
     try {
@@ -196,17 +306,20 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
 
       console.info('[ProjectsProvider] Fetched projects:', projectsList.length);
-      setProjects(projectsList);
+      // Set only the fetched remote projects
+      setProjects(projectsList); 
     } catch (err) {
       console.error('[ProjectsProvider] Error fetching projects:', err);
       setError('Failed to load projects');
+      // Set empty array on error
+      setProjects([]); 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [artifactManager, user, ensureProjectsCollection]);
 
   // Create a new project
-  const createProject = async (name: string, description: string): Promise<Project> => {
+  const createProject = useCallback(async (name: string, description: string): Promise<Project> => {
     if (!artifactManager || !user) {
       console.error('[ProjectsProvider] Cannot create project - no artifactManager or user');
       throw new Error('Not authenticated');
@@ -238,13 +351,15 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [artifactManager, user, refreshProjects]);
 
   // Delete a project
-  const deleteProject = async (projectId: string) => {
+  const deleteProject = useCallback(async (projectId: string) => {
     if (!artifactManager || !user) {
-      console.warn('[ProjectsProvider] Cannot delete project - no artifactManager or user');
-      return;
+      const errorMsg = 'Cannot delete project: Artifact manager or user not available.';
+      console.error(`[ProjectsProvider] ${errorMsg}`);
+      setError(errorMsg);
+      throw new Error(errorMsg);
     }
 
     try {
@@ -272,13 +387,24 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [artifactManager, user, selectedProject, refreshProjects]);
 
   // Get project files
-  const getProjectFiles = async (projectId: string): Promise<ProjectFile[]> => {
+  const getProjectFiles = useCallback(async (projectId: string): Promise<ProjectFile[]> => {
+    // Log values at the start
+    console.log('[ProjectsProvider getProjectFiles Start] Values:', {
+        projectId,
+        hasArtifactManager: !!artifactManager,
+        userId: user?.id
+    });
+    if (projectId === 'in-browser') {
+      return listInBrowserFiles();
+    }
+
     if (!artifactManager || !user) {
-      console.warn('[ProjectsProvider] Cannot get project files - no artifactManager or user');
-      return [];
+      const errorMsg = 'Cannot get project files: Artifact manager or user not available.';
+      console.error(`[ProjectsProvider] ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
     try {
@@ -292,7 +418,10 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const files = fileList.map((file: any) => ({
         name: file.name,
         path: file.name,
-        type: file.type
+        type: file.type,
+        created_at: new Date().toISOString(),
+        modified_at: new Date().toISOString(),
+        size: 0
       }));
 
       console.info('[ProjectsProvider] Fetched files:', files.length);
@@ -301,13 +430,34 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.error('[ProjectsProvider] Error fetching project files:', err);
       throw new Error('Failed to fetch project files');
     }
-  };
+  }, [artifactManager, user, listInBrowserFiles]);
 
   // Upload a file to a project
-  const uploadFile = async (projectId: string, file: File) => {
+  const uploadFile = useCallback(async (projectId: string, file: File) => {
+    // Log values at the start
+    console.log('[ProjectsProvider uploadFile Start] Values:', {
+        projectId,
+        fileName: file.name,
+        hasArtifactManager: !!artifactManager,
+        userId: user?.id
+    });
+    if (projectId === 'in-browser') {
+      try {
+        const content = await file.text();
+        // Try to parse as JSON if it's a notebook file
+        const fileContent = file.name.endsWith('.ipynb') ? JSON.parse(content) : content;
+        await saveInBrowserFile(file.name, fileContent);
+        return;
+      } catch (err) {
+        console.error('[ProjectsProvider] Error uploading in-browser file:', err);
+        throw new Error('Failed to upload in-browser file');
+      }
+    }
+
     if (!artifactManager || !user) {
-      console.warn('[ProjectsProvider] Cannot upload file - no artifactManager or user');
-      return;
+      const errorMsg = 'Cannot upload file: Artifact manager or user not available.';
+      console.error(`[ProjectsProvider] ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
     try {
@@ -336,13 +486,26 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.error('[ProjectsProvider] Error uploading file:', err);
       throw new Error('Failed to upload file');
     }
-  };
+  }, [artifactManager, user, saveInBrowserFile]);
 
   // Delete a file from a project
-  const deleteFile = async (projectId: string, filePath: string) => {
-    if (!artifactManager || !user) {
-      console.warn('[ProjectsProvider] Cannot delete file - no artifactManager or user');
+  const deleteFile = useCallback(async (projectId: string, filePath: string) => {
+    // Log values at the start
+    console.log('[ProjectsProvider deleteFile Start] Values:', {
+        projectId,
+        filePath,
+        hasArtifactManager: !!artifactManager,
+        userId: user?.id
+    });
+    if (projectId === 'in-browser') {
+      await deleteInBrowserFile(filePath);
       return;
+    }
+
+    if (!artifactManager || !user) {
+      const errorMsg = 'Cannot delete file: Artifact manager or user not available.';
+      console.error(`[ProjectsProvider] ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
     try {
@@ -357,13 +520,31 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.error('[ProjectsProvider] Error deleting file:', err);
       throw new Error('Failed to delete file');
     }
-  };
+  }, [artifactManager, user, deleteInBrowserFile]);
 
   // Get file content
-  const getFileContent = async (projectId: string, filePath: string): Promise<string> => {
+  const getFileContent = useCallback(async (projectId: string, filePath: string): Promise<string> => {
+    // Log values at the start - CRITICAL POINT
+    console.log('[ProjectsProvider getFileContent Start] Values:', {
+        projectId,
+        filePath,
+        hasArtifactManager: !!artifactManager,
+        userId: user?.id
+    });
+
+    if (projectId === 'in-browser') {
+      const content = await getInBrowserFileContent(filePath);
+      return typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+    }
+
     if (!artifactManager || !user) {
-      console.warn('[ProjectsProvider] Cannot get file content - no artifactManager or user');
-      return '';
+      const errorMsg = 'Cannot get file content: Artifact manager or user not available.';
+      // Log right before throwing
+      console.error(`[ProjectsProvider getFileContent Check FAILED] ${errorMsg}`, {
+        hasArtifactManager: !!artifactManager,
+        userId: user?.id
+       });
+      throw new Error(errorMsg);
     }
 
     try {
@@ -387,17 +568,25 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.error('[ProjectsProvider] Error fetching file content:', err);
       throw new Error('Failed to fetch file content');
     }
-  };
+  }, [artifactManager, user, getInBrowserFileContent]);
+
+  // Define getInBrowserProject here if needed (it has no dependencies)
+  const getInBrowserProject = () => IN_BROWSER_PROJECT;
 
   // Load projects on mount
   useEffect(() => {
+    // Log values when this effect runs
+    console.log('[ProjectsProvider Initial Load Effect] Running effect. Values:', {
+      hasArtifactManager: !!artifactManager,
+      userId: user?.id
+    });
     if (artifactManager && user) {
-      console.info('[ProjectsProvider] Initial projects load');
+      console.info('[ProjectsProvider] Initial projects load triggered.');
       refreshProjects();
     } else {
-      console.warn('[ProjectsProvider] Skipping initial projects load - no artifactManager or user');
+      console.warn('[ProjectsProvider] Skipping initial projects load - no artifactManager or user.');
     }
-  }, [artifactManager, user]);
+  }, [artifactManager, user, refreshProjects]);
 
   // Log state changes in debug mode
   useEffect(() => {
@@ -424,7 +613,13 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     getFileContent,
     showCreateDialog,
     openCreateDialog: () => setShowCreateDialog(true),
-    closeCreateDialog: () => setShowCreateDialog(false)
+    closeCreateDialog: () => setShowCreateDialog(false),
+    // Add new methods to context
+    getInBrowserProject,
+    saveInBrowserFile,
+    listInBrowserFiles,
+    deleteInBrowserFile,
+    getInBrowserFileContent
   };
 
   return (

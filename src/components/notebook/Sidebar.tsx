@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { FaBook, FaCode, FaFolder, FaSync, FaPlus, FaFile, FaTrash } from 'react-icons/fa';
-import { useProjects, ProjectFile } from '../../providers/ProjectsProvider';
+import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import { FaBook, FaCode, FaFolder, FaSync, FaPlus, FaFile, FaTrash, FaLaptop, FaChevronDown, FaUpload, FaComment } from 'react-icons/fa';
+import { useProjects, ProjectFile, IN_BROWSER_PROJECT } from '../../providers/ProjectsProvider';
 import ProjectFileTree from './ProjectFileTree';
 import { useDropzone } from 'react-dropzone';
 import { useHyphaStore } from '../../store/hyphaStore';
 import ConfirmDialog from '../common/ConfirmDialog';
+import { CellManager } from '../../pages/CellManager';
+import localforage from 'localforage';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -13,6 +15,7 @@ interface SidebarProps {
   onTabChange: (tab: string) => void;
   onResize?: (width: number) => void;
   onSelectFile: (file: ProjectFile) => Promise<void>;
+  onDoubleClickFile: (file: ProjectFile) => Promise<void>;
 }
 
 // Add upload status type
@@ -22,13 +25,43 @@ interface UploadStatus {
   progress?: number;
 }
 
+// Add new interfaces for dropdown menu
+interface DropdownProps {
+  isOpen: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  className?: string;
+}
+
+// Update ProjectFile interface to include id
+interface ExtendedProjectFile extends ProjectFile {
+  id: string;
+  created_at: string;
+  modified_at: string;
+  size: number;
+}
+
+const Dropdown: React.FC<DropdownProps> = ({ isOpen, onClose, children, className }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className={`absolute right-0 mt-2 py-2 w-48 bg-white rounded-md shadow-xl z-20 border border-gray-200 ${className}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+};
+
 const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onToggle,
   activeTab,
   onTabChange,
   onResize,
-  onSelectFile
+  onSelectFile,
+  onDoubleClickFile
 }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -45,26 +78,50 @@ const Sidebar: React.FC<SidebarProps> = ({
     openCreateDialog,
     uploadFile,
     deleteProject,
+    listInBrowserFiles,
+    saveInBrowserFile,
+    getInBrowserProject
   } = useProjects();
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'list' | 'details'>('list');
+  const [inBrowserFiles, setInBrowserFiles] = useState<ProjectFile[]>([]);
+  const [selectedInBrowserFile, setSelectedInBrowserFile] = useState<string | null>(null);
+  const [isInBrowserProject, setIsInBrowserProject] = useState(false);
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const addButtonRef = useRef<HTMLDivElement>(null);
 
   // Load project files when a project is selected
   useEffect(() => {
     const loadProjectFiles = async () => {
+      console.log('[Sidebar Debug] useEffect triggered. Selected project:', selectedProject); // Debug log
       if (!selectedProject) {
+        console.log('[Sidebar Debug] No selected project. Clearing projectFiles.'); // Debug log
         setProjectFiles([]);
         return;
+      }
+      
+      // Add check specifically for in-browser project
+      if (selectedProject.id === IN_BROWSER_PROJECT.id) {
+        console.log('[Sidebar Debug] Selected project is in-browser. Skipping remote fetch.'); // Debug log
+        // Assuming inBrowserFiles are loaded elsewhere and handled correctly by the render logic
+        // If not, in-browser files might need explicit handling here too.
+        return; 
       }
 
       try {
         console.info('[Sidebar] Loading files for project:', selectedProject.id);
+        console.log(`[Sidebar Debug] Calling getProjectFiles for ID: ${selectedProject.id}`); // Debug log
         const files = await getProjectFiles(selectedProject.id);
+        console.log('[Sidebar Debug] Fetched files:', files); // Debug log
         console.info('[Sidebar] Loaded files:', files.length);
-        setProjectFiles(files);
+        setProjectFiles(prevFiles => {
+          console.log('[Sidebar Debug] Updating projectFiles state. Previous:', prevFiles, 'New:', files); // Debug log
+          return files;
+        });
       } catch (error) {
         console.error('Error loading project files:', error);
+        console.log('[Sidebar Debug] Error loading project files:', error); // Debug log
       }
     };
 
@@ -87,11 +144,56 @@ const Sidebar: React.FC<SidebarProps> = ({
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+  // Load InBrowserProject files
+  useEffect(() => {
+    const loadInBrowserFiles = async () => {
+      const files = await listInBrowserFiles();
+      setInBrowserFiles(files.map(f => ({
+        ...f,
+        id: f.path,
+        created_at: new Date().toISOString(),
+        modified_at: new Date().toISOString(),
+        size: 0
+      })));
+    };
+    loadInBrowserFiles();
+  }, [listInBrowserFiles]);
+
+  // Add click outside handler
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (addButtonRef.current && !addButtonRef.current.contains(event.target as Node)) {
+        setIsAddMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Handle project selection
   const handleProjectClick = async (projectId: string) => {
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return;
-    setSelectedProject(project);
+    if (projectId === 'in-browser') {
+      setIsInBrowserProject(true);
+      const inBrowserProject = getInBrowserProject(); 
+      setSelectedProject(inBrowserProject);
+      setSelectedInBrowserFile(null);
+      const files = await listInBrowserFiles();
+      setInBrowserFiles(files.map(f => ({
+        ...f,
+        id: f.path,
+        created_at: new Date().toISOString(),
+        modified_at: new Date().toISOString(),
+        size: 0
+      })));
+    } else {
+      setIsInBrowserProject(false);
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      setSelectedProject(project);
+    }
   };
 
   const handleRefreshProjects = async () => {
@@ -205,6 +307,122 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // Handle creating new chat
+  const handleCreateNewChat = async (isInBrowserFile: boolean) => {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `chat-${timestamp}.ipynb`;
+      const newNotebook = {
+        metadata: {
+          kernelspec: {
+            name: "python3",
+            display_name: "Python 3"
+          },
+          language_info: {
+            name: "python",
+            version: "3.8"
+          },
+          title: "New Chat",
+          created: new Date().toISOString(),
+          modified: new Date().toISOString()
+        },
+        nbformat: 4,
+        nbformat_minor: 5,
+        cells: []
+      };
+
+      if (isInBrowserFile) {
+        // Save to InBrowserProject using provider method
+        await saveInBrowserFile(fileName, newNotebook);
+        
+        // Refresh the file list using provider method
+        const files = await listInBrowserFiles();
+        setInBrowserFiles(files.map(f => ({
+          ...f,
+          id: f.path,
+          created_at: new Date().toISOString(),
+          modified_at: new Date().toISOString(),
+          size: 0
+        })));
+        
+        // Open the new file
+        const newFile: ExtendedProjectFile = {
+          name: fileName,
+          path: fileName,
+          type: 'file',
+          created_at: new Date().toISOString(),
+          modified_at: new Date().toISOString(),
+          size: 0,
+          id: fileName
+        };
+        onSelectFile(newFile);
+      } else if (selectedProject && artifactManager) {
+        // Save to remote project
+        await artifactManager.edit({
+          artifact_id: selectedProject.id,
+          version: "stage",
+          _rkwargs: true
+        });
+        
+        const blob = new Blob([JSON.stringify(newNotebook, null, 2)], { type: 'application/json' });
+        const file = new File([blob], fileName, { type: 'application/json' });
+        await uploadFile(selectedProject.id, file);
+        
+        // Refresh the file list
+        const files = await getProjectFiles(selectedProject.id);
+        setProjectFiles(files);
+        
+        // Open the new file
+        const newFile = files.find(f => f.name === fileName);
+        if (newFile) {
+          onSelectFile(newFile);
+        }
+      }
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+    }
+    setIsAddMenuOpen(false);
+  };
+
+  // Add refresh button click handler
+  const handleRefreshFiles = async () => {
+    if (isInBrowserProject) {
+      const files = await listInBrowserFiles();
+      setInBrowserFiles(files.map(f => ({
+        ...f,
+        id: f.path,
+        created_at: new Date().toISOString(),
+        modified_at: new Date().toISOString(),
+        size: 0
+      })));
+    } else if (selectedProject) {
+      const files = await getProjectFiles(selectedProject.id);
+      setProjectFiles(files);
+    }
+  };
+
+  // Function to refresh the in-browser file list state
+  const refreshInBrowserFiles = useCallback(async () => {
+    console.log('[Sidebar] refreshInBrowserFiles called.'); // Log entry
+    try {
+      const files = await listInBrowserFiles();
+      console.log('[Sidebar] Fetched in-browser files:', files.length); // Log fetched count
+      const mappedFiles = files.map(f => ({
+        ...f,
+        created_at: new Date().toISOString(), // Placeholder
+        modified_at: new Date().toISOString(), // Placeholder
+        size: 0 // Placeholder
+      }));
+      setInBrowserFiles(mappedFiles); // This should trigger re-render
+      console.log('[Sidebar] Called setInBrowserFiles.'); // Log state update call
+    } catch (error) {
+      console.error('[Sidebar] Failed to refresh in-browser files:', error);
+    }
+  }, [listInBrowserFiles]);
+
+  // Determine if the current selected project is the in-browser one
+  const isSelectedProjectInBrowser = selectedProject?.id === IN_BROWSER_PROJECT.id;
+
   if (!isOpen) {
     return null;
   }
@@ -262,7 +480,29 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Projects Section */}
       <div className="flex-1 overflow-y-auto">
-        {/* Projects List */}
+        {/* InBrowserProject */}
+        <div className="py-1">
+          <div
+            className={`flex items-center w-full px-4 py-2 hover:bg-gray-100 transition-colors ${
+              isInBrowserProject ? 'bg-blue-50' : ''
+            }`}
+          >
+            <button
+              onClick={() => handleProjectClick('in-browser')}
+              className={`flex items-center flex-1 ${
+                isInBrowserProject ? 'text-blue-600' : 'text-gray-600'
+              }`}
+              title="In-Browser Project"
+            >
+              <FaLaptop className="w-4 h-4 flex-shrink-0" />
+              <span className="ml-3 text-sm truncate">
+                In-Browser Project
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Remote Projects */}
         <div className="py-1">
           {projects.map((project) => (
             <div
@@ -292,28 +532,37 @@ const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
           ))}
-          {projects.length === 0 && (
+          {projects.length === 0 && !isLoggedIn && (
             <div className="px-4 py-2 text-sm text-gray-400 italic">
-              No projects
+              Log in to see remote projects
+            </div>
+          )}
+          {projects.length === 0 && isLoggedIn && (
+            <div className="px-4 py-2 text-sm text-gray-400 italic">
+              No remote projects
             </div>
           )}
         </div>
 
         {/* Project Details Section */}
-        {selectedProject && (
+        {(selectedProject || isInBrowserProject) && (
           <div className="border-t border-gray-200" {...getRootProps()}>
             <div className="p-2">
               <h3 className="text-sm font-medium text-gray-900 mb-2">
-                {selectedProject.manifest.name}
+                {isInBrowserProject ? 'In-Browser Project' : selectedProject?.manifest.name}
               </h3>
               <p className="text-xs text-gray-500 mb-4">
-                {selectedProject.manifest.description}
+                {isInBrowserProject 
+                  ? 'Local files stored in your browser'
+                  : selectedProject?.manifest.description}
               </p>
               
-              <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
-                <span>Version: {selectedProject.manifest.version}</span>
-                <span>Created: {new Date(selectedProject.manifest.created_at).toLocaleDateString()}</span>
-              </div>
+              {!isInBrowserProject && selectedProject && (
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
+                  <span>Version: {selectedProject.manifest.version}</span>
+                  <span>Created: {new Date(selectedProject.manifest.created_at).toLocaleDateString()}</span>
+                </div>
+              )}
 
               {/* Upload Status */}
               {uploadStatus && (
@@ -342,37 +591,61 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <h4 className="text-xs font-medium text-gray-700">Files</h4>
                   <div className="flex gap-1">
                     <button
-                      onClick={async () => {
-                        if (!selectedProject) return;
-                        const files = await getProjectFiles(selectedProject.id);
-                        setProjectFiles(files);
-                      }}
+                      onClick={handleRefreshFiles}
                       className="p-1 rounded-md hover:bg-gray-100 cursor-pointer text-gray-600 transition-colors"
                       title="Refresh files"
                     >
                       <FaSync className="w-3 h-3" />
                     </button>
-                    <label className="p-1 rounded-md hover:bg-gray-100 cursor-pointer text-gray-600 transition-colors">
-                      <input
-                        type="file"
-                        multiple
-                        onChange={(e) => {
-                          if (e.target.files) {
-                            onDrop(Array.from(e.target.files));
-                          }
-                        }}
-                        className="hidden"
-                        title="Upload files"
-                      />
-                      <FaPlus className="w-3 h-3" />
-                    </label>
+                    <div className="relative" ref={addButtonRef}>
+                      <button
+                        onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
+                        className="p-1 rounded-md hover:bg-gray-100 cursor-pointer text-gray-600 transition-colors flex items-center"
+                        title="Add new item"
+                      >
+                        <FaPlus className="w-3 h-3" />
+                        <FaChevronDown className="w-2 h-2 ml-1" />
+                      </button>
+                      <Dropdown 
+                        isOpen={isAddMenuOpen} 
+                        onClose={() => setIsAddMenuOpen(false)}
+                        className="text-sm"
+                      >
+                        <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
+                          {isInBrowserProject ? 'In-Browser Project' : selectedProject?.manifest.name}
+                        </div>
+                        <button
+                          onClick={() => handleCreateNewChat(isInBrowserProject)}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
+                        >
+                          <FaComment className="w-3 h-3 mr-2" />
+                          <span>New Chat</span>
+                        </button>
+                        <label className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center cursor-pointer">
+                          <FaUpload className="w-3 h-3 mr-2" />
+                          <span>Upload File</span>
+                          <input
+                            type="file"
+                            multiple
+                            onChange={(e) => {
+                              if (e.target.files) {
+                                onDrop(Array.from(e.target.files));
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      </Dropdown>
+                    </div>
                   </div>
                 </div>
                 <div className="h-[300px] min-h-[200px] overflow-y-auto relative border border-gray-100 rounded-md p-2">
                   <ProjectFileTree
-                    key={projectFiles.length}
-                    files={projectFiles}
+                    key={selectedProject?.id === IN_BROWSER_PROJECT.id ? 'in-browser-tree' : selectedProject?.id}
+                    files={selectedProject?.id === IN_BROWSER_PROJECT.id ? inBrowserFiles : projectFiles}
                     onSelectFile={onSelectFile}
+                    onDoubleClickFile={onDoubleClickFile}
+                    onRefreshInBrowserFiles={selectedProject?.id === IN_BROWSER_PROJECT.id ? refreshInBrowserFiles : undefined}
                   />
                 </div>
               </div>
