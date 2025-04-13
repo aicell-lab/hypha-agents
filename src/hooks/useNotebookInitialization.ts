@@ -49,8 +49,13 @@ export function useNotebookInitialization({
   useEffect(() => {
     // --- PRIMARY GUARD: Only run this effect once ---
     if (hasInitialized.current) {
+      console.log('[useNotebookInit] Initialization already attempted, skipping effect run.');
       return;
     }
+    // --- Mark initialization as attempted immediately ---
+    // This prevents re-entry if dependencies change while async operations are pending.
+    hasInitialized.current = true;
+    console.log('[useNotebookInit] Marked initialization as attempted.');
 
     const urlProjectId = searchParams.get('projectId');
     const urlFilePath = searchParams.get('filePath');
@@ -58,7 +63,7 @@ export function useNotebookInitialization({
     // --- Logic to determine initial load target ---
     const determineInitialLoad = async () => {
       let loadAttempted = false;
-      let initializationFinalized = false;
+      let initializationFinalized = false; // Tracks if a final state (load/default) was reached
 
       // Determine if dependencies are ready for a potential remote load
       const dependenciesReady = initialLoadComplete;
@@ -68,6 +73,9 @@ export function useNotebookInitialization({
         console.log('[useNotebookInit] Attempting load from URL:', { urlProjectId, urlFilePath });
         if (urlProjectId !== IN_BROWSER_PROJECT.id && !dependenciesReady) {
           console.log('[useNotebookInit] Waiting for project load before processing URL...');
+          // Reset the flag so the effect can run again when dependencies ARE ready
+          hasInitialized.current = false;
+          console.log('[useNotebookInit] Resetting initialization attempted flag due to pending dependencies.');
           return; // Defer until projects are loaded
         }
         try {
@@ -93,6 +101,9 @@ export function useNotebookInitialization({
 
             if (lastProjectId !== IN_BROWSER_PROJECT.id && !dependenciesReady) {
               console.log('[useNotebookInit] Waiting for project load before processing last state...');
+              // Reset the flag so the effect can run again when dependencies ARE ready
+              hasInitialized.current = false;
+              console.log('[useNotebookInit] Resetting initialization attempted flag due to pending dependencies for last state.');
               return; // Defer until projects are loaded
             }
 
@@ -146,25 +157,34 @@ export function useNotebookInitialization({
         }
       }
 
-      // --- Finalization Guard ---
-      // Only set hasInitialized to true if the process determined a final state (load attempt or default)
+      // --- Finalization Notification ---
+      // Log if the initialization process reached a concluding state
       if (initializationFinalized) {
-         hasInitialized.current = true;
          console.log('[useNotebookInit] Initialization sequence complete.');
+      } else {
+        // This case should ideally not happen if the logic covers all paths
+        // but indicates the init process didn't conclude with a load/default action.
+        console.warn('[useNotebookInit] Initialization sequence finished without a final load action.');
       }
     };
 
-    // Run initialization logic only when login status is known and dependencies are met
+    // Run initialization logic only when login status is known and dependencies are met,
+    // but *only* if initialization hasn't been successfully marked as attempted yet.
     if (isLoggedIn !== null && initialLoadComplete) {
+        console.log('[useNotebookInit] Conditions met (logged in, projects loaded), proceeding with load determination.');
         determineInitialLoad();
     } else if (isLoggedIn !== null && !initialLoadComplete && urlProjectId === IN_BROWSER_PROJECT.id) {
         // Allow in-browser URL load even if remote projects aren't finished loading
+        console.log('[useNotebookInit] Conditions met (logged in, in-browser project), proceeding with load determination.');
         determineInitialLoad();
     } else if (isLoggedIn !== null && !initialLoadComplete && !urlProjectId) {
         // Allow last state/default load check even if remote projects aren't finished
+        console.log('[useNotebookInit] Conditions met (logged in, no specific project requested), proceeding with fallback load determination.');
         determineInitialLoad();
     } else {
-        console.log('[useNotebookInit] Waiting for login/initial project load...', { isLoggedIn, initialLoadComplete });
+        // If conditions aren't met, reset the flag so it can try again when they are.
+        hasInitialized.current = false;
+        console.log('[useNotebookInit] Waiting for login/initial project load... Resetting init attempt flag.', { isLoggedIn, initialLoadComplete });
     }
 
   }, [
@@ -182,5 +202,5 @@ export function useNotebookInitialization({
     cellManagerRef
   ]);
 
-  return hasInitialized;
+  return hasInitialized; // Note: This ref now indicates if an attempt *started*, not if it *completed*.
 } 
