@@ -36,6 +36,9 @@ import Sidebar from '../components/notebook/Sidebar';
 import type { Project as BaseProject, ProjectFile } from '../providers/ProjectsProvider';
 import { ProjectsProvider, useProjects, IN_BROWSER_PROJECT } from '../providers/ProjectsProvider'; // Import constant
 
+// Import setupNotebookService
+import { setupNotebookService } from '../components/services/hyphaCoreServices';
+
 // Add CellRole enum values
 const CELL_ROLES = {
   THINKING: 'thinking' as CellRole,
@@ -128,6 +131,22 @@ const NotebookPage: React.FC = () => {
 
   // Simplified sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // --- Define handleAddWindow callback ---
+  const handleAddWindow = useCallback((config: HyphaCoreWindow) => {
+    setHyphaCoreWindows((prev) => {
+      // Check if a window with the same id already exists
+      if (prev.some(win => win.id === config.id)) {
+        return prev; // If it exists, return the previous state unchanged
+      }
+      // If it doesn't exist, add the new window configuration
+      return [...prev, config];
+    });
+    // Optionally, activate the new window/tab and show the panel
+    setActiveCanvasTab(config.id);
+    setShowCanvasPanel(true);
+  }, [setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]); // Dependencies for the callback
+
 
   if (!cellManager.current) {
     cellManager.current = new CellManager(
@@ -379,6 +398,9 @@ const NotebookPage: React.FC = () => {
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
 
+      // Reset the hyphaCoreApi state to trigger re-initialization
+      setHyphaCoreApi(null);
+
       showToast('Kernel state reset successfully', 'success');
       // Keep AI ready state as true, kernel is still technically ready
       // setIsAIReady(true);
@@ -537,6 +559,9 @@ const NotebookPage: React.FC = () => {
           .then(() => console.log(`Saved uploaded file to in-browser: ${newFilePath}`))
           .catch(err => console.error(`Failed to auto-save uploaded file: ${err}`));
 
+        // Make sure project context is updated after loading from file
+        setSelectedProject(getInBrowserProject());
+
         // Reset kernel state after loading and saving
         // await handleRestartKernel(); // Use reset instead
         await handleResetKernelState();
@@ -662,9 +687,8 @@ const NotebookPage: React.FC = () => {
       }
     };
     executeSystemCell();
-    // Keep dependencies: effect needs to run when kernel is ready or cells change initially.
-    // The ref check prevents infinite loops after the flag is set.
-  }, [isReady, cells, hasInitializedRef]);
+    // Dependencies remain important here
+  }, [isReady, cells, hasInitializedRef, cellManager]); // Added cellManager dependency
 
   // New hook to set AI readiness based on kernel readiness
   useEffect(() => {
@@ -736,6 +760,59 @@ const NotebookPage: React.FC = () => {
     const parts = notebookMetadata.filePath.split('/');
     return parts[parts.length - 1] || 'Untitled_Chat'; // Fallback if split fails unexpectedly
   }, [notebookMetadata.filePath]); // Recalculate only when filePath changes
+
+  // --- Effect to setup Hypha Core notebook service after login and kernel ready ---
+  useEffect(() => {
+    const setupService = async () => {
+      // Guard clauses: ensure all necessary components are ready and service isn't already set up
+      if (!isLoggedIn || !server || !isReady || hyphaCoreApi || !cellManager.current || !executeCode) {
+        console.log('[AgentLab] Setup Service check failed:', {
+          isLoggedIn,
+          server: !!server,
+          isReady,
+          hyphaCoreApi: !!hyphaCoreApi,
+          cellManager: !!cellManager.current,
+          executeCode: !!executeCode
+        });
+        return;
+      }
+
+      console.log('[AgentLab] Conditions met, attempting to set up notebook service...');
+      showToast('Connecting Hypha Core Service...', 'loading');
+
+      try {
+        const api = await setupNotebookService({
+          onAddWindow: handleAddWindow, // Pass the callback
+          server,
+          executeCode, // Pass the wrapped executeCode from cellManager
+          agentSettings,
+          // abortSignal: abortControllerRef.current?.signal // Optional: Add abort signal if needed
+        });
+        setHyphaCoreApi(api); // Store the API object
+        console.log('[AgentLab] Hypha Core service successfully set up.');
+        showToast('Hypha Core Service Connected', 'success');
+      } catch (error) {
+        console.error('[AgentLab] Failed to set up notebook service:', error);
+        showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        // Optionally reset hyphaCoreApi state on failure
+        setHyphaCoreApi(null);
+      }
+    };
+
+    setupService();
+
+    // Dependencies for this effect
+  }, [
+    isLoggedIn,
+    server,
+    isReady, // Kernel readiness from useThebe
+    executeCode, // Added executeCode from useThebe as dependency
+    agentSettings,
+    hyphaCoreApi, // Prevent re-running if already set up
+    // Keep cellManager ref object itself as dependency
+    cellManager, // Ensure cellManager ref object is stable
+    handleAddWindow, // Callback dependency
+  ]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
