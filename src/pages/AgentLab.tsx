@@ -251,11 +251,13 @@ const NotebookPage: React.FC = () => {
           projectId: resolvedProjectId
         }));
 
-        // --- Explicitly update URL params after successful load ---
-        setSearchParams(
-          { projectId: resolvedProjectId, filePath: filePath },
-          { replace: true }
-        );
+        // --- Explicitly update URL params after successful load using new names ---
+        const paramsToSet: Record<string, string> = { file: filePath };
+        // Only add project if it's not the 'in-browser' one
+        if (resolvedProjectId !== IN_BROWSER_PROJECT.id) {
+          paramsToSet.project = resolvedProjectId;
+        }
+        setSearchParams(paramsToSet, { replace: true });
         // --- End URL update ---
 
         const visibleCells = loadedCells.filter(cell => cell.metadata?.role !== CELL_ROLES.THINKING);

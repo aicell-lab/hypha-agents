@@ -10,7 +10,8 @@ interface UseUrlSyncProps {
 
 /**
  * Custom hook to synchronize the browser URL search parameters
- * with the current notebook's state (projectId, filePath).
+ * with the current notebook's state (project, file).
+ * If the projectId is 'in-browser', the 'project' param is omitted from the URL.
  * Also persists the last opened state to local storage.
  */
 export function useUrlSync({
@@ -29,30 +30,41 @@ export function useUrlSync({
     const currentFilePath = notebookMetadata.filePath;
 
     // Determine target URL state based on current metadata
-    let targetProjectId: string | null = null;
-    let targetFilePath: string | null = null;
+    let targetProjectForUrl: string | null = null;
+    let targetFileForUrl: string | null = null;
 
     if (currentProjectId && currentFilePath) {
-      targetProjectId = currentProjectId;
-      targetFilePath = currentFilePath;
+      // Omit 'in-browser' projectId from URL
+      targetProjectForUrl = currentProjectId === 'in-browser' ? null : currentProjectId;
+      targetFileForUrl = currentFilePath;
     }
 
-    // Get current URL params
-    const urlProjectId = searchParams.get('projectId');
-    const urlFilePath = searchParams.get('filePath');
+    // Get current URL params using new names
+    const urlProject = searchParams.get('project');
+    const urlFile = searchParams.get('file');
 
-    // Only update if the URL params need changing
-    if (urlProjectId !== targetProjectId || urlFilePath !== targetFilePath) {
-      if (targetProjectId && targetFilePath) {
-        console.log('[useUrlSync] Updating URL params from state:', { targetProjectId, targetFilePath });
-        setSearchParams({ projectId: targetProjectId, filePath: targetFilePath }, { replace: true });
-        // Persist the last opened state
-        localforage.setItem('lastNotebookState', { projectId: targetProjectId, filePath: targetFilePath })
-          .catch(err => console.error('Failed to save last notebook state:', err));
+    // Check if URL parameters need updating
+    const needsUpdate = urlProject !== targetProjectForUrl || urlFile !== targetFileForUrl;
+
+    if (needsUpdate) {
+      if (targetFileForUrl) { // We always need 'file' if there's a valid notebook
+        const paramsToSet: Record<string, string> = { file: targetFileForUrl };
+        if (targetProjectForUrl) {
+          paramsToSet.project = targetProjectForUrl; // Use 'project' key
+        }
+        console.log('[useUrlSync] Updating URL params from state:', paramsToSet);
+        setSearchParams(paramsToSet, { replace: true });
+
+        // Persist the *actual* last opened state, including 'in-browser' projectId
+        // Local storage still uses the original keys
+        if (currentProjectId && currentFilePath) {
+          localforage.setItem('lastNotebookState', { projectId: currentProjectId, filePath: currentFilePath })
+            .catch(err => console.error('Failed to save last notebook state:', err));
+        }
       } else {
         // If state represents an unsaved/invalid notebook, clear URL params
-        if (urlProjectId || urlFilePath) { // Only clear if params exist
-          console.log('[useUrlSync] Clearing URL params (no valid file path/project in metadata).');
+        if (urlProject || urlFile) { // Check existing new param names
+          console.log('[useUrlSync] Clearing URL params (no valid file/project in metadata).');
           setSearchParams({}, { replace: true });
           // Clear last state as well
           localforage.removeItem('lastNotebookState')

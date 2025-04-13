@@ -27,7 +27,7 @@ interface UseNotebookInitializationProps {
 
 /**
  * Custom hook to handle the initial loading logic for the notebook.
- * Determines whether to load from URL params, local storage (last state), or a default state.
+ * Determines whether to load from URL params (project, file), local storage (last state), or a default state.
  * Returns a ref indicating whether initialization has completed.
  */
 export function useNotebookInitialization({
@@ -57,8 +57,9 @@ export function useNotebookInitialization({
     hasInitialized.current = true;
     console.log('[useNotebookInit] Marked initialization as attempted.');
 
-    const urlProjectId = searchParams.get('projectId');
-    const urlFilePath = searchParams.get('filePath');
+    // --- Read NEW parameter names ---
+    const urlProject = searchParams.get('project');
+    const urlFile = searchParams.get('file');
 
     // --- Logic to determine initial load target ---
     const determineInitialLoad = async () => {
@@ -68,10 +69,11 @@ export function useNotebookInitialization({
       // Determine if dependencies are ready for a potential remote load
       const dependenciesReady = initialLoadComplete;
 
-      if (urlProjectId && urlFilePath) {
+      // --- Use NEW parameter names in the condition ---
+      if (urlProject && urlFile) {
         // --- Attempt 1: Load from URL ---
-        console.log('[useNotebookInit] Attempting load from URL:', { urlProjectId, urlFilePath });
-        if (urlProjectId !== IN_BROWSER_PROJECT.id && !dependenciesReady) {
+        console.log('[useNotebookInit] Attempting load from URL:', { urlProject, urlFile });
+        if (urlProject !== IN_BROWSER_PROJECT.id && !dependenciesReady) {
           console.log('[useNotebookInit] Waiting for project load before processing URL...');
           // Reset the flag so the effect can run again when dependencies ARE ready
           hasInitialized.current = false;
@@ -79,7 +81,8 @@ export function useNotebookInitialization({
           return; // Defer until projects are loaded
         }
         try {
-          await loadNotebookContent(urlProjectId, urlFilePath);
+          // --- Pass NEW parameter names to load function ---
+          await loadNotebookContent(urlProject, urlFile);
           loadAttempted = true;
           initializationFinalized = true; // Assume success finalizes init
         } catch (error) {
@@ -88,11 +91,25 @@ export function useNotebookInitialization({
           // Reset state is handled within loadNotebookContent on error
           initializationFinalized = true; // Finalize even on error to prevent loops
         }
+      } else if (urlFile && !urlProject) {
+          // --- Handle case: Only 'file' param is present (implies 'in-browser' project) ---
+          console.log('[useNotebookInit] Attempting load from URL (in-browser implied):', { urlFile });
+          try {
+            // Load with undefined projectId, which loadNotebookContent resolves to IN_BROWSER_PROJECT.id
+            await loadNotebookContent(undefined, urlFile);
+            loadAttempted = true;
+            initializationFinalized = true;
+          } catch (error) {
+            console.error('[useNotebookInit] Error loading from URL (in-browser implied):', error);
+            loadAttempted = true;
+            initializationFinalized = true;
+          }
       } else {
         // --- Attempt 2: Load from Local Storage (Last State) ---
         console.log('[useNotebookInit] No URL params, checking last state.');
         let loadedFromLastState = false;
         try {
+          // Local storage still uses projectId/filePath keys
           const lastState = await localforage.getItem<{ projectId: string | null, filePath: string | null }>('lastNotebookState');
           if (lastState?.filePath) {
             const lastProjectId = lastState.projectId || IN_BROWSER_PROJECT.id;
@@ -112,6 +129,7 @@ export function useNotebookInitialization({
             if (projectExists) {
               console.log('[useNotebookInit Fallback] Attempting to load from last state...');
               try {
+                // loadNotebookContent expects projectId/filePath internally
                 await loadNotebookContent(lastProjectId, lastFilePath);
                 loadAttempted = true;
                 loadedFromLastState = true;
@@ -173,13 +191,11 @@ export function useNotebookInitialization({
     if (isLoggedIn !== null && initialLoadComplete) {
         console.log('[useNotebookInit] Conditions met (logged in, projects loaded), proceeding with load determination.');
         determineInitialLoad();
-    } else if (isLoggedIn !== null && !initialLoadComplete && urlProjectId === IN_BROWSER_PROJECT.id) {
-        // Allow in-browser URL load even if remote projects aren't finished loading
-        console.log('[useNotebookInit] Conditions met (logged in, in-browser project), proceeding with load determination.');
+    } else if (isLoggedIn !== null && !initialLoadComplete && urlFile && !urlProject) { // Allow in-browser URL load even if remote projects aren't finished loading
+        console.log('[useNotebookInit] Conditions met (logged in, in-browser file param), proceeding with load determination.');
         determineInitialLoad();
-    } else if (isLoggedIn !== null && !initialLoadComplete && !urlProjectId) {
-        // Allow last state/default load check even if remote projects aren't finished
-        console.log('[useNotebookInit] Conditions met (logged in, no specific project requested), proceeding with fallback load determination.');
+    } else if (isLoggedIn !== null && !initialLoadComplete && !urlProject && !urlFile) { // Allow last state/default load check even if remote projects aren't finished
+        console.log('[useNotebookInit] Conditions met (logged in, no project/file requested), proceeding with fallback load determination.');
         determineInitialLoad();
     } else {
         // If conditions aren't met, reset the flag so it can try again when they are.
