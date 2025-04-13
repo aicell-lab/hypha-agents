@@ -230,6 +230,12 @@ export function useChatCompletion({
       // Wait a small tick to ensure deletion is complete
       await new Promise(resolve => setTimeout(resolve, 0));
 
+      // Update references and process chat completion
+      const messages = getConversationHistory(cellId);
+      messages.push({
+        role: 'user',
+        content: messageContent,
+      });
       // Add the new cell at the same position as the old one
       const newCellId = cellManager.addCell(
         'markdown',
@@ -240,8 +246,7 @@ export function useChatCompletion({
         currentIndex
       );
 
-      // Update references and process chat completion
-      const messages = getConversationHistory(newCellId);
+
       await processChatCompletion({
         messages,
         userCellId: newCellId,
@@ -270,13 +275,13 @@ export function useChatCompletion({
       setInitializationError("AI assistant is not ready. Please wait.");
       return;
     }
-
-    const userCellId = cellManager.addCell('markdown', message, 'user');
-    const messages = getConversationHistory(userCellId);
+    const activeCellId = cellManager.activeCellId;
+    const messages = getConversationHistory(activeCellId || undefined);
     messages.push({
       role: 'user',
       content: message,
     });
+    const userCellId = cellManager.addCell('markdown', message, 'user');
 
     await processChatCompletion({
       messages,
