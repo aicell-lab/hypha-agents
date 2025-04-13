@@ -229,66 +229,188 @@ const Sidebar: React.FC<SidebarProps> = ({
     e.preventDefault();
   }, [onResize, isMobile]);
 
+  // Function to refresh the in-browser file list state
+  const refreshInBrowserFiles = useCallback(async () => {
+    // console.log('[Sidebar] refreshInBrowserFiles called.'); // Removed simple call log
+    setIsLoadingFiles(true); // Set loading
+    try {
+      const files = await listInBrowserFiles();
+      console.info('[Sidebar] Fetched in-browser files:', files.length); // Keep info
+      const mappedFiles = files.map(f => ({
+        ...f,
+        id: f.path, // Ensure ID is set
+        created_at: new Date().toISOString(), // Placeholder
+        modified_at: new Date().toISOString(), // Placeholder
+        size: 0 // Placeholder
+      }));
+      setInBrowserFiles(mappedFiles); // This should trigger re-render
+      // console.log('[Sidebar] Called setInBrowserFiles.'); // Removed simple call log
+    } catch (error) {
+      console.error('[Sidebar] Failed to refresh in-browser files:', error); // Keep error
+    } finally {
+      setIsLoadingFiles(false); // Unset loading
+    }
+  }, [listInBrowserFiles]);
+
   // Add file upload handler
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (!selectedProject || !artifactManager) return;
-
-    try {
-      setUploadStatus({
-        message: 'Preparing for upload...',
-        severity: 'info'
-      });
-
-      await artifactManager.edit({
-        artifact_id: selectedProject.id,
-        version: "stage",
-        _rkwargs: true
-      });
+    // Check if it's the in-browser project FIRST
+    if (isInBrowserProject) {
+      setUploadStatus({ message: 'Processing files for browser storage...', severity: 'info' });
+      let successCount = 0;
+      let errorCount = 0;
 
       for (const file of acceptedFiles) {
         try {
-          setUploadStatus({
-            message: `Uploading ${file.name}...`,
-            severity: 'info'
+          setUploadStatus({ message: `Reading ${file.name}...`, severity: 'info', progress: 0 });
+          
+          // Use FileReader to read the file content
+          const reader = new FileReader();
+          
+          // Create a promise to handle async FileReader
+          const readPromise = new Promise<string | ArrayBuffer | null>((resolve, reject) => {
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = (error) => reject(error);
+            
+            // Read as text for now, might need adjustments for binary files later
+            // Consider checking file.type if binary support is needed
+            reader.readAsText(file); 
           });
 
-          await uploadFile(selectedProject.id, file);
+          const fileContent = await readPromise;
 
-          setUploadStatus({
-            message: `${file.name} uploaded successfully`,
-            severity: 'success'
-          });
+          if (fileContent === null) {
+            throw new Error(`Failed to read file content for ${file.name}`);
+          }
+          
+          setUploadStatus({ message: `Saving ${file.name} to browser...`, severity: 'info' });
+
+          // Assume saveInBrowserFile takes name and content (string | ArrayBuffer)
+          await saveInBrowserFile(file.name, fileContent); 
+          
+          successCount++;
+          setUploadStatus({ message: `${file.name} saved successfully`, severity: 'success' });
+          
         } catch (error) {
-          console.error('Error uploading file:', error);
-          setUploadStatus({
-            message: `Error uploading ${file.name}`,
-            severity: 'error'
-          });
-          continue;
+          console.error(`Error processing file ${file.name} for in-browser storage:`, error);
+          setUploadStatus({ message: `Error saving ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`, severity: 'error' });
+          errorCount++;
+          // Continue to next file even if one fails
         }
       }
 
-      const files = await getProjectFiles(selectedProject.id);
-      setProjectFiles(files);
+      // Refresh the list after processing all files
+      await refreshInBrowserFiles(); 
 
-      setTimeout(() => {
-        setUploadStatus(null);
-      }, 2000);
+      // Final status message
+      if (errorCount > 0) {
+        setUploadStatus({ message: `Completed: ${successCount} files saved, ${errorCount} errors.`, severity: 'error' });
+      } else {
+        setUploadStatus({ message: `All ${successCount} files saved successfully.`, severity: 'success' });
+      }
+      
+      setTimeout(() => setUploadStatus(null), errorCount > 0 ? 5000 : 3000); // Show error longer
 
-    } catch (error) {
-      console.error('Error preparing project for upload:', error);
-      setUploadStatus({
-        message: 'Failed to prepare for upload. Please try again.',
-        severity: 'error'
-      });
+    } else {
+      // --- Existing Remote Upload Logic ---
+      if (!selectedProject || !artifactManager) {
+        console.warn("Cannot upload: No remote project selected or artifact manager unavailable.");
+        setUploadStatus({ message: "Select a remote project first.", severity: 'error' });
+        setTimeout(() => setUploadStatus(null), 3000);
+        return;
+      }
+
+      try {
+        setUploadStatus({
+          message: 'Preparing remote project for upload...',
+          severity: 'info'
+        });
+
+        await artifactManager.edit({
+          artifact_id: selectedProject.id,
+          version: "stage",
+          _rkwargs: true
+        });
+
+        let uploadSuccessCount = 0;
+        let uploadErrorCount = 0;
+        
+        for (const file of acceptedFiles) {
+          try {
+            setUploadStatus({
+              message: `Uploading ${file.name} to ${selectedProject.manifest.name}...`,
+              severity: 'info'
+            });
+
+            await uploadFile(selectedProject.id, file);
+            uploadSuccessCount++;
+
+            setUploadStatus({
+              message: `${file.name} uploaded successfully`,
+              severity: 'success'
+            });
+            // Short delay for success message before next upload
+            await new Promise(resolve => setTimeout(resolve, 500)); 
+
+          } catch (error) {
+            console.error(`Error uploading file ${file.name}:`, error);
+            uploadErrorCount++;
+            setUploadStatus({
+              message: `Error uploading ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              severity: 'error'
+            });
+            // Longer delay on error to allow user to read
+             await new Promise(resolve => setTimeout(resolve, 2000)); 
+            // Optional: Decide whether to continue or stop on error
+            // continue; 
+          }
+        }
+
+        // Refresh remote file list only if there were successful uploads or if needed regardless
+        if (uploadSuccessCount > 0 || acceptedFiles.length > 0) {
+            setUploadStatus({ message: "Refreshing remote file list...", severity: 'info' });
+            const files = await getProjectFiles(selectedProject.id);
+            setProjectFiles(files);
+        }
+
+        // Final status for remote upload
+        if (uploadErrorCount > 0) {
+            setUploadStatus({ message: `Remote Upload Complete: ${uploadSuccessCount} succeeded, ${uploadErrorCount} failed.`, severity: 'error' });
+        } else if (uploadSuccessCount > 0) {
+            setUploadStatus({ message: `Remote Upload Complete: ${uploadSuccessCount} files uploaded.`, severity: 'success' });
+        } else {
+             // Case where no files were processed (e.g., initial try block failed)
+            setUploadStatus(null); // Or set a specific message
+        }
+
+        setTimeout(() => {
+          setUploadStatus(null);
+        }, uploadErrorCount > 0 ? 5000 : 3000); // Show error longer
+
+      } catch (error) {
+        console.error('Error preparing project for upload:', error);
+        setUploadStatus({
+          message: `Failed to prepare project for upload: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          severity: 'error'
+        });
+         setTimeout(() => setUploadStatus(null), 5000);
+      }
     }
-  }, [selectedProject, uploadFile, getProjectFiles, artifactManager]);
+  }, [
+    selectedProject, 
+    uploadFile, 
+    getProjectFiles, 
+    artifactManager, 
+    isInBrowserProject, 
+    saveInBrowserFile, 
+    refreshInBrowserFiles // Add new dependencies
+  ]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
     noClick: true,
     noKeyboard: true,
-    disabled: !selectedProject
+    disabled: !selectedProject && !isInBrowserProject // Allow drop for in-browser
   });
 
   // Handle project deletion
@@ -430,29 +552,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       setIsLoadingFiles(false); // Unset loading
     }
   };
-
-  // Function to refresh the in-browser file list state
-  const refreshInBrowserFiles = useCallback(async () => {
-    // console.log('[Sidebar] refreshInBrowserFiles called.'); // Removed simple call log
-    setIsLoadingFiles(true); // Set loading
-    try {
-      const files = await listInBrowserFiles();
-      console.info('[Sidebar] Fetched in-browser files:', files.length); // Keep info
-      const mappedFiles = files.map(f => ({
-        ...f,
-        id: f.path, // Ensure ID is set
-        created_at: new Date().toISOString(), // Placeholder
-        modified_at: new Date().toISOString(), // Placeholder
-        size: 0 // Placeholder
-      }));
-      setInBrowserFiles(mappedFiles); // This should trigger re-render
-      // console.log('[Sidebar] Called setInBrowserFiles.'); // Removed simple call log
-    } catch (error) {
-      console.error('[Sidebar] Failed to refresh in-browser files:', error); // Keep error
-    } finally {
-      setIsLoadingFiles(false); // Unset loading
-    }
-  }, [listInBrowserFiles]);
 
   // Determine if the current selected project is the in-browser one
   const isSelectedProjectInBrowser = selectedProject?.id === IN_BROWSER_PROJECT.id;
