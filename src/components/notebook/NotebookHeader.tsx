@@ -74,12 +74,12 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
             </svg>
           </Link>
           {/* Always show Agent Lab */}
-          <h1 className="text-lg font-medium text-gray-900">Agent Lab</h1>
+          <h1 className="text-base font-medium text-gray-900">Agent Lab</h1>
           {/* Show file name on medium and larger screens */}
           <div className="hidden md:flex items-center">
             <div className="h-5 w-px bg-gray-200 mx-1"></div>
             <span
-              className="text-lg font-medium bg-transparent border-none px-1 text-gray-600 truncate"
+              className="text-lg font-medium bg-transparent border-none px-1 text-gray-600 truncate max-w-xs inline-block"
               title={fileName}
             >
               {fileName || 'Untitled_Chat'}
