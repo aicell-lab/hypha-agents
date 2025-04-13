@@ -107,8 +107,7 @@
   left: 8px; /* Align with the child indent strip */
 }
 
-.child-cell::before,
-.child-cell::after {
+.child-cell::before {
   content: '';
   position: absolute;
   top: 0;
