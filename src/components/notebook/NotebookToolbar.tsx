@@ -134,8 +134,8 @@ export const CellControls: React.FC<CellControlsProps> = ({
 );
 
 export const LoginSection: React.FC = () => (
-  <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
-    <LoginButton className="scale-75 z-100" />
+  <div className="flex items-center ml-1 border-l border-gray-200 pl-1 z-10">
+    <LoginButton className="scale-75" />
   </div>
 );
 
@@ -152,7 +152,8 @@ export interface NotebookToolbarProps {
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
   isProcessing: boolean;
-  isReady: boolean;
+  isKernelReady: boolean;
+  isAIReady: boolean;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
 }
@@ -175,7 +176,8 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
   isProcessing,
-  isReady,
+  isKernelReady,
+  isAIReady,
   onToggleSidebar,
   isSidebarOpen,
   isOpen,
@@ -332,7 +334,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
         </button>
         <button
           onClick={onRestartKernel}
-          disabled={!isReady || isProcessing}
+          disabled={!isKernelReady || isProcessing}
           className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
         >
           <FaRedo className="w-3.5 h-3.5 mr-2" />
@@ -367,7 +369,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
   isProcessing,
-  isReady,
+  isKernelReady,
+  isAIReady,
   onToggleSidebar,
   isSidebarOpen
 }) => {
@@ -383,7 +386,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           onClearOutputs={onClearOutputs}
           onRestartKernel={onRestartKernel}
           isProcessing={isProcessing}
-          isReady={isReady}
+          isReady={isKernelReady}
         />
         <CellControls
           onAddCodeCell={onAddCodeCell}
@@ -417,6 +420,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
               <FaPlay className="w-3.5 h-3.5" />
             )}
           </button>
+          <LoginSection />
         </div>
 
         {/* Mobile menu button and dropdown */}
@@ -442,7 +446,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onAddMarkdownCell={onAddMarkdownCell}
             onShowKeyboardShortcuts={onShowKeyboardShortcuts}
             isProcessing={isProcessing}
-            isReady={isReady}
+            isKernelReady={isKernelReady}
+            isAIReady={isAIReady}
             onToggleSidebar={onToggleSidebar}
             isSidebarOpen={isSidebarOpen}
             isOpen={isDropdownOpen}

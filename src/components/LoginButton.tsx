@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useHyphaStore } from '../store/hyphaStore';
 import { UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 import { RiLoginBoxLine } from 'react-icons/ri';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { Spinner } from './Spinner';
 
@@ -29,11 +29,14 @@ const getSavedToken = () => {
   return null;
 };
 
+const REDIRECT_PATH_KEY = 'redirectPath'; // Define key for sessionStorage
+
 export default function LoginButton({ className = '' }: LoginButtonProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const { client, user, connect, setUser, server } = useHyphaStore();
   const navigate = useNavigate();
+  const location = useLocation(); // Get location
 
   // Add click outside handler to close dropdown
   useEffect(() => {
@@ -55,6 +58,7 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
       // Clear any auth tokens or user data from localStorage
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      sessionStorage.removeItem(REDIRECT_PATH_KEY); // Clear redirect path on logout
       
       // Perform existing logout logic
       setUser(null);
@@ -92,6 +96,13 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
   };
 
   const handleLogin = useCallback(async () => {
+    // Store the intended path BEFORE initiating login
+    // Use location.hash which includes '#/...' for HashRouter
+    if (location.hash && location.hash !== '#/') {
+      sessionStorage.setItem(REDIRECT_PATH_KEY, location.hash);
+      console.log(`[LoginButton] Stored redirect path: ${location.hash}`); // Debug log
+    }
+
     setIsLoggingIn(true);
     
     try {
@@ -107,30 +118,55 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
         server_url: serverUrl,
         token: token,
       });
+
+      // Redirect after successful connect
+      const redirectPath = sessionStorage.getItem(REDIRECT_PATH_KEY);
+      if (redirectPath) {
+        console.log(`[LoginButton] Redirecting to stored path: ${redirectPath}`); // Debug log
+        sessionStorage.removeItem(REDIRECT_PATH_KEY);
+        // Use navigate with the full hash path for HashRouter
+        navigate(redirectPath.startsWith('#') ? redirectPath.substring(1) : redirectPath);
+      }
+
     } catch (error) {
       console.error("Error during login:", error);
       localStorage.removeItem("token");
       localStorage.removeItem("tokenExpiry");
+      sessionStorage.removeItem(REDIRECT_PATH_KEY); // Clear on error too
     } finally {
       setIsLoggingIn(false);
     }
-  }, [connect]);
+  }, [connect, location.hash, navigate]); // Add location.hash and navigate to dependencies
 
   // Auto-login on component mount if token exists
   useEffect(() => {
     const autoLogin = async () => {
       const token = getSavedToken();
-      if (token && !user) {
+      // ** Always attempt to connect if a valid token exists **
+      // The `connect` function should handle cases where connection is already established.
+      if (token) { 
+        // Removed the `!user` check to ensure connection attempt happens 
+        // even if user state might be present but connection isn't fully ready.
         setIsLoggingIn(true);
         try {
           await connect({
             server_url: serverUrl,
             token: token,
           });
+
+          // Redirect after successful auto-login connect
+          const redirectPath = sessionStorage.getItem(REDIRECT_PATH_KEY);
+          if (redirectPath) {
+            console.log(`[LoginButton] Auto-login redirecting to stored path: ${redirectPath}`); // Debug log
+            sessionStorage.removeItem(REDIRECT_PATH_KEY);
+            // Use navigate with the full hash path for HashRouter
+            navigate(redirectPath.startsWith('#') ? redirectPath.substring(1) : redirectPath);
+          }
         } catch (error) {
           console.error("Auto-login failed:", error);
           localStorage.removeItem("token");
           localStorage.removeItem("tokenExpiry");
+          sessionStorage.removeItem(REDIRECT_PATH_KEY); // Clear on error
         } finally {
           setIsLoggingIn(false);
         }
@@ -138,7 +174,8 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
     };
     
     autoLogin();
-  }, [connect, user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connect]); // Keep dependencies as is, navigate is stable
 
   useEffect(() => {
     if (server) {

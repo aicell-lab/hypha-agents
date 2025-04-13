@@ -17,7 +17,8 @@ interface NotebookHeaderProps {
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
   isProcessing: boolean;
-  isReady: boolean;
+  isKernelReady: boolean;
+  isAIReady: boolean;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
 }
@@ -35,7 +36,8 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
   isProcessing,
-  isReady,
+  isKernelReady,
+  isAIReady,
   onToggleSidebar,
   isSidebarOpen
 }) => {
@@ -54,10 +56,10 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
         <div className="flex items-center gap-1 ml-2">
           <button
             onClick={onToggleSidebar}
-            className="p-2 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
-            title={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+            className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
+            title="Toggle sidebar"
           >
-            <FaBars className="w-5 h-5" />
+            <FaBars className="w-4 h-4" />
           </button>
           <Link
             to="/"
@@ -105,7 +107,8 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           onAddMarkdownCell={onAddMarkdownCell}
           onShowKeyboardShortcuts={onShowKeyboardShortcuts}
           isProcessing={isProcessing}
-          isReady={isReady}
+          isKernelReady={isKernelReady}
+          isAIReady={isAIReady}
           onToggleSidebar={onToggleSidebar}
           isSidebarOpen={isSidebarOpen}
         />

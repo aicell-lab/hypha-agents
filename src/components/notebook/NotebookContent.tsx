@@ -92,7 +92,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                 className={`notebook-cell-container group relative ${
                   cell.executionState === 'error' ? 'border-red-200' : ''
                 } ${activeCellId === cell.id ? 'notebook-cell-container-active' : ''
-                } mb-1 bg-white overflow-hidden rounded-md`}
+                } ${cell.metadata?.parent ? 'child-cell' : ''} mb-1 bg-white overflow-hidden rounded-md`}
                 onClick={() => onActiveCellChange(cell.id)}
                 tabIndex={0}
               >

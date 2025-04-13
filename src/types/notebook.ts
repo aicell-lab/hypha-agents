@@ -54,9 +54,6 @@ export interface NotebookCell {
 }
 
 export interface NotebookMetadata {
-  modified: string;
-  created: string;
-  title: string;
   kernelspec: {
     name: string;
     display_name: string;
@@ -65,6 +62,9 @@ export interface NotebookMetadata {
     name: string;
     version: string;
   };
+  title: string;
+  created: string;
+  modified: string;
   projectId?: string;
   filePath?: string;
 }

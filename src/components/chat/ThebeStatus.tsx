@@ -185,22 +185,6 @@ print(f"Path: {sys.path}")
         terminalRef.current.pushToStdout("\n=== Restarting Kernel ===\n");
       }
       await restartKernel();
-      
-      if (kernel && isReady && terminalRef.current) {
-        terminalRef.current.pushToStdout("Kernel restarted successfully.\n");
-        kernel.requestExecute({
-          code: `
-import sys
-import pyodide
-import platform
-
-print(f"Python {sys.version}")
-print(f"Pyodide {pyodide.__version__}")
-print(f"Platform: {platform.platform()}")
-print(f"Path: {sys.path}")
-`
-        }).onIOPub = handleIOPubMessage;
-      }
     } catch (error) {
       console.error('Failed to restart kernel:', error);
       if (terminalRef.current) {

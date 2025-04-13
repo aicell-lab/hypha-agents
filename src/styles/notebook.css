@@ -24,8 +24,14 @@
   position: relative;
   margin-bottom: 0.25rem;
   border-radius: 0.375rem;
-  overflow: hidden;
+  overflow: visible; /* Ensure shadow isn't clipped */
   background: white;
+}
+
+/* Add subtle shadow for parent cells only */
+.notebook-cell-container:not(.child-cell) {
+  /* x-offset | y-offset | blur-radius | spread-radius | color */
+  box-shadow: -2px 2px 5px -1px rgba(0, 0, 0, 0.06);
 }
 
 .notebook-cell {
@@ -78,21 +84,29 @@
   position: relative;
 }
 
-/* Active Cell Indicator */
+/* Active Cell Indicator - Default for Parent Cells */
 .notebook-cell-container-active::before {
   content: '';
   position: absolute;
-  left: -1px;
+  left: -1px; /* Position for parent cells */
   top: 0;
   bottom: 0;
   width: 3px;
   background-color: #3b82f6;
   transition: opacity 0.2s ease-in-out;
 }
+
 /* Child Cell Relationships */
 .child-cell {
   background-color: rgba(139, 139, 139, 0.019);
+  box-shadow: none !important; /* Ensure no shadow on child cells */
 }
+
+/* Align active indicator specifically for child cells */
+.child-cell.notebook-cell-container-active::before {
+  left: 8px; /* Align with the child indent strip */
+}
+
 .child-cell::before,
 .child-cell::after {
   content: '';
@@ -340,7 +354,13 @@
 }
 
 .notebook-cell-container-active {
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  /* Keep existing active shadow for parent cells */
+  box-shadow: -2px 2px 5px -1px rgba(59, 130, 246, 0.1), 0 0 0 1px rgba(59, 130, 246, 0.3);
+}
+
+/* Remove active shadow specifically from child cells */
+.child-cell.notebook-cell-container-active {
+  box-shadow: none !important;
 }
 
 /* System cell specific styling */

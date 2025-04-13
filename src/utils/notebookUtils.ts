@@ -19,8 +19,9 @@ const activeToasts = new Map<string, HTMLElement>();
 /**
  * Downloads the notebook data as a JSON file.
  * @param notebookData The notebook data to download.
+ * @param filename Optional specific filename (without extension).
  */
-export function downloadNotebook(notebook: NotebookData): void {
+export function downloadNotebook(notebook: NotebookData, filename?: string): void {
   const notebookData: NotebookData = {
     metadata: {
       ...notebook.metadata,
@@ -57,7 +58,10 @@ export function downloadNotebook(notebook: NotebookData): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${notebookData.metadata.title?.replace(/\s+/g, '_')}.ipynb` || 'untitled.ipynb';
+  const downloadFilename = filename
+    ? `${filename.replace(/\s+/g, '_')}.ipynb`
+    : `${notebookData.metadata.title?.replace(/\s+/g, '_') || 'untitled'}.ipynb`;
+  a.download = downloadFilename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

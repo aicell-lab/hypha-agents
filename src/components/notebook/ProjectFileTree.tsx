@@ -229,18 +229,25 @@ const ProjectFileTree: React.FC<ProjectFileTreeProps> = ({ files, onSelectFile, 
         
         {/* Delete button rendered separately, conditionally */} 
         {isHovered && isDeletable && itemPath && (
-          <button 
+          <div 
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
-              // Prevent the click from triggering the item's primary action (double-click)
               e.stopPropagation(); 
               handleDeleteFile(itemPath); 
             }}
-            className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors duration-150 flex-shrink-0"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+                handleDeleteFile(itemPath);
+              }
+            }}
+            className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors duration-150 flex-shrink-0 cursor-pointer"
             title={`Delete ${title}`}
             aria-label={`Delete ${title}`}
           >
             <FaTrash className="w-3 h-3" />
-          </button>
+          </div>
         )}
       </div>
     );
