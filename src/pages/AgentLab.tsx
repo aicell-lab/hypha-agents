@@ -251,6 +251,13 @@ const NotebookPage: React.FC = () => {
           projectId: resolvedProjectId
         }));
 
+        // --- Explicitly update URL params after successful load ---
+        setSearchParams(
+          { projectId: resolvedProjectId, filePath: filePath },
+          { replace: true }
+        );
+        // --- End URL update ---
+
         const visibleCells = loadedCells.filter(cell => cell.metadata?.role !== CELL_ROLES.THINKING);
         setCells(visibleCells);
 
@@ -342,20 +349,17 @@ const NotebookPage: React.FC = () => {
   // --- Notebook Action Handlers (Moved Up) ---
   const handleRestartKernel = useCallback(async () => {
     if (!cellManager.current) return;
-    setIsAIReady(false);
     showToast('Restarting kernel...', 'loading');
     try {
       await restartKernel();
-      setIsAIReady(true);
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
       showToast('Kernel restarted successfully', 'success');
     } catch (error) {
       console.error('Failed to restart kernel:', error);
       showToast('Failed to restart kernel', 'error');
-      setIsAIReady(false);
     }
-  }, [restartKernel, setIsAIReady, setExecutionCounter]);
+  }, [restartKernel, setExecutionCounter]);
 
   // --- Kernel State Reset Function ---
   const handleResetKernelState = useCallback(async () => {
@@ -666,6 +670,17 @@ const NotebookPage: React.FC = () => {
     // Keep dependencies: effect needs to run when kernel is ready or cells change initially.
     // The ref check prevents infinite loops after the flag is set.
   }, [isReady, cells, hasInitializedRef]);
+
+  // New hook to set AI readiness based on kernel readiness
+  useEffect(() => {
+    if (isReady) {
+      console.log('[AgentLab] Kernel is ready, setting AI ready state to true.');
+      setIsAIReady(true);
+    } else {
+      console.log('[AgentLab] Kernel is not ready, setting AI ready state to false.');
+      setIsAIReady(false);
+    }
+  }, [isReady, setIsAIReady]); // Dependency array ensures this runs when isReady changes
 
   // --- Notebook Action Handlers ---
   const handleDownloadNotebook = useCallback(() => {
