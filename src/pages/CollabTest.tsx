@@ -142,7 +142,7 @@ const CollabTest: React.FC = () => {
       <div className="border rounded-lg overflow-hidden">
         <Editor
           height="70vh"
-          defaultLanguage="typescript"
+          defaultLanguage="text"
           defaultValue="// Start typing here..."
           onMount={handleEditorDidMount}
           onChange={(value) => {

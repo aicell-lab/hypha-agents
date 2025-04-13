@@ -8,7 +8,8 @@ import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
 import { Editor } from '@monaco-editor/react';
 import { processTextOutput, processAnsiInOutputElement, outputAreaStyles } from '../../utils/ansi-utils';
-import { JupyterOutput, OutputItem } from '../JupyterOutput';
+import { JupyterOutput } from '../JupyterOutput';
+import { OutputItem } from '../../types/notebook';
 
 // Type definitions for external modules
 type MonacoEditorProps = {
