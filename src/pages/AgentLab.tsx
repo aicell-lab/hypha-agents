@@ -880,7 +880,7 @@ const NotebookPage: React.FC = () => {
                 </div>
 
               {/* Footer with chat input */}
-                <div className="sticky bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md">
+                <div className="sticky bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md z-100">
                   <NotebookFooter
                   onSendMessage={handleCommandOrSendMessage}
                     onStopChatCompletion={handleStopChatCompletion}
