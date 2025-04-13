@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { debounce } from 'lodash';
 import { ThebeProvider, useThebe } from '../components/chat/ThebeProvider';
@@ -386,6 +386,9 @@ const NotebookPage: React.FC = () => {
       // Consider if AI should be marked as not ready on reset failure
       // setIsAIReady(false);
     }
+    finally {
+      dismissToast('resetting-kernel');
+    }
   }, [isReady, executeCode, setExecutionCounter, showToast, handleRestartKernel]); // Add dependencies
 
   // Handle sending a message with command checking
@@ -696,6 +699,23 @@ const NotebookPage: React.FC = () => {
     cellManager.current.clearAllOutputs();
     showToast('Cleared all outputs', 'success');
   }, []);
+
+  // Add keyboard shortcut for saving notebook
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        console.log('Ctrl/Cmd+S detected, attempting to save notebook...');
+        saveNotebook();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [saveNotebook]); // Dependency array includes saveNotebook
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
