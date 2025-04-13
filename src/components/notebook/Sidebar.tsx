@@ -617,7 +617,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 )}
 
                 {/* File Tree */}
-                <div className="border-t border-gray-100 pt-4 flex-1 overflow-hidden">
+                <div className="border-t border-gray-100 pt-2 flex-1 overflow-hidden">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-xs font-medium text-gray-700">Files</h4>
                     <div className="flex gap-1">
@@ -670,7 +670,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                       </div>
                     </div>
                   </div>
-                  <div className="h-[300px] min-h-[200px] overflow-y-auto relative border border-gray-100 rounded-md p-2">
+                  <div className="h-[300px] min-h-[200px] overflow-y-auto relative border border-gray-100 rounded-md">
                     {isLoadingFiles ? (
                       <div className="flex items-center justify-center h-full text-gray-500 text-sm">
                         Loading files...
