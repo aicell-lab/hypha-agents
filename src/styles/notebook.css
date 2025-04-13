@@ -96,16 +96,6 @@
   transition: opacity 0.2s ease-in-out;
 }
 
-/* Child Cell Relationships */
-.child-cell {
-  background-color: rgba(139, 139, 139, 0.019);
-  box-shadow: none !important; /* Ensure no shadow on child cells */
-}
-
-/* Align active indicator specifically for child cells */
-.child-cell.notebook-cell-container-active::before {
-  left: 8px; /* Align with the child indent strip */
-}
 
 .child-cell::before {
   content: '';
@@ -115,12 +105,8 @@
   width: 1px;
   background-color: rgba(156, 163, 175, 0.261); /* Tailwind gray-400 */
   transition: background-color 0.2s ease;
-}
-.child-cell::before {
   left: 8px;
-}
-.child-cell::after {
-  right: 8px;
+  box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.2); /* Subtle shadow at bottom */
 }
 
 /* Remove old styles */

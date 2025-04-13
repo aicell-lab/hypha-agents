@@ -340,9 +340,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   return (
     <div 
       ref={editorDivRef}
-      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${
-        parent ? 'child-cell' : 'parent-cell'
-      } ${role === 'system' ? 'system-cell' : ''} ${
+      className={`relative w-full code-cell ${isActive ? 'notebook-cell-active' : ''} ${role === 'system' ? 'system-cell' : ''} ${
         staged ? 'staged-cell bg-gray-50/50 border-l-2 border-gray-200' : ''
       }`}
       onClick={handleEditorClick}

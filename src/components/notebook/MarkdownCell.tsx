@@ -275,7 +275,7 @@ const handleRegenerateResponse = useCallback(() => {
 
   return (
     <div 
-      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''} ${parent ? 'child-cell' : 'parent-cell'} ${staged ? 'staged-cell bg-gray-50/50 border-l-2 border-gray-200' : ''}`}
+      className={`relative markdown-cell ${isEditing ? 'editing' : ''} ${isActive ? 'active' : ''} ${staged ? 'staged-cell bg-gray-50/50 border-l-2 border-gray-200' : ''}`}
       tabIndex={-1} // Make the container focusable
       data-parent={parent || undefined}
       data-staged={staged || undefined}
