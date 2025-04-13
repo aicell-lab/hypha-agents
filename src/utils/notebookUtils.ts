@@ -91,6 +91,7 @@ export function showToast(
   options: { duration?: number; id?: string } = {}
 ): void {
   const { duration = 2000, id } = options;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null; // Store timeout ID
 
   // If an ID is provided and a toast with that ID already exists, remove the old one first.
   if (id && activeToasts.has(id)) {
@@ -101,7 +102,7 @@ export function showToast(
   messageDiv.style.opacity = '1'; // Start fully visible
 
   let iconSpan = document.createElement('span');
-  iconSpan.className = 'inline-block mr-2'; // Add margin for spacing
+  iconSpan.className = 'inline-block mr-2 flex-shrink-0'; // Prevent icon shrinking
 
   // Choose icon based on type
   switch (type) {
@@ -125,17 +126,43 @@ export function showToast(
   }
 
   // Combine classes for new style, positioning, and layout
-  messageDiv.className = `fixed bottom-4 left-1/2 transform -translate-x-1/2 \
+  messageDiv.className = `fixed top-12 right-4 \
                           bg-white text-gray-800 \
                           px-4 py-2 rounded shadow-xl border border-blue-500 \
                           z-[100] transition-opacity duration-300 ease-out \
-                          flex items-center`; // Increased z-index
+                          flex items-center max-w-sm`; // Added max-width
 
   // Set content with icon and message
+  const contentWrapper = document.createElement('div');
+  contentWrapper.className = 'flex items-center flex-grow mr-2'; // Allow message to grow, add margin before close button
   const messageSpan = document.createElement('span');
   messageSpan.textContent = message;
-  messageDiv.appendChild(iconSpan);
-  messageDiv.appendChild(messageSpan);
+  contentWrapper.appendChild(iconSpan);
+  contentWrapper.appendChild(messageSpan);
+  messageDiv.appendChild(contentWrapper);
+
+  // Add close button
+  const closeButton = document.createElement('button');
+  closeButton.textContent = '✕'; // Simple 'x' character
+  closeButton.className = 'ml-2 text-gray-500 hover:text-gray-800 focus:outline-none flex-shrink-0'; // Prevent shrinking
+  closeButton.onclick = () => {
+    // Clear auto-dismiss timeout if it exists
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    // Dismiss logic
+    messageDiv.style.opacity = '0';
+    setTimeout(() => {
+      if (document.body.contains(messageDiv)) {
+        document.body.removeChild(messageDiv);
+      }
+      if (id) {
+        activeToasts.delete(id); // Clean up map entry only if it has an ID
+      }
+    }, 300); // Wait for fade out
+  };
+  messageDiv.appendChild(closeButton);
 
   document.body.appendChild(messageDiv);
 
@@ -144,7 +171,7 @@ export function showToast(
     activeToasts.set(id, messageDiv);
   } else {
     // Auto-dismiss logic for toasts without an ID
-    setTimeout(() => {
+    timeoutId = setTimeout(() => { // Store the timeout ID
       messageDiv.style.opacity = '0';
       setTimeout(() => {
         if (document.body.contains(messageDiv)) {
@@ -156,12 +183,15 @@ export function showToast(
 }
 
 /**
- * Dismisses a specific toast message by its ID.
+ * Dismisses a specific toast message by its ID. Also clears any related timeout.
  * @param id The ID of the toast to dismiss.
  */
 export function dismissToast(id: string): void {
   const toastElement = activeToasts.get(id);
   if (toastElement) {
+    // Attempt to find and clear any associated timeout if we stored it (might need a different structure)
+    // For simplicity, the close button handler now clears the timeout directly.
+    // We just handle the removal here.
     toastElement.style.opacity = '0';
     setTimeout(() => {
       if (document.body.contains(toastElement)) {

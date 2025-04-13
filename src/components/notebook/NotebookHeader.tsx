@@ -6,6 +6,7 @@ import { FaBars } from 'react-icons/fa';
 
 interface NotebookHeaderProps {
   metadata: NotebookMetadata;
+  fileName: string;
   onMetadataChange: (metadata: NotebookMetadata) => void;
   onSave: () => void;
   onDownload: () => void;
@@ -25,6 +26,7 @@ interface NotebookHeaderProps {
 
 const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   metadata,
+  fileName,
   onMetadataChange,
   onSave,
   onDownload,
@@ -41,14 +43,6 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   onToggleSidebar,
   isSidebarOpen
 }) => {
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onMetadataChange({
-      ...metadata,
-      title: e.target.value || 'Untitled Chat',
-      modified: new Date().toISOString()
-    });
-  };
-
   return (
     <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-full mx-auto flex items-center justify-between">
@@ -81,16 +75,15 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           </Link>
           {/* Always show Agent Lab */}
           <h1 className="text-lg font-medium text-gray-900">Agent Lab</h1>
-          {/* Show editable title on medium and larger screens */}
+          {/* Show file name on medium and larger screens */}
           <div className="hidden md:flex items-center">
             <div className="h-5 w-px bg-gray-200 mx-1"></div>
-            <input
-              type="text"
-              value={metadata.title || 'Untitled Chat'}
-              onChange={handleTitleChange}
-              className="text-lg font-medium bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1 text-gray-600"
-              placeholder="Untitled Chat"
-            />
+            <span
+              className="text-lg font-medium bg-transparent border-none px-1 text-gray-600 truncate"
+              title={fileName}
+            >
+              {fileName || 'Untitled_Chat'}
+            </span>
           </div>
         </div>
 

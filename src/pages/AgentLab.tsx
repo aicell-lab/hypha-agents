@@ -5,13 +5,12 @@ import { ThebeProvider, useThebe } from '../components/chat/ThebeProvider';
 import '../styles/ansi.css';
 import '../styles/notebook.css';
 import { useHyphaStore } from '../store/hyphaStore';
-import { CellManager, StorageLocation, SavedState } from './CellManager';
+import { CellManager, SavedState } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
-import { AgentSettings } from '../utils/chatCompletion';
 import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
 import { CanvasPanel } from '../components/notebook/CanvasPanel';
-import { setupNotebookService, HyphaCoreWindow } from '../components/services/hyphaCoreServices';
+import { HyphaCoreWindow } from '../components/services/hyphaCoreServices';
 import { ChatMessage } from '../utils/chatCompletion';
 
 // Import components
@@ -22,8 +21,7 @@ import KeyboardShortcutsDialog from '../components/notebook/KeyboardShortcutsDia
 
 // Import utilities and types
 import { NotebookCell, NotebookData, NotebookMetadata, CellType, CellRole, OutputItem } from '../types/notebook';
-import { showToast, downloadNotebook, dismissToast } from '../utils/notebookUtils';
-import { v4 as uuidv4 } from 'uuid';
+import { showToast, dismissToast } from '../utils/notebookUtils';
 
 // Import hooks
 import { useChatCompletion } from '../hooks/useChatCompletion';
@@ -37,8 +35,6 @@ import Sidebar from '../components/notebook/Sidebar';
 // Import types from ProjectsProvider and use BaseProject alias
 import type { Project as BaseProject, ProjectFile } from '../providers/ProjectsProvider';
 import { ProjectsProvider, useProjects, IN_BROWSER_PROJECT } from '../providers/ProjectsProvider'; // Import constant
-
-import localforage from 'localforage';
 
 // Add CellRole enum values
 const CELL_ROLES = {
@@ -374,7 +370,7 @@ const NotebookPage: React.FC = () => {
 
     if (!cellManager.current) return;
 
-    showToast('Resetting kernel state...', 'loading', { id: 'resetting-kernel' });
+    showToast('Resetting kernel state...', 'loading');
     try {
       // Execute the reset command
       await executeCode('%reset -f');
@@ -383,17 +379,14 @@ const NotebookPage: React.FC = () => {
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
 
-      showToast('Kernel state reset successfully', 'success', { id: 'resetting-kernel' });
+      showToast('Kernel state reset successfully', 'success');
       // Keep AI ready state as true, kernel is still technically ready
       // setIsAIReady(true);
     } catch (error) {
       console.error('Failed to reset kernel state:', error);
-      showToast('Failed to reset kernel state', 'error', { id: 'resetting-kernel' });
+      showToast('Failed to reset kernel state', 'error');
       // Consider if AI should be marked as not ready on reset failure
       // setIsAIReady(false);
-    }
-    finally {
-      dismissToast('resetting-kernel');
     }
   }, [isReady, executeCode, setExecutionCounter, showToast, handleRestartKernel]); // Add dependencies
 
@@ -473,7 +466,7 @@ const NotebookPage: React.FC = () => {
     }
 
     console.log('[AgentLab Save] Attempting save to:', { projectId: resolvedProjectId, filePath: metadataToSave.filePath });
-    showToast('Saving...', 'loading', { id: 'saving-notebook' });
+    showToast('Saving...', 'loading');
 
     try {
       setNotebookMetadata(metadataToSave);
@@ -734,15 +727,26 @@ const NotebookPage: React.FC = () => {
     };
   }, [saveNotebook]); // Dependency array includes saveNotebook
 
+  // Calculate the filename from the filePath in metadata
+  const notebookFileName = useMemo(() => {
+    if (!notebookMetadata.filePath) {
+      return 'Untitled_Chat'; // Default if no path
+    }
+    // Get the part after the last '/'
+    const parts = notebookMetadata.filePath.split('/');
+    return parts[parts.length - 1] || 'Untitled_Chat'; // Fallback if split fails unexpectedly
+  }, [notebookMetadata.filePath]); // Recalculate only when filePath changes
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Header goes first and spans full width */}
           <NotebookHeader
             metadata={notebookMetadata}
-        onMetadataChange={setNotebookMetadata}
-        onSave={saveNotebook}
+            fileName={notebookFileName}
+            onMetadataChange={setNotebookMetadata}
+            onSave={saveNotebook}
             onDownload={handleDownloadNotebook}
-        onLoad={loadNotebookFromFile}
+            onLoad={loadNotebookFromFile}
             onRunAll={handleRunAllCells}
             onClearOutputs={handleClearAllOutputs}
             onRestartKernel={handleRestartKernel}
@@ -750,8 +754,8 @@ const NotebookPage: React.FC = () => {
             onAddMarkdownCell={handleAddMarkdownCell}
             onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
             isProcessing={isProcessingAgentResponse}
-        isKernelReady={isReady}
-        isAIReady={isAIReady}
+            isKernelReady={isReady}
+            isAIReady={isAIReady}
             onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
             isSidebarOpen={isSidebarOpen}
           />
