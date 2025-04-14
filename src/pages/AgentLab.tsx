@@ -376,6 +376,14 @@ const NotebookPage: React.FC = () => {
     showToast('Restarting kernel...', 'loading');
     try {
       cellManager.current?.clearRunningState();
+      
+      // Abort any ongoing Hypha service operations before restarting
+      hyphaServiceAbortControllerRef.current.abort('Kernel restart initiated');
+      hyphaServiceAbortControllerRef.current = new AbortController(); // Create new one
+      
+      // Clear the hyphaCoreApi state to trigger re-initialization after restart
+      setHyphaCoreApi(null);
+      
       await restartKernel();
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
@@ -384,7 +392,7 @@ const NotebookPage: React.FC = () => {
       console.error('Failed to restart kernel:', error);
       showToast('Failed to restart kernel', 'error');
     }
-  }, [restartKernel, setExecutionCounter]);
+  }, [restartKernel, setExecutionCounter, setHyphaCoreApi]);
 
   // --- Kernel State Reset Function ---
   const handleResetKernelState = useCallback(async () => {
@@ -693,6 +701,16 @@ const NotebookPage: React.FC = () => {
     }
   }, [isReady, setIsAIReady]); // Dependency array ensures this runs when isReady changes
 
+  // Calculate the filename from the filePath in metadata
+  const notebookFileName = useMemo(() => {
+    if (!notebookMetadata.filePath) {
+      return 'Untitled_Chat'; // Default if no path
+    }
+    // Get the part after the last '/'
+    const parts = notebookMetadata.filePath.split('/');
+    return parts[parts.length - 1] || 'Untitled_Chat'; // Fallback if split fails unexpectedly
+  }, [notebookMetadata.filePath]); // Recalculate only when filePath changes
+
   // --- Notebook Action Handlers ---
   const handleDownloadNotebook = useCallback(() => {
     if (!notebookMetadata) return;
@@ -705,14 +723,13 @@ const NotebookPage: React.FC = () => {
     const blob = new Blob([JSON.stringify(notebookToSave, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const safeTitle = notebookMetadata.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     a.href = url;
-    a.download = `${safeTitle || 'untitled'}.ipynb`;
+    a.download = notebookFileName.endsWith('.ipynb') ? notebookFileName : `${notebookFileName}.ipynb`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [notebookMetadata, cells]);
+  }, [notebookMetadata, cells, notebookFileName]);
 
   const handleRunAllCells = useCallback(async () => {
     if (!cellManager.current) return;
@@ -742,16 +759,6 @@ const NotebookPage: React.FC = () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [saveNotebook]); // Dependency array includes saveNotebook
-
-  // Calculate the filename from the filePath in metadata
-  const notebookFileName = useMemo(() => {
-    if (!notebookMetadata.filePath) {
-      return 'Untitled_Chat'; // Default if no path
-    }
-    // Get the part after the last '/'
-    const parts = notebookMetadata.filePath.split('/');
-    return parts[parts.length - 1] || 'Untitled_Chat'; // Fallback if split fails unexpectedly
-  }, [notebookMetadata.filePath]); // Recalculate only when filePath changes
 
   // --- Effect to setup Hypha Core notebook service after login and kernel ready ---
   useEffect(() => {
