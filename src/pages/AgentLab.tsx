@@ -123,6 +123,10 @@ const NotebookPage: React.FC = () => {
   // Simplified sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // Ref to store the AbortController for Hypha service setup
+  const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
+
+
   // --- Define handleAddWindow callback ---
   const handleAddWindow = useCallback((config: any) => {
     // Add the new window to our state
@@ -279,7 +283,7 @@ const NotebookPage: React.FC = () => {
         const assistantCells = visibleCells.filter(cell => cell.role === CELL_ROLES.ASSISTANT);
         lastUserCellRef.current = userCells[userCells.length - 1]?.id || null;
         lastAgentCellRef.current = assistantCells[assistantCells.length - 1]?.id || null;
-
+        cellManager.current?.clearRunningState();
         showToast('Notebook loaded successfully', 'success');
       } else {
         console.warn('Invalid notebook file format found after parsing:', { projectId: resolvedProjectId, filePath });
@@ -349,19 +353,30 @@ const NotebookPage: React.FC = () => {
     setCells
   });
 
+  // Modify handleAbortExecution to use the ref
   const handleAbortExecution = useCallback(() => {
-    console.log('[AgentLab] Aborting execution');
-    // TODO: Implement abort execution
- 
-  }, []);
+    console.log('[AgentLab] Aborting Hypha Core service operations...');
+    // Abort the current controller
+    hyphaServiceAbortControllerRef.current.abort();
+    console.log(`[AgentLab] Abort signal sent. Reason: ${hyphaServiceAbortControllerRef.current.signal.reason}`);
+
+    // Create a new controller for future operations
+    hyphaServiceAbortControllerRef.current = new AbortController();
+    console.log('[AgentLab] New AbortController created for subsequent operations.');
+
+    // Additionally, stop any ongoing chat completion if needed (assuming different mechanism)
+    handleStopChatCompletion();
+
+  }, [handleStopChatCompletion]); // Dependency on handleStopChatCompletion if it's used
+
 
   // --- Notebook Action Handlers (Moved Up) ---
   const handleRestartKernel = useCallback(async () => {
     if (!cellManager.current) return;
     showToast('Restarting kernel...', 'loading');
     try {
-      await restartKernel();
       cellManager.current?.clearRunningState();
+      await restartKernel();
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
       showToast('Kernel restarted successfully', 'success');
@@ -384,6 +399,10 @@ const NotebookPage: React.FC = () => {
 
     showToast('Resetting kernel state...', 'loading');
     try {
+      // Abort any ongoing Hypha service operations before resetting
+      hyphaServiceAbortControllerRef.current.abort('Kernel reset initiated');
+      hyphaServiceAbortControllerRef.current = new AbortController(); // Create new one
+
       // Execute the reset command
       await executeCode('%reset -f');
 
@@ -392,7 +411,7 @@ const NotebookPage: React.FC = () => {
       systemCellsExecutedRef.current = false;
 
       // Reset the hyphaCoreApi state to trigger re-initialization
-      setHyphaCoreApi(null);
+      setHyphaCoreApi(null); // This will trigger the setup useEffect again
 
       showToast('Kernel state reset successfully', 'success');
       // Keep AI ready state as true, kernel is still technically ready
@@ -403,7 +422,8 @@ const NotebookPage: React.FC = () => {
       // Consider if AI should be marked as not ready on reset failure
       // setIsAIReady(false);
     }
-  }, [isReady, executeCode, setExecutionCounter, showToast, handleRestartKernel]); // Add dependencies
+  }, [isReady, executeCode, setExecutionCounter, showToast, handleRestartKernel]); // Added dependencies
+
 
   // Handle sending a message with command checking
   const handleCommandOrSendMessage = useCallback((message: string) => {
@@ -421,28 +441,6 @@ const NotebookPage: React.FC = () => {
     handleSendChatMessage(message);
   }, [isReady, handleCommand, handleSendChatMessage, setInitializationError]);
 
-  // Debounced save function (only for in-browser/default storage auto-save)
-  const debouncedSave = useCallback(
-    debounce(async (state: SavedState) => {
-      const currentMetadata: NotebookMetadata = state.metadata; // Added explicit type
-      if (currentMetadata.projectId === IN_BROWSER_PROJECT.id && currentMetadata.filePath) {
-        try {
-          console.log('[AgentLab Debounced Save] Saving to in-browser:', currentMetadata.filePath);
-          const notebookData: NotebookData = {
-            nbformat: 4,
-            nbformat_minor: 5,
-            metadata: currentMetadata,
-            cells: state.cells
-          };
-          await saveInBrowserFile(currentMetadata.filePath, notebookData);
-          console.log('[AgentLab Debounced Save] Saved successfully.');
-        } catch (error) {
-          console.error('Error auto-saving in-browser notebook:', error);
-        }
-      }
-    }, 2000),
-    [saveInBrowserFile]
-  );
 
   // Save notebook based on current notebookMetadata
   const saveNotebook = useCallback(async () => {
@@ -774,27 +772,41 @@ const NotebookPage: React.FC = () => {
       console.log('[AgentLab] Conditions met, attempting to set up notebook service...');
       showToast('Connecting Hypha Core Service...', 'loading');
 
+      // Use the signal from the current AbortController
+      const currentSignal = hyphaServiceAbortControllerRef.current.signal;
+
       try {
         const api = await setupNotebookService({
           onAddWindow: handleAddWindow, // Pass the callback
           server,
           executeCode, // Pass the wrapped executeCode from cellManager
           agentSettings,
-          // abortSignal: abortControllerRef.current?.signal // Optional: Add abort signal if needed
+          abortSignal: currentSignal // Pass the current abort signal
         });
+        // Check if the operation was aborted *before* setting the API
+        if (currentSignal.aborted) {
+            console.log('[AgentLab] Hypha Core service setup aborted before completion.');
+            showToast('Hypha Core Service connection cancelled.', 'warning');
+            // Do not set the API if aborted
+            return;
+        }
         setHyphaCoreApi(api); // Store the API object
         console.log('[AgentLab] Hypha Core service successfully set up.');
         showToast('Hypha Core Service Connected', 'success');
-      } catch (error) {
-        console.error('[AgentLab] Failed to set up notebook service:', error);
-        showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
-        // Optionally reset hyphaCoreApi state on failure
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+            console.log('[AgentLab] Hypha Core service setup explicitly aborted.');
+            showToast('Hypha Core Service connection cancelled.', 'warning');
+        } else {
+            console.error('[AgentLab] Failed to set up notebook service:', error);
+            showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        }
+        // Optionally reset hyphaCoreApi state on failure/abort
         setHyphaCoreApi(null);
       }
     };
 
     setupService();
-
     // Dependencies for this effect
   }, [
     isLoggedIn,
@@ -803,7 +815,6 @@ const NotebookPage: React.FC = () => {
     executeCode, // Added executeCode from useThebe as dependency
     agentSettings,
     hyphaCoreApi, // Prevent re-running if already set up
-    // Keep cellManager ref object itself as dependency
     cellManager, // Ensure cellManager ref object is stable
     handleAddWindow, // Callback dependency
   ]);
@@ -863,12 +874,12 @@ const NotebookPage: React.FC = () => {
                       onDeleteCellWithChildren={handleDeleteCellWithChildren}
                       onToggleCellCommitStatus={handleToggleCellCommitStatus}
                       onRegenerateClick={handleRegenerateClick}
-                      onStopChatCompletion={handleStopChatCompletion}
+                      onStopChatCompletion={handleStopChatCompletion} // Use the combined stop function
                       getEditorRef={getEditorRef}
                       isReady={isReady}
-                      activeAbortController={activeAbortController}
+                      activeAbortController={activeAbortController} // Keep this for chat completion
                       showCanvasPanel={showCanvasPanel}
-                      onAbortExecution={handleAbortExecution}
+                      onAbortExecution={handleAbortExecution} // Pass the new abort function
                     />
                   </div>
                 </div>
