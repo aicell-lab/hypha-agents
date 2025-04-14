@@ -7,8 +7,6 @@ import axios from 'axios';
 import { LinearProgress } from '@mui/material';
 import yaml from 'js-yaml';
 import { Link, useNavigate } from 'react-router-dom';
-import ReactMarkdown from 'react-markdown';
-import ModelTester from './ModelTester';
 import ModelValidator from './ModelValidator';
 import { SITE_ID, SITE_NAME } from '../utils/env';
 
@@ -706,14 +704,6 @@ const Upload: React.FC<UploadProps> = ({ artifactId, onBack }) => {
                             </svg>
                             Changes Saved
                           </button>
-                        )}
-                        {/* Only show ModelTester when not uploading and no files are edited */}
-                        {!isUploading && !files.some(f => f.edited) && (
-                          <ModelTester
-                            artifactId={uploadedArtifact.id}
-                            version="stage"
-                            isDisabled={!server}
-                          />
                         )}
                       </div>
                     )}

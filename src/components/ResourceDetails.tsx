@@ -11,7 +11,6 @@ import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import DownloadIcon from '@mui/icons-material/Download';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import UpdateIcon from '@mui/icons-material/Update';
-import ModelTester from './ModelTester';
 import { resolveHyphaUrl } from '../utils/urlHelpers';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';

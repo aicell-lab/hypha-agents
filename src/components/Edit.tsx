@@ -10,7 +10,6 @@ import { Resource } from '../types/index';
 import { useDropzone } from 'react-dropzone';
 import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import ModelTester from './ModelTester';
 import ModelValidator from './ModelValidator';
 import Chat from './chat/Chat';
 import { LazyThebeProvider } from './chat/ThebeProvider';
@@ -104,26 +103,12 @@ interface AgentConfig {
   description: string;
   welcomeMessage: string;
   
-  // Identity
-  profile: string;
-  goal: string;
-  
   // Model Settings
   model: string;
-  stream?: boolean;
-  disableStreaming?: boolean;
-  instructions?: string;
-  startup_script?: string;
-
-  // Voice Settings
-  voice?: string;
   temperature?: number;
-
-  // Tools Configuration
-  enabled_tools?: string[];
   
-  // Mode Selection
-  mode?: 'text' | 'voice';
+  // Startup Script
+  startup_script?: string;
 }
 
 // Add new interface for tool options
@@ -158,7 +143,7 @@ const Edit: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [files, setFiles] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
-  const { schemaAgents, artifactManager, isLoggedIn, server } = useHyphaStore();
+  const { artifactManager, isLoggedIn, server } = useHyphaStore();
   const [uploadStatus, setUploadStatus] = useState<{
     message: string;
     severity: 'info' | 'success' | 'error';
@@ -203,16 +188,12 @@ const Edit: React.FC = () => {
     description: '',
     welcomeMessage: 'Hello, how can I assist you today?',
     
-    // Identity
-    profile: 'AI Assistant',
-    goal: 'I am a helpful AI assistant',
-    
     // Model Settings
     model: 'gpt-4o-mini',
-    stream: true,
+    temperature: 0.8,
     
-    // Mode Selection
-    mode: 'text'
+    // Startup Script
+    startup_script: ''
   });
 
   // Add new state for available extensions
@@ -838,271 +819,84 @@ const Edit: React.FC = () => {
                     />
                   </div>
 
-                  {/* Runtime Configuration */}
-                  <div className="border-t pt-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Runtime Configuration</h3>
+                  {/* Model Settings */}
+                  <div className="border-t pt-6 space-y-4">
+                    <h3 className="text-lg font-medium text-gray-900">Model Settings</h3>
                     
-                    {/* Identity */}
-                    <div className="space-y-4 mb-6">
-                      <TextField
-                        label="Profile"
-                        value={agentConfig.profile}
+                    <FormControl fullWidth>
+                      <InputLabel>Model</InputLabel>
+                      <Select
+                        value={agentConfig.model || "gpt-4o-mini"}
                         onChange={(e) => setAgentConfig(prev => ({
                           ...prev,
-                          profile: e.target.value
+                          model: e.target.value
                         }))}
-                        fullWidth
-                        required
-                        helperText="Define the agent's role and expertise"
-                      />
+                      >
+                        {TEXT_MODEL_OPTIONS.map((model) => (
+                          <MenuItem key={model} value={model}>
+                            {model}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      <FormHelperText>
+                        Select the LLM model to use for text interactions
+                      </FormHelperText>
+                    </FormControl>
 
-                      <TextField
-                        label="Goal"
-                        value={agentConfig.goal}
+                    <div className="space-y-2">
+                      <label className="block text-sm text-gray-700">
+                        Temperature ({agentConfig.temperature})
+                      </label>
+                      <input
+                        type="range"
+                        name="temperature"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        value={agentConfig.temperature || 0.8}
                         onChange={(e) => setAgentConfig(prev => ({
                           ...prev,
-                          goal: e.target.value
+                          temperature: parseFloat(e.target.value)
                         }))}
-                        fullWidth
-                        required
-                        helperText="Define the agent's primary objective in a single line"
+                        className="w-full"
+                        title="Adjust temperature"
+                        aria-label="Adjust temperature"
                       />
-
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-medium text-gray-900">Instructions</h4>
-                        <Editor
-                          height="200px"
-                          language="markdown"
-                          theme="vs-light"
-                          value={agentConfig.instructions || ''}
-                          onChange={(value: string | undefined) => setAgentConfig(prev => ({
-                            ...prev,
-                            instructions: value || ''
-                          }))}
-                          options={{
-                            minimap: { enabled: false },
-                            scrollBeyondLastLine: false,
-                            wordWrap: 'on',
-                            wrappingIndent: 'indent',
-                            lineNumbers: 'off'
-                          }}
-                        />
-                        <FormHelperText>
-                          Detailed instructions for the agent's behavior and capabilities in markdown format
-                        </FormHelperText>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Precise (0)</span>
+                        <span>Balanced (1)</span>
+                        <span>Creative (2)</span>
                       </div>
-
-                      <TextField
-                        label="Startup Script"
-                        value={agentConfig.startup_script || ''}
-                        onChange={(e) => setAgentConfig(prev => ({
-                          ...prev,
-                          startup_script: e.target.value
-                        }))}
-                        multiline
-                        rows={4}
-                        fullWidth
-                        helperText="Python code that will be executed automatically when starting a chat session"
-                        placeholder={`# Example:
-import numpy as np
-import pandas as pd
-
-# Set up custom functions
-def my_helper_function():
-    return "Hello from helper function!"
-
-# Initialize variables
-my_global_var = 42`}
-                      />
-                    </div>
-
-                    {/* Model Settings */}
-                    <div className="space-y-4 mb-6">
-                      <h4 className="text-sm font-medium text-gray-900">Model Settings</h4>
-                      
-                      <FormControl fullWidth>
-                        <InputLabel>Model</InputLabel>
-                        <Select
-                          value={agentConfig.mode === 'voice' ? 'gpt-4o-realtime-preview' : (agentConfig.model || 'gpt-4o-mini')}
-                          onChange={(e) => setAgentConfig(prev => ({
-                            ...prev,
-                            model: e.target.value
-                          }))}
-                          disabled={agentConfig.mode === 'voice'}
-                        >
-                          {agentConfig.mode === 'voice' ? (
-                            <MenuItem value="gpt-4o-realtime-preview">gpt-4o-realtime-preview</MenuItem>
-                          ) : (
-                            TEXT_MODEL_OPTIONS.map((model) => (
-                              <MenuItem key={model} value={model}>
-                                {model}
-                              </MenuItem>
-                            ))
-                          )}
-                        </Select>
-                        <FormHelperText>
-                          {agentConfig.mode === 'voice' 
-                            ? "Voice mode requires gpt-4o-realtime-preview model" 
-                            : "Select the LLM model to use for text interactions"}
-                        </FormHelperText>
-                      </FormControl>
-
-                      {/* Streaming options */}
-                      <div className="space-y-2">
-                        <FormControlLabel
-                          control={
-                            <Checkbox
-                              checked={agentConfig.stream !== false}
-                              onChange={(e) => setAgentConfig(prev => ({
-                                ...prev,
-                                stream: e.target.checked
-                              }))}
-                              disabled={agentConfig.disableStreaming}
-                            />
-                          }
-                          label="Enable streaming responses"
-                        />
-                        
-                        <FormControlLabel
-                          control={
-                            <Checkbox
-                              checked={!!agentConfig.disableStreaming}
-                              onChange={(e) => {
-                                const disableStreaming = e.target.checked;
-                                setAgentConfig(prev => ({
-                                  ...prev,
-                                  disableStreaming,
-                                  // If disabling streaming, also set stream to false
-                                  stream: disableStreaming ? false : prev.stream
-                                }));
-                              }}
-                            />
-                          }
-                          label="Disable streaming (for models that don't support it)"
-                        />
-                        <FormHelperText>
-                          Some models don't support streaming. Check this option if you're experiencing issues with streaming responses.
-                        </FormHelperText>
-                      </div>
-                    </div>
-
-                    {/* Mode Selection */}
-                    <div className="space-y-4 mb-6">
-                      <h4 className="text-sm font-medium text-gray-900">Interaction Mode</h4>
-                      
-                      <FormControl fullWidth>
-                        <InputLabel>Mode</InputLabel>
-                        <Select
-                          value={agentConfig.mode || "text"}
-                          onChange={(e) => {
-                            const newMode = e.target.value as 'text' | 'voice';
-                            setAgentConfig(prev => ({
-                              ...prev,
-                              mode: newMode,
-                              // Update model based on mode
-                              model: newMode === 'voice' ? 'gpt-4o-realtime-preview' : 'gpt-4o-mini'
-                            }));
-                          }}
-                        >
-                          <MenuItem value="text">Text Only</MenuItem>
-                          <MenuItem value="voice">Voice Enabled</MenuItem>
-                        </Select>
-                        <FormHelperText>
-                          Choose how users will interact with this agent. Voice mode enables both text and voice interactions.
-                          {agentConfig.mode === 'voice' && " Voice mode requires gpt-4o-realtime-preview model."}
-                        </FormHelperText>
-                      </FormControl>
-                    </div>
-
-                    {/* Voice Settings - Only show if voice mode is selected */}
-                    {(agentConfig.mode === 'voice') && (
-                      <div className="space-y-4 mb-6">
-                        <h4 className="text-sm font-medium text-gray-900">Voice Settings</h4>
-                        
-                        <FormControl fullWidth>
-                          <InputLabel>Voice</InputLabel>
-                          <Select
-                            value={agentConfig.voice || "sage"}
-                            onChange={(e) => setAgentConfig(prev => ({
-                              ...prev,
-                              voice: e.target.value
-                            }))}
-                          >
-                            {VOICE_OPTIONS.map((voice) => (
-                              <MenuItem key={voice} value={voice}>
-                                {voice.charAt(0).toUpperCase() + voice.slice(1)}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        <TextField
-                          label="Temperature"
-                          type="number"
-                          value={agentConfig.temperature || 0.8}
-                          onChange={(e) => setAgentConfig(prev => ({
-                            ...prev,
-                            temperature: parseFloat(e.target.value)
-                          }))}
-                          inputProps={{ min: 0, max: 1, step: 0.1 }}
-                          fullWidth
-                          helperText="Controls randomness in responses (0.0 to 1.0)"
-                        />
-                      </div>
-                    )}
-
-                    {/* Tools Configuration */}
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium text-gray-900">Enabled Tools</h4>
-                      
-                      <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-[3rem]">
-                        {(agentConfig.enabled_tools || ['code_interpreter']).map((toolId) => {
-                          const tool = availableTools.find(t => t.id === toolId);
-                          if (!tool) return null;
-                          
-                          return (
-                            <Chip
-                              key={tool.id}
-                              label={tool.name}
-                              onDelete={() => setAgentConfig(prev => ({
-                                ...prev,
-                                enabled_tools: prev.enabled_tools?.filter(id => id !== tool.id)
-                              }))}
-                              className="m-1"
-                            />
-                          );
-                        })}
-                      </div>
-
-                      <FormControl fullWidth>
-                        <InputLabel>Add Tool</InputLabel>
-                        <Select
-                          value=""
-                          onChange={(e) => {
-                            const toolId = e.target.value;
-                            setAgentConfig(prev => ({
-                              ...prev,
-                              enabled_tools: [...(prev.enabled_tools || []), toolId]
-                            }));
-                          }}
-                        >
-                          {availableTools
-                            .filter(tool => !(agentConfig.enabled_tools || []).includes(tool.id))
-                            .map(tool => (
-                              <MenuItem key={tool.id} value={tool.id}>
-                                <div>
-                                  <div className="font-medium">{tool.name}</div>
-                                  <div className="text-sm text-gray-500">{tool.description}</div>
-                                </div>
-                              </MenuItem>
-                            ))
-                          }
-                        </Select>
-                      </FormControl>
                     </div>
                   </div>
 
-                  {/* Remove the save button div since it's now in the action bar */}
+                  {/* Startup Script */}
+                  <div className="border-t pt-6 space-y-4">
+                    <h3 className="text-lg font-medium text-gray-900">Startup Script</h3>
+                    
+                    <div className="space-y-2">
+                      <Editor
+                        height="200px"
+                        language="python"
+                        theme="vs-light"
+                        value={agentConfig.startup_script || ''}
+                        onChange={(value: string | undefined) => setAgentConfig(prev => ({
+                          ...prev,
+                          startup_script: value || ''
+                        }))}
+                        options={{
+                          minimap: { enabled: false },
+                          scrollBeyondLastLine: false,
+                          wordWrap: 'on',
+                          wrappingIndent: 'indent',
+                          lineNumbers: 'on'
+                        }}
+                      />
+                      <FormHelperText>
+                        Python code that will be executed automatically when starting a chat session
+                      </FormHelperText>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1644,14 +1438,6 @@ my_global_var = 42`}
             />
           </div>
         )}
-
-        {artifactId && (
-          <ModelTester
-            artifactId={artifactId}
-            version={isStaged ? 'stage' : artifactInfo?.version}
-            isDisabled={!isStaged || shouldDisableActions}
-          />
-        )}
       </div>
     );
   };
@@ -1989,74 +1775,24 @@ my_global_var = 42`}
     return cleanup;
   }, [setupKeyboardShortcuts]);
 
-  // Add function to load extensions
-  const loadExtensions = async () => {
-    if (!schemaAgents) return;
-    
-    try {
-      
-      if (schemaAgents.extensions) {
-        setAvailableExtensions(schemaAgents.extensions);
-      }
-    } catch (error) {
-      console.error("Error loading extensions:", error);
-    }
-  };
-
-  // Add useEffect to load extensions and initial config
-  useEffect(() => {
-    if (schemaAgents) {
-      loadExtensions();
-    }
-  }, [schemaAgents]);
 
   useEffect(() => {
-    if (artifactInfo?.manifest) {
-      // Determine the mode from the manifest or default to 'text'
-      const mode = artifactInfo.manifest.mode || 'text';
+    if (!artifactInfo) return;
+
+    // Set agent config based on manifest
+    setAgentConfig({
+      // Basic Info
+      name: artifactInfo.manifest.name || '',
+      description: artifactInfo.manifest.description || '',
+      welcomeMessage: artifactInfo.manifest.welcomeMessage || 'Hello, how can I assist you today?',
       
-      // Determine the appropriate model based on the mode
-      let modelToUse: string;
-      if (mode === 'voice') {
-        modelToUse = 'gpt-4o-realtime-preview';
-      } else {
-        // For text mode, use the specified model if it's in our options, otherwise default to gpt-4o-mini
-        const specifiedModel = artifactInfo.manifest.model;
-        if (specifiedModel && TEXT_MODEL_OPTIONS.includes(specifiedModel as any)) {
-          modelToUse = specifiedModel;
-        } else {
-          modelToUse = 'gpt-4o-mini';
-        }
-      }
+      // Model Settings
+      model: artifactInfo.manifest.model || 'gpt-4o-mini',
+      temperature: artifactInfo.manifest.temperature || 0.8,
       
-      setAgentConfig({
-        // Basic Info
-        name: artifactInfo.manifest.name || '',
-        description: artifactInfo.manifest.description || '',
-        welcomeMessage: artifactInfo.manifest.welcomeMessage || 'Hello, how can I assist you today?',
-        
-        // Identity
-        profile: artifactInfo.manifest.profile || 'AI Assistant',
-        goal: artifactInfo.manifest.goal || 'I am a helpful AI assistant',
-        
-        // Model Settings
-        model: modelToUse,
-        stream: artifactInfo.manifest.stream ?? true,
-        disableStreaming: artifactInfo.manifest.disableStreaming,
-        instructions: artifactInfo.manifest.instructions || '',
-        startup_script: artifactInfo.manifest.startup_script || '',
-        
-        // Voice Settings
-        voice: artifactInfo.manifest.voice || 'sage',
-        temperature: artifactInfo.manifest.temperature || 0.8,
-        
-        // Tools Configuration
-        enabled_tools: artifactInfo.manifest.enabled_tools,
-        
-        // Mode Selection
-        mode: mode
-      });
-    }
+      // Startup Script
+      startup_script: artifactInfo.manifest.startup_script || ''
+    });
   }, [artifactInfo]);
 
   // Add function to save agent config
@@ -2069,20 +1805,6 @@ my_global_var = 42`}
         severity: 'info'
       });
 
-      // Ensure the model is correctly set based on the mode
-      let modelToUse: string;
-      if (agentConfig.mode === 'voice') {
-        modelToUse = 'gpt-4o-realtime-preview';
-      } else {
-        // For text mode, use the specified model if it's in our options, otherwise default to gpt-4o-mini
-        const specifiedModel = agentConfig.model;
-        if (specifiedModel && TEXT_MODEL_OPTIONS.includes(specifiedModel as any)) {
-          modelToUse = specifiedModel;
-        } else {
-          modelToUse = 'gpt-4o-mini';
-        }
-      }
-
       const updatedManifest = {
         ...artifactInfo.manifest,
         // Basic Info
@@ -2090,26 +1812,12 @@ my_global_var = 42`}
         description: agentConfig.description,
         welcomeMessage: agentConfig.welcomeMessage,
         
-        // Identity
-        profile: agentConfig.profile,
-        goal: agentConfig.goal,
-        
         // Model Settings
-        model: modelToUse,
-        stream: agentConfig.stream,
-        disableStreaming: agentConfig.disableStreaming,
-        instructions: agentConfig.instructions,
-        startup_script: agentConfig.startup_script,
-        
-        // Voice Settings
-        voice: agentConfig.voice,
+        model: agentConfig.model,
         temperature: agentConfig.temperature,
         
-        // Tools Configuration
-        enabled_tools: agentConfig.enabled_tools,
-        
-        // Mode Selection
-        mode: agentConfig.mode || 'text'
+        // Startup Script
+        startup_script: agentConfig.startup_script
       };
 
       await artifactManager.edit({
@@ -2134,7 +1842,7 @@ my_global_var = 42`}
     }
   };
 
-  // Update renderConfig to include mode selection
+  // Update renderConfig to include simplified agent configuration
   const renderConfig = () => (
     <div className="p-6">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -2180,271 +1888,84 @@ my_global_var = 42`}
             />
           </div>
 
-          {/* Runtime Configuration */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Runtime Configuration</h3>
+          {/* Model Settings */}
+          <div className="border-t pt-6 space-y-4">
+            <h3 className="text-lg font-medium text-gray-900">Model Settings</h3>
             
-            {/* Identity */}
-            <div className="space-y-4 mb-6">
-              <TextField
-                label="Profile"
-                value={agentConfig.profile}
+            <FormControl fullWidth>
+              <InputLabel>Model</InputLabel>
+              <Select
+                value={agentConfig.model || "gpt-4o-mini"}
                 onChange={(e) => setAgentConfig(prev => ({
                   ...prev,
-                  profile: e.target.value
+                  model: e.target.value
                 }))}
-                fullWidth
-                required
-                helperText="Define the agent's role and expertise"
-              />
+              >
+                {TEXT_MODEL_OPTIONS.map((model) => (
+                  <MenuItem key={model} value={model}>
+                    {model}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                Select the LLM model to use for text interactions
+              </FormHelperText>
+            </FormControl>
 
-              <TextField
-                label="Goal"
-                value={agentConfig.goal}
+            <div className="space-y-2">
+              <label className="block text-sm text-gray-700">
+                Temperature ({agentConfig.temperature})
+              </label>
+              <input
+                type="range"
+                name="temperature"
+                min="0"
+                max="2"
+                step="0.1"
+                value={agentConfig.temperature || 0.8}
                 onChange={(e) => setAgentConfig(prev => ({
                   ...prev,
-                  goal: e.target.value
+                  temperature: parseFloat(e.target.value)
                 }))}
-                fullWidth
-                required
-                helperText="Define the agent's primary objective in a single line"
+                className="w-full"
+                title="Adjust temperature"
+                aria-label="Adjust temperature"
               />
-
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-900">Instructions</h4>
-                <Editor
-                  height="200px"
-                  language="markdown"
-                  theme="vs-light"
-                  value={agentConfig.instructions || ''}
-                  onChange={(value: string | undefined) => setAgentConfig(prev => ({
-                    ...prev,
-                    instructions: value || ''
-                  }))}
-                  options={{
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'on',
-                    wrappingIndent: 'indent',
-                    lineNumbers: 'off'
-                  }}
-                />
-                <FormHelperText>
-                  Detailed instructions for the agent's behavior and capabilities in markdown format
-                </FormHelperText>
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>Precise (0)</span>
+                <span>Balanced (1)</span>
+                <span>Creative (2)</span>
               </div>
-
-              <TextField
-                label="Startup Script"
-                value={agentConfig.startup_script || ''}
-                onChange={(e) => setAgentConfig(prev => ({
-                  ...prev,
-                  startup_script: e.target.value
-                }))}
-                multiline
-                rows={4}
-                fullWidth
-                helperText="Python code that will be executed automatically when starting a chat session"
-                placeholder={`# Example:
-import numpy as np
-import pandas as pd
-
-# Set up custom functions
-def my_helper_function():
-    return "Hello from helper function!"
-
-# Initialize variables
-my_global_var = 42`}
-              />
-            </div>
-
-            {/* Model Settings */}
-            <div className="space-y-4 mb-6">
-              <h4 className="text-sm font-medium text-gray-900">Model Settings</h4>
-              
-              <FormControl fullWidth>
-                <InputLabel>Model</InputLabel>
-                <Select
-                  value={agentConfig.mode === 'voice' ? 'gpt-4o-realtime-preview' : (agentConfig.model || 'gpt-4o-mini')}
-                  onChange={(e) => setAgentConfig(prev => ({
-                    ...prev,
-                    model: e.target.value
-                  }))}
-                  disabled={agentConfig.mode === 'voice'}
-                >
-                  {agentConfig.mode === 'voice' ? (
-                    <MenuItem value="gpt-4o-realtime-preview">gpt-4o-realtime-preview</MenuItem>
-                  ) : (
-                    TEXT_MODEL_OPTIONS.map((model) => (
-                      <MenuItem key={model} value={model}>
-                        {model}
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-                <FormHelperText>
-                  {agentConfig.mode === 'voice' 
-                    ? "Voice mode requires gpt-4o-realtime-preview model" 
-                    : "Select the LLM model to use for text interactions"}
-                </FormHelperText>
-              </FormControl>
-
-              {/* Streaming options */}
-              <div className="space-y-2">
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={agentConfig.stream !== false}
-                      onChange={(e) => setAgentConfig(prev => ({
-                        ...prev,
-                        stream: e.target.checked
-                      }))}
-                      disabled={agentConfig.disableStreaming}
-                    />
-                  }
-                  label="Enable streaming responses"
-                />
-                
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={!!agentConfig.disableStreaming}
-                      onChange={(e) => {
-                        const disableStreaming = e.target.checked;
-                        setAgentConfig(prev => ({
-                          ...prev,
-                          disableStreaming,
-                          // If disabling streaming, also set stream to false
-                          stream: disableStreaming ? false : prev.stream
-                        }));
-                      }}
-                    />
-                  }
-                  label="Disable streaming (for models that don't support it)"
-                />
-                <FormHelperText>
-                  Some models don't support streaming. Check this option if you're experiencing issues with streaming responses.
-                </FormHelperText>
-              </div>
-            </div>
-
-            {/* Mode Selection */}
-            <div className="space-y-4 mb-6">
-              <h4 className="text-sm font-medium text-gray-900">Interaction Mode</h4>
-              
-              <FormControl fullWidth>
-                <InputLabel>Mode</InputLabel>
-                <Select
-                  value={agentConfig.mode || "text"}
-                  onChange={(e) => {
-                    const newMode = e.target.value as 'text' | 'voice';
-                    setAgentConfig(prev => ({
-                      ...prev,
-                      mode: newMode,
-                      // Update model based on mode
-                      model: newMode === 'voice' ? 'gpt-4o-realtime-preview' : 'gpt-4o-mini'
-                    }));
-                  }}
-                >
-                  <MenuItem value="text">Text Only</MenuItem>
-                  <MenuItem value="voice">Voice Enabled</MenuItem>
-                </Select>
-                <FormHelperText>
-                  Choose how users will interact with this agent. Voice mode enables both text and voice interactions.
-                  {agentConfig.mode === 'voice' && " Voice mode requires gpt-4o-realtime-preview model."}
-                </FormHelperText>
-              </FormControl>
-            </div>
-
-            {/* Voice Settings - Only show if voice mode is selected */}
-            {(agentConfig.mode === 'voice') && (
-              <div className="space-y-4 mb-6">
-                <h4 className="text-sm font-medium text-gray-900">Voice Settings</h4>
-                
-                <FormControl fullWidth>
-                  <InputLabel>Voice</InputLabel>
-                  <Select
-                    value={agentConfig.voice || "sage"}
-                    onChange={(e) => setAgentConfig(prev => ({
-                      ...prev,
-                      voice: e.target.value
-                    }))}
-                  >
-                    {VOICE_OPTIONS.map((voice) => (
-                      <MenuItem key={voice} value={voice}>
-                        {voice.charAt(0).toUpperCase() + voice.slice(1)}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <TextField
-                  label="Temperature"
-                  type="number"
-                  value={agentConfig.temperature || 0.8}
-                  onChange={(e) => setAgentConfig(prev => ({
-                    ...prev,
-                    temperature: parseFloat(e.target.value)
-                  }))}
-                  inputProps={{ min: 0, max: 1, step: 0.1 }}
-                  fullWidth
-                  helperText="Controls randomness in responses (0.0 to 1.0)"
-                />
-              </div>
-            )}
-
-            {/* Tools Configuration */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium text-gray-900">Enabled Tools</h4>
-              
-              <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-[3rem]">
-                {(agentConfig.enabled_tools || ['code_interpreter']).map((toolId) => {
-                  const tool = availableTools.find(t => t.id === toolId);
-                  if (!tool) return null;
-                  
-                  return (
-                    <Chip
-                      key={tool.id}
-                      label={tool.name}
-                      onDelete={() => setAgentConfig(prev => ({
-                        ...prev,
-                        enabled_tools: prev.enabled_tools?.filter(id => id !== tool.id)
-                      }))}
-                      className="m-1"
-                    />
-                  );
-                })}
-              </div>
-
-              <FormControl fullWidth>
-                <InputLabel>Add Tool</InputLabel>
-                <Select
-                  value=""
-                  onChange={(e) => {
-                    const toolId = e.target.value;
-                    setAgentConfig(prev => ({
-                      ...prev,
-                      enabled_tools: [...(prev.enabled_tools || []), toolId]
-                    }));
-                  }}
-                >
-                  {availableTools
-                    .filter(tool => !(agentConfig.enabled_tools || []).includes(tool.id))
-                    .map(tool => (
-                      <MenuItem key={tool.id} value={tool.id}>
-                        <div>
-                          <div className="font-medium">{tool.name}</div>
-                          <div className="text-sm text-gray-500">{tool.description}</div>
-                        </div>
-                      </MenuItem>
-                    ))
-                  }
-                </Select>
-              </FormControl>
             </div>
           </div>
 
-          {/* Remove the save button div since it's now in the action bar */}
+          {/* Startup Script */}
+          <div className="border-t pt-6 space-y-4">
+            <h3 className="text-lg font-medium text-gray-900">Startup Script</h3>
+            
+            <div className="space-y-2">
+              <Editor
+                height="200px"
+                language="python"
+                theme="vs-light"
+                value={agentConfig.startup_script || ''}
+                onChange={(value: string | undefined) => setAgentConfig(prev => ({
+                  ...prev,
+                  startup_script: value || ''
+                }))}
+                options={{
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'on',
+                  wrappingIndent: 'indent',
+                  lineNumbers: 'on'
+                }}
+              />
+              <FormHelperText>
+                Python code that will be executed automatically when starting a chat session
+              </FormHelperText>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2452,26 +1973,38 @@ my_global_var = 42`}
 
   // Update renderChat function
   const renderChat = () => (
-    <div className="flex-1 flex flex-col" style={{ height: 'calc(100vh - 107px)' }}> {/* 104px = 64px (navbar) + 40px (back button bar) */}
-      {selectedTab === 'chat' && (
-        <LazyThebeProvider>
-          <Chat 
-            agentConfig={{
-              ...agentConfig,
-            }}
-            className="flex-1"
-            showActions={true}
-            onPreviewChat={() => artifactId && window.open(`#/chat/${artifactId.split('/').pop()}`, '_blank')}
-            onPublish={() => setShowPublishDialog(true)}
-            artifactId={artifactId}
-          />
-        </LazyThebeProvider>
-      )}
-      {selectedTab !== 'chat' && (
-        <div className="flex-1 flex items-center justify-center text-gray-500">
-          Select the chat tab to start a conversation
-        </div>
-      )}
+    <div className="p-6">
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Chat Preview</h2>
+        
+        {!artifactId ? (
+          <div className="text-center py-10 text-gray-500">
+            Save the agent configuration first to enable chat preview
+          </div>
+        ) : (
+          <div className="border rounded-lg overflow-hidden h-[600px]">
+            <LazyThebeProvider>
+              <Chat 
+                agentConfig={{
+                  name: agentConfig.name,
+                  profile: artifactInfo?.manifest.profile || '',
+                  goal: artifactInfo?.manifest.goal || '',
+                  model: agentConfig.model,
+                  temperature: agentConfig.temperature,
+                  instructions: artifactInfo?.manifest.instructions || '',
+                  startup_script: agentConfig.startup_script,
+                  welcomeMessage: agentConfig.welcomeMessage,
+                  voice: artifactInfo?.manifest.voice || 'alloy',
+                  enabled_tools: artifactInfo?.manifest.enabled_tools || ['code_interpreter'],
+                  mode: artifactInfo?.manifest.mode || 'text'
+                }}
+                artifactId={artifactId}
+                showActions={false}
+              />
+            </LazyThebeProvider>
+          </div>
+        )}
+      </div>
     </div>
   );
 

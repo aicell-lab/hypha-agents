@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { useHyphaStore } from '../../store/hyphaStore';
 import { Tool } from './ToolProvider';
-import { useTools } from './ToolProvider';
 import OpenAI from 'openai';
 
 interface TextModeContextType {
@@ -55,7 +54,6 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
   const [connectionState, setConnectionState] = useState<string>('disconnected');
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const { server } = useHyphaStore();
-  const { onToolsChange } = useTools();
   
   // OpenAI client reference
   const openaiClientRef = useRef<OpenAI | null>(null);
@@ -598,18 +596,6 @@ export const TextModeProvider: React.FC<TextModeProviderProps> = ({ children }) 
     }
   }, [isChatRunning, continueConversation]);
 
-  // Register a callback to update the session when tools change
-  useEffect(() => {
-    // Only set up the listener if we're in an active chat and onToolsChange is available
-    if (isChatRunning && onToolsChange) {
-      const unsubscribe = onToolsChange((updatedTools) => {
-        console.log('Tools changed, updating chat with new tools:', updatedTools);
-        chatConfigRef.current.tools = updatedTools;
-      });
-      
-      return unsubscribe;
-    }
-  }, [isChatRunning, onToolsChange]);
 
   return (
     <TextModeContext.Provider value={{

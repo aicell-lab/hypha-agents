@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars } from 'react-icons/fa';
+import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaUpload } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -12,9 +12,10 @@ interface FileOperationsProps {
   onSave: () => void;
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onPublish: () => void;
 }
 
-export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownload, onLoad }) => (
+export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownload, onLoad, onPublish }) => (
   <div className="flex items-center">
     <input
       type="file"
@@ -44,6 +45,13 @@ export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownlo
       title="Download notebook (Ctrl/Cmd + Shift + S)"
     >
       <FaDownload className="w-3.5 h-3.5" />
+    </button>
+    <button
+      onClick={onPublish}
+      className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition"
+      title="Publish agent"
+    >
+      <FaUpload className="w-3.5 h-3.5" />
     </button>
   </div>
 );
@@ -156,6 +164,7 @@ export interface NotebookToolbarProps {
   isAIReady: boolean;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
+  onPublish: () => void;
 }
 
 interface ToolbarDropdownProps extends NotebookToolbarProps {
@@ -180,6 +189,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   isAIReady,
   onToggleSidebar,
   isSidebarOpen,
+  onPublish,
   isOpen,
   onClose
 }) => {
@@ -291,6 +301,16 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
         <FaDownload className="w-3.5 h-3.5 mr-2" />
         Download
       </button>
+      <button
+        onClick={() => {
+          onPublish();
+          onClose();
+        }}
+        className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+      >
+        <FaUpload className="w-3.5 h-3.5 mr-2" />
+        Publish Agent
+      </button>
 
       <div className="border-t border-gray-200 mt-1 pt-1">
         <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Cells</div>
@@ -372,7 +392,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   isKernelReady,
   isAIReady,
   onToggleSidebar,
-  isSidebarOpen
+  isSidebarOpen,
+  onPublish
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -380,7 +401,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
     <div className="flex items-center justify-between px-2 py-1 border-b border-gray-200 bg-white">
       {/* Desktop toolbar - hidden on small screens */}
       <div className="hidden md:flex items-center space-x-2 flex-1">
-        <FileOperations onSave={onSave} onDownload={onDownload} onLoad={onLoad} />
+        <FileOperations onSave={onSave} onDownload={onDownload} onLoad={onLoad} onPublish={onPublish} />
         <KernelControls
           onRunAll={onRunAll}
           onClearOutputs={onClearOutputs}
@@ -450,6 +471,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             isAIReady={isAIReady}
             onToggleSidebar={onToggleSidebar}
             isSidebarOpen={isSidebarOpen}
+            onPublish={onPublish}
             isOpen={isDropdownOpen}
             onClose={() => setIsDropdownOpen(false)}
           />
