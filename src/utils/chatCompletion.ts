@@ -39,10 +39,9 @@ export interface AgentSettings {
   apiKey: string;
   model: string;
   temperature: number;
-  instructions: string;
 }
 const RESPONSE_INSTRUCTIONS = `
-You are an expert Python assistant capable of solving tasks by writing and executing code.
+You are an expert assistant capable of solving tasks by writing and executing Python code.
 You will be given a task and must plan and execute Python code snippets to achieve the goal.
 
 Follow this iterative cycle meticulously:
@@ -168,7 +167,6 @@ export const DefaultAgentConfig: AgentSettings = {
     apiKey: 'ollama',
     model: 'qwen2.5-coder:7b',
     temperature: 0.7,
-    instructions: `You are a code assistant specialized in generating Python code for notebooks.`
   };
 
 // Helper function to extract final response from script

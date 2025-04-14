@@ -110,7 +110,6 @@ export function useChatCompletion({
       // Use agent settings in chat completion
       const completion = chatCompletion({
         messages,
-        systemPrompt: agentSettings.instructions,
         model: agentSettings.model,
         temperature: agentSettings.temperature,
         maxSteps: 15,

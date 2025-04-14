@@ -491,19 +491,6 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
                     </div>
                   </div>
                 </div>
-
-                {/* Instructions Section */}
-                <div className="space-y-2 pt-4">
-                  <h4 className="text-sm font-medium text-gray-900">Agent Instructions</h4>
-                  <textarea
-                    name="instructions"
-                    value={localSettings.instructions}
-                    onChange={handleChange}
-                    rows={6}
-                    className="w-full px-3 py-2 border rounded-md text-sm font-mono"
-                    placeholder="Enter agent instructions..."
-                  />
-                </div>
               </div>
 
               {/* Footer */}

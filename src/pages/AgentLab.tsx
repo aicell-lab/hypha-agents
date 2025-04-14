@@ -12,12 +12,14 @@ import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
 import { CanvasPanel } from '../components/notebook/CanvasPanel';
 import { HyphaCoreWindow } from '../components/services/hyphaCoreServices';
 import { ChatMessage } from '../utils/chatCompletion';
+import axios from 'axios';
 
 // Import components
 import NotebookHeader from '../components/notebook/NotebookHeader';
 import NotebookContent from '../components/notebook/NotebookContent';
 import NotebookFooter from '../components/notebook/NotebookFooter';
 import KeyboardShortcutsDialog from '../components/notebook/KeyboardShortcutsDialog';
+import PublishAgentDialog from '../components/notebook/PublishAgentDialog';
 
 // Import utilities and types
 import { NotebookCell, NotebookData, NotebookMetadata, CellType, CellRole, OutputItem } from '../types/notebook';
@@ -38,6 +40,7 @@ import { ProjectsProvider, useProjects, IN_BROWSER_PROJECT } from '../providers/
 
 // Import setupNotebookService
 import { setupNotebookService } from '../components/services/hyphaCoreServices';
+import { SITE_ID } from '../utils/env';
 
 // Add CellRole enum values
 const CELL_ROLES = {
@@ -91,7 +94,7 @@ const NotebookPage: React.FC = () => {
   const editorRefs = useRef<{ [key: string]: React.RefObject<any> }>({});
   const lastUserCellRef = useRef<string | null>(null);
   const lastAgentCellRef = useRef<string | null>(null);
-  const { server, isLoggedIn } = useHyphaStore();
+  const { server, isLoggedIn, artifactManager } = useHyphaStore();
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [isAIReady, setIsAIReady] = useState(false);
   const [agentSettings, setAgentSettings] = useState(() => loadSavedAgentSettings());
@@ -126,6 +129,9 @@ const NotebookPage: React.FC = () => {
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
 
+  // Add state for publish dialog
+  const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   // --- Define handleAddWindow callback ---
   const handleAddWindow = useCallback((config: any) => {
@@ -820,11 +826,124 @@ const NotebookPage: React.FC = () => {
     server,
     isReady, // Kernel readiness from useThebe
     executeCode, // Added executeCode from useThebe as dependency
-    agentSettings,
     hyphaCoreApi, // Prevent re-running if already set up
-    cellManager, // Ensure cellManager ref object is stable
-    handleAddWindow, // Callback dependency
+    // Removed unstable dependencies that cause multiple re-runs:
+    // agentSettings - Only need initial values, we don't need to reconnect when settings change
+    // cellManager - This is a ref object, shouldn't be in dependency array
+    // handleAddWindow - This is a stable callback created with useCallback
   ]);
+
+  // Create a separate effect to handle agentSettings changes
+  useEffect(() => {
+    // Only update existing API with new settings if connected
+    if (hyphaCoreApi) {
+      console.log('[AgentLab] Updating existing Hypha Core service with new settings');
+      // Add implementation here if needed to update settings without reconnecting
+    }
+  }, [agentSettings, hyphaCoreApi]);
+
+  // Get system cell for publish dialog
+  const systemCell = useMemo(() => {
+    return cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code') || null;
+  }, [cells]);
+
+  // Handle publish agent
+  const handlePublishAgent = useCallback((name: string, description: string) => {
+    if (!artifactManager || !isLoggedIn) {
+      showToast('You need to be logged in to publish an agent', 'error');
+      return;
+    }
+
+    setIsPublishing(true);
+    const toastId = 'publishing-agent';
+    showToast('Publishing agent...', 'loading', { id: toastId });
+
+    // Save current notebook first
+    saveNotebook()
+      .then(async () => {
+        try {
+          // Create agent manifest
+          const manifest = {
+            name: name,
+            description: description,
+            version: '1.0.0',
+            license: 'Apache-2.0',
+            type: 'agent',
+            created_at: new Date().toISOString()
+          };
+
+          // Create the agent
+          const artifact = await artifactManager.create({
+            parent_id: `${SITE_ID}/agents`,
+            type: "agent",
+            manifest,
+            config: {},
+            version: "stage",
+            _rkwargs: true
+          });
+
+          // If system cell exists, extract it for the agent
+          if (systemCell) {
+            // Upload the system cell content as a file
+            const blob = new Blob([systemCell.content], { type: 'text/plain' });
+            
+            // Get the upload URL
+            const putUrl = await artifactManager.put_file({
+              artifact_id: artifact.id,
+              file_path: 'startup_script.py',
+              _rkwargs: true
+            });
+            
+            // Upload the file content
+            await axios.put(putUrl, blob, {
+              headers: {
+                "Content-Type": ""
+              }
+            });
+          }
+
+          // Upload the full notebook as well
+          const notebookData: NotebookData = {
+            nbformat: 4,
+            nbformat_minor: 5,
+            metadata: notebookMetadata,
+            cells: cellManager.current ? cellManager.current.getCurrentCellsContent() : cells
+          };
+          
+          const notebookBlob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
+          
+          // Get the upload URL for notebook
+          const notebookPutUrl = await artifactManager.put_file({
+            artifact_id: artifact.id,
+            file_path: 'example_chat.ipynb',
+            _rkwargs: true
+          });
+          
+          // Upload the notebook content
+          await axios.put(notebookPutUrl, notebookBlob, {
+            headers: {
+              "Content-Type": ""
+            }
+          });
+
+          showToast('Agent published successfully!', 'success', { id: toastId });
+          
+          // Navigate to edit page for the new agent
+          navigate(`/edit/${encodeURIComponent(artifact.id)}`);
+        } catch (error) {
+          console.error('Error publishing agent:', error);
+          showToast(`Failed to publish agent: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error', { id: toastId });
+        } finally {
+          setIsPublishing(false);
+          setIsPublishDialogOpen(false);
+        }
+      })
+      .catch((error) => {
+        console.error('Error saving notebook before publishing:', error);
+        showToast(`Failed to save notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error', { id: toastId });
+        setIsPublishing(false);
+      });
+  }, [artifactManager, isLoggedIn, systemCell, notebookMetadata, cells, saveNotebook, navigate, cellManager]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -847,6 +966,7 @@ const NotebookPage: React.FC = () => {
             isAIReady={isAIReady}
             onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
             isSidebarOpen={isSidebarOpen}
+            onPublish={() => setIsPublishDialogOpen(true)}
           />
 
       {/* Container for Sidebar + Main Content Area (takes remaining height) */}
@@ -925,6 +1045,16 @@ const NotebookPage: React.FC = () => {
           <KeyboardShortcutsDialog
             isOpen={isShortcutsDialogOpen}
             onClose={() => setIsShortcutsDialogOpen(false)}
+          />
+
+          {/* Publish Agent Dialog */}
+          <PublishAgentDialog
+            isOpen={isPublishDialogOpen}
+            onClose={() => setIsPublishDialogOpen(false)}
+            onConfirm={handlePublishAgent}
+            title="Publish Agent"
+            systemCell={systemCell}
+            notebookTitle={notebookMetadata.title || notebookFileName || 'Untitled Agent'}
           />
         </div>
       </div>
