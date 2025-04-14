@@ -16,6 +16,21 @@ export const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g
 // Store references to toasts that need manual dismissal
 const activeToasts = new Map<string, HTMLElement>();
 
+// Maximum length for toast messages in the UI
+const MAX_TOAST_MESSAGE_LENGTH = 100;
+
+/**
+ * Truncates a message if it exceeds the maximum length.
+ * @param message The message to truncate.
+ * @returns The truncated message with ellipsis if needed.
+ */
+export function truncateMessage(message: string): string {
+  if (message.length <= MAX_TOAST_MESSAGE_LENGTH) {
+    return message;
+  }
+  return message.substring(0, MAX_TOAST_MESSAGE_LENGTH - 3) + '...';
+}
+
 /**
  * Downloads the notebook data as a JSON file.
  * @param notebookData The notebook data to download.
@@ -93,6 +108,15 @@ export function showToast(
   const { duration = 2000, id } = options;
   let timeoutId: ReturnType<typeof setTimeout> | null = null; // Store timeout ID
 
+  // Handle long messages
+  let displayMessage = message;
+  if (message.length > MAX_TOAST_MESSAGE_LENGTH) {
+    // Log the full message to console
+    console.error(`Toast message (full): ${message}`);
+    // Truncate for UI display and add note about console
+    displayMessage = truncateMessage(message).slice(0, -3) + ' (see full message in browser console)...';
+  }
+
   // If an ID is provided and a toast with that ID already exists, remove the old one first.
   if (id && activeToasts.has(id)) {
     dismissToast(id);
@@ -136,7 +160,7 @@ export function showToast(
   const contentWrapper = document.createElement('div');
   contentWrapper.className = 'flex items-center flex-grow mr-2'; // Allow message to grow, add margin before close button
   const messageSpan = document.createElement('span');
-  messageSpan.textContent = message;
+  messageSpan.textContent = displayMessage; // Use the possibly truncated message
   contentWrapper.appendChild(iconSpan);
   contentWrapper.appendChild(messageSpan);
   messageDiv.appendChild(contentWrapper);

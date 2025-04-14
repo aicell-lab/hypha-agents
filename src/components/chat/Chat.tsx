@@ -48,33 +48,7 @@ interface ChatProps {
   enableVoiceMode?: boolean;
 }
 
-const defaultInitialMessages: Message[] = [
-  {
-    role: 'assistant',
-    content: [
-      {
-        type: 'markdown',
-        content: `# Welcome to REEF Imaging Farm Live Demo 🌟
-
-I'm your AI assistant, ready to demonstrate the power of Autonomous AI Agents in bioimage analysis and data management.
-
-## Live View of REEF Farm 📸
-Let me show you the real-time view of our REEF farm setup:`
-      },
-      {
-        type: 'code_execution',
-        content: `from IPython.display import HTML
-
-# Display live webcam feed
-HTML('<img src="http://reef.aicell.io:8001/video_feed" width="50%" style="border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">')`,
-        attrs: {
-          language: 'python'
-        }
-      },
-      
-    ]
-  }
-];
+const defaultInitialMessages: Message[] = [];
 
 const ChatContent: React.FC<ChatProps> = (props) => {
   const {

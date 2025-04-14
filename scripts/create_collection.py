@@ -33,7 +33,7 @@ async def create_collection():
             "links": []
         },
         config={
-            "permissions": {"*": "r", "@": "r+"},
+            "permissions": {"*": "r", "@": "rw+"},
         },
         overwrite=True
     )

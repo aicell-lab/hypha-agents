@@ -6,7 +6,7 @@ import ResourceCard from './ResourceCard';
 import { Grid } from '@mui/material';
 
 interface ResourceGridProps {
-  type?: 'model' | 'application' | 'notebook' | 'dataset';
+  type?: 'model' | 'application' | 'notebook' | 'dataset' | 'agent';
 }
 
 interface PaginationProps {
@@ -75,9 +75,10 @@ export const ResourceGrid: React.FC<ResourceGridProps> = ({ type }) => {
       'models': 'model',
       'datasets': 'dataset',
       'applications': 'application',
-      'notebooks': 'notebook'
+      'notebooks': 'notebook',
+      'agents': 'agent'
     };
-    return typeMap[path] || null;
+    return typeMap[path] || 'agent'; // Default to 'agent' if path not found
   }, [location.pathname]);
 
   useEffect(() => {
@@ -126,6 +127,11 @@ export const ResourceGrid: React.FC<ResourceGridProps> = ({ type }) => {
     setSearchQuery(query);
   };
 
+  const handleSearchConfirm = (query: string) => {
+    setServerSearchQuery(query);
+    setCurrentPage(1);
+  };
+
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
   return (
@@ -139,6 +145,7 @@ export const ResourceGrid: React.FC<ResourceGridProps> = ({ type }) => {
         />
         <SearchBar 
           onSearchChange={handleSearchChange}
+          onSearchConfirm={handleSearchConfirm}
         />
       </div>
       <Grid container spacing={2} sx={{ padding: { xs: 0.5, sm: 1, md: 2 } }}>

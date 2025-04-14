@@ -56,7 +56,7 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
   user: null,
   isInitialized: false,
   resources: [],
-  resourceType: 'model',
+  resourceType: 'agent',
   resourceTypes: [],
   page: 0,
   itemsPerPage: 12,
