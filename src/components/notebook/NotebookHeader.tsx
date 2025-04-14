@@ -22,6 +22,7 @@ interface NotebookHeaderProps {
   isAIReady: boolean;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
+  onPublish: () => void;
 }
 
 const NotebookHeader: React.FC<NotebookHeaderProps> = ({
@@ -41,7 +42,8 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   isKernelReady,
   isAIReady,
   onToggleSidebar,
-  isSidebarOpen
+  isSidebarOpen,
+  onPublish
 }) => {
   return (
     <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
@@ -104,6 +106,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           isAIReady={isAIReady}
           onToggleSidebar={onToggleSidebar}
           isSidebarOpen={isSidebarOpen}
+          onPublish={onPublish}
         />
       </div>
     </div>

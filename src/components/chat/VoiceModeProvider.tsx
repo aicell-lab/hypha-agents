@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { useHyphaStore } from '../../store/hyphaStore';
 import { Tool } from './ToolProvider';
-import { useTools } from './ToolProvider';
 
 interface VoiceModeContextType {
   isChatRunning: boolean;
@@ -53,7 +52,6 @@ export const VoiceModeProvider: React.FC<VoiceModeProviderProps> = ({ children }
   const [connectionState, setConnectionState] = useState<string>('disconnected');
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const { server } = useHyphaStore();
-  const { onToolsChange } = useTools();
   
   // WebRTC related refs
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -731,22 +729,6 @@ Remember:
       console.error('Data channel not open, sending text message failed');
     }
   }, []);
-
-  // Register a callback to update the session when tools change
-  useEffect(() => {
-    // Only set up the listener if we're recording and onToolsChange is available
-    if (isChatRunning && dataChannelRef.current?.readyState === 'open' && onToolsChange) {
-      const unsubscribe = onToolsChange((updatedTools) => {
-        console.log('Tools changed, updating session with new tools:', updatedTools);
-        updateSession({
-          ...recordingConfigRef.current,
-          tools: updatedTools
-        });
-      });
-      
-      return unsubscribe;
-    }
-  }, [isChatRunning, onToolsChange, updateSession]);
 
   return (
     <VoiceModeContext.Provider value={{
