@@ -19,7 +19,7 @@ import NotebookHeader from '../components/notebook/NotebookHeader';
 import NotebookContent from '../components/notebook/NotebookContent';
 import NotebookFooter from '../components/notebook/NotebookFooter';
 import KeyboardShortcutsDialog from '../components/notebook/KeyboardShortcutsDialog';
-import PublishAgentDialog from '../components/notebook/PublishAgentDialog';
+import PublishAgentDialog, { PublishAgentData } from '../components/notebook/PublishAgentDialog';
 
 // Import utilities and types
 import { NotebookCell, NotebookData, NotebookMetadata, CellType, CellRole, OutputItem } from '../types/notebook';
@@ -132,6 +132,9 @@ const NotebookPage: React.FC = () => {
   // Add state for publish dialog
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+
+  // Ref to track if service setup has completed
+  const setupCompletedRef = useRef(false);
 
   // --- Define handleAddWindow callback ---
   const handleAddWindow = useCallback((config: any) => {
@@ -513,10 +516,10 @@ const NotebookPage: React.FC = () => {
         const file = new File([blob], metadataToSave.filePath.split('/').pop() || 'notebook.ipynb', { type: 'application/json' });
         await uploadFile(resolvedProjectId, file);
       }
-      showToast('Notebook saved successfully', 'success', { id: 'saving-notebook' });
+      showToast('Notebook saved successfully', 'success');
     } catch (error) {
       console.error('Error saving notebook:', error);
-      showToast(`Failed to save notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error', { id: 'saving-notebook' });
+      showToast(`Failed to save notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   }, [cellManager, notebookMetadata, isProjectsLoading, uploadFile, saveInBrowserFile, setNotebookMetadata]);
 
@@ -769,20 +772,27 @@ const NotebookPage: React.FC = () => {
   // --- Effect to setup Hypha Core notebook service after login and kernel ready ---
   useEffect(() => {
     const setupService = async () => {
-      // Guard clauses: ensure all necessary components are ready and service isn't already set up
-      if (!isLoggedIn || !server || !isReady || hyphaCoreApi || !cellManager.current || !executeCode) {
-        console.log('[AgentLab] Setup Service check failed:', {
+      // Skip if already set up or missing initial conditions
+      if (setupCompletedRef.current || hyphaCoreApi || !hasInitializedRef.current || !notebookMetadata.filePath) {
+        return;
+      }
+
+      // Guard clauses: ensure all necessary components are ready
+      if (!isLoggedIn || !server || !isReady || !cellManager.current || !executeCode) {
+        console.log('[AgentLab] Setup Service skipped - prerequisites not ready:', {
           isLoggedIn,
           server: !!server,
           isReady,
-          hyphaCoreApi: !!hyphaCoreApi,
           cellManager: !!cellManager.current,
           executeCode: !!executeCode
         });
         return;
       }
 
-      console.log('[AgentLab] Conditions met, attempting to set up notebook service...');
+      // Mark as completed to prevent duplicate attempts
+      setupCompletedRef.current = true;
+
+      console.log('[AgentLab] Setting up Hypha Core service for notebook:', notebookMetadata.filePath);
       showToast('Connecting Hypha Core Service...', 'loading');
 
       // Use the signal from the current AbortController
@@ -800,7 +810,7 @@ const NotebookPage: React.FC = () => {
         if (currentSignal.aborted) {
             console.log('[AgentLab] Hypha Core service setup aborted before completion.');
             showToast('Hypha Core Service connection cancelled.', 'warning');
-            // Do not set the API if aborted
+            setupCompletedRef.current = false; // Reset flag to allow retry
             return;
         }
         setHyphaCoreApi(api); // Store the API object
@@ -814,24 +824,14 @@ const NotebookPage: React.FC = () => {
             console.error('[AgentLab] Failed to set up notebook service:', error);
             showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
         }
-        // Optionally reset hyphaCoreApi state on failure/abort
+        // Reset flags to allow retry
+        setupCompletedRef.current = false;
         setHyphaCoreApi(null);
       }
     };
 
     setupService();
-    // Dependencies for this effect
-  }, [
-    isLoggedIn,
-    server,
-    isReady, // Kernel readiness from useThebe
-    executeCode, // Added executeCode from useThebe as dependency
-    hyphaCoreApi, // Prevent re-running if already set up
-    // Removed unstable dependencies that cause multiple re-runs:
-    // agentSettings - Only need initial values, we don't need to reconnect when settings change
-    // cellManager - This is a ref object, shouldn't be in dependency array
-    // handleAddWindow - This is a stable callback created with useCallback
-  ]);
+  }, [isReady, hasInitializedRef, notebookMetadata.filePath]);
 
   // Create a separate effect to handle agentSettings changes
   useEffect(() => {
@@ -848,7 +848,7 @@ const NotebookPage: React.FC = () => {
   }, [cells]);
 
   // Handle publish agent
-  const handlePublishAgent = useCallback((name: string, description: string) => {
+  const handlePublishAgent = useCallback((agentData: PublishAgentData) => {
     if (!artifactManager || !isLoggedIn) {
       showToast('You need to be logged in to publish an agent', 'error');
       return;
@@ -862,74 +862,102 @@ const NotebookPage: React.FC = () => {
     saveNotebook()
       .then(async () => {
         try {
+          // Get system cell content
+          const systemCellContent = systemCell ? systemCell.content : '';
+          
+          // Create a minimal chat template from current cells
+          const templateCells = cells.filter(cell => 
+            (cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code')
+          ).slice(0, 1); // Just take the first cell for the template
+          
           // Create agent manifest
           const manifest = {
-            name: name,
-            description: description,
-            version: '1.0.0',
-            license: 'Apache-2.0',
+            name: agentData.name,
+            description: agentData.description,
+            version: agentData.version,
+            license: agentData.license,
             type: 'agent',
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            startup_script: systemCellContent,
+            welcomeMessage: agentData.welcomeMessage,
+            // Structure chat_template as an object with metadata and cells
+            chat_template: templateCells.length > 0 ? {
+              metadata: notebookMetadata,
+              cells: templateCells
+            } : null
           };
 
-          // Create the agent
-          const artifact = await artifactManager.create({
-            parent_id: `${SITE_ID}/agents`,
-            type: "agent",
-            manifest,
-            config: {},
-            version: "stage",
-            _rkwargs: true
-          });
-
-          // If system cell exists, extract it for the agent
-          if (systemCell) {
-            // Upload the system cell content as a file
-            const blob = new Blob([systemCell.content], { type: 'text/plain' });
-            
-            // Get the upload URL
-            const putUrl = await artifactManager.put_file({
-              artifact_id: artifact.id,
-              file_path: 'startup_script.py',
+          let artifact;
+          
+          // Check if we're updating an existing agent or creating a new one
+          if (agentData.id) {
+            // Update existing agent
+            artifact = await artifactManager.edit({
+              artifact_id: agentData.id,
+              type: "agent",
+              manifest,
+              version: "new", // Create a new version
               _rkwargs: true
             });
-            
-            // Upload the file content
-            await axios.put(putUrl, blob, {
-              headers: {
-                "Content-Type": ""
-              }
+            dismissToast(toastId);
+            showToast('Agent updated successfully!', 'success');
+          } else {
+            // Create a new agent
+            artifact = await artifactManager.create({
+              parent_id: `${SITE_ID}/agents`,
+              type: "agent",
+              manifest,
+              _rkwargs: true
             });
+            dismissToast(toastId);
+            showToast('Agent published successfully!', 'success');
           }
-
-          // Upload the full notebook as well
+          
+          // Save the artifact info to the notebook metadata and save the notebook
+          const updatedMetadata = {
+            ...notebookMetadata,
+            agentArtifact: {
+              id: artifact.id,
+              version: artifact.version,
+              name: agentData.name,
+              description: agentData.description,
+              manifest: manifest
+            }
+          };
+          
+          // First update the cell manager's reference to ensure it's saved
+          if (cellManager.current) {
+            cellManager.current.notebookMetadata = updatedMetadata;
+          }
+          
+          // Then update the state
+          setNotebookMetadata(updatedMetadata);
+          
+          // Then save the notebook with the updated metadata
           const notebookData: NotebookData = {
             nbformat: 4,
             nbformat_minor: 5,
-            metadata: notebookMetadata,
+            metadata: updatedMetadata,
             cells: cellManager.current ? cellManager.current.getCurrentCellsContent() : cells
           };
           
-          const notebookBlob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
-          
-          // Get the upload URL for notebook
-          const notebookPutUrl = await artifactManager.put_file({
-            artifact_id: artifact.id,
-            file_path: 'example_chat.ipynb',
-            _rkwargs: true
-          });
-          
-          // Upload the notebook content
-          await axios.put(notebookPutUrl, notebookBlob, {
-            headers: {
-              "Content-Type": ""
+          // Save directly to avoid race conditions with state updates
+          try {
+            if (updatedMetadata.projectId === IN_BROWSER_PROJECT.id) {
+              await saveInBrowserFile(updatedMetadata.filePath!, notebookData);
+            } else {
+              const blob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
+              const file = new File([blob], updatedMetadata.filePath!.split('/').pop() || 'notebook.ipynb', { type: 'application/json' });
+              await uploadFile(updatedMetadata.projectId!, file);
             }
-          });
-
-          showToast('Agent published successfully!', 'success', { id: toastId });
+            console.log('[AgentLab] Notebook with agent artifact info saved successfully');
+          } catch (saveError) {
+            console.error('Error saving notebook with agent artifact:', saveError);
+          }
           
-          // Navigate to edit page for the new agent
+          // Navigate to edit page for the agent
           navigate(`/edit/${encodeURIComponent(artifact.id)}`);
+          
         } catch (error) {
           console.error('Error publishing agent:', error);
           showToast(`Failed to publish agent: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error', { id: toastId });
@@ -943,7 +971,7 @@ const NotebookPage: React.FC = () => {
         showToast(`Failed to save notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error', { id: toastId });
         setIsPublishing(false);
       });
-  }, [artifactManager, isLoggedIn, systemCell, notebookMetadata, cells, saveNotebook, navigate, cellManager]);
+  }, [artifactManager, isLoggedIn, systemCell, cells, notebookMetadata, saveNotebook, navigate, setNotebookMetadata]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -1055,6 +1083,9 @@ const NotebookPage: React.FC = () => {
             title="Publish Agent"
             systemCell={systemCell}
             notebookTitle={notebookMetadata.title || notebookFileName || 'Untitled Agent'}
+            existingId={notebookMetadata.agentArtifact?.id}
+            existingVersion={notebookMetadata.agentArtifact?.version}
+            welcomeMessage={notebookMetadata.agentArtifact?.manifest?.welcomeMessage}
           />
         </div>
       </div>

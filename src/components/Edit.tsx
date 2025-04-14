@@ -69,6 +69,26 @@ interface ArtifactInfo {
     enabled_tools?: string[];
     mode?: 'text' | 'voice';
     startup_script?: string;
+    chat_template?: {
+      metadata: {
+        title: string;
+        description: string;
+        created: string;
+      };
+      cells: Array<{
+        id: string;
+        type: string;
+        content: string;
+        role?: string;
+        metadata?: {
+          role?: string;
+          collapsed?: boolean;
+          trusted?: boolean;
+        };
+        executionCount?: number;
+        outputs?: Array<any>;
+      }>;
+    };
   };
 }
 
@@ -249,7 +269,7 @@ const Edit: React.FC = () => {
   };
 
   const getImageDataUrl = async (content: string | ArrayBuffer, fileName: string): Promise<string> => {
-    let buffer: ArrayBuffer;
+    let buffer: ArrayBufferLike;
     if (typeof content === 'string') {
       const encoder = new TextEncoder();
       buffer = encoder.encode(content).buffer;
@@ -339,7 +359,8 @@ const Edit: React.FC = () => {
           voice: artifact.manifest?.voice,
           temperature: artifact.manifest?.temperature,
           enabled_tools: artifact.manifest?.enabled_tools,
-          mode: artifact.manifest?.mode
+          mode: artifact.manifest?.mode,
+          chat_template: artifact.manifest.chat_template || []
         }
       });
 
@@ -872,11 +893,11 @@ const Edit: React.FC = () => {
 
                   {/* Startup Script */}
                   <div className="border-t pt-6 space-y-4">
-                    <h3 className="text-lg font-medium text-gray-900">Startup Script</h3>
+                    <h3 className="text-lg font-medium text-gray-900">System Cell (Startup Script)</h3>
                     
                     <div className="space-y-2">
                       <Editor
-                        height="200px"
+                        height="300px"
                         language="python"
                         theme="vs-light"
                         value={agentConfig.startup_script || ''}
@@ -893,10 +914,33 @@ const Edit: React.FC = () => {
                         }}
                       />
                       <FormHelperText>
-                        Python code that will be executed automatically when starting a chat session
+                        Python code that defines the agent's system behavior. This code will be executed at the beginning of each chat session.
                       </FormHelperText>
                     </div>
                   </div>
+
+                  {/* Chat Template Preview (if available) */}
+                  {artifactInfo?.manifest?.chat_template && (
+                    <div className="border-t pt-6 space-y-4">
+                      <h3 className="text-lg font-medium text-gray-900">Chat Template</h3>
+                      <div className="bg-gray-50 p-4 rounded-md text-sm border">
+                        <div className="mb-3">
+                          <h4 className="font-semibold">{artifactInfo.manifest.chat_template.metadata.title}</h4>
+                          <p className="text-gray-600 text-xs">{artifactInfo.manifest.chat_template.metadata.description}</p>
+                        </div>
+                        <p className="text-gray-700 mb-2">This template contains {artifactInfo.manifest.chat_template.cells.length} messages:</p>
+                        <div className="space-y-2">
+                          {artifactInfo.manifest.chat_template.cells.map((cell, index) => (
+                            <div key={index} className="p-2 rounded border">
+                              <div className="font-medium">{cell.metadata?.role || cell.role || 'Unknown'}</div>
+                              <div className="text-gray-600 text-xs">{cell.type}</div>
+                              <div className="mt-1 text-xs line-clamp-2">{cell.content.substring(0, 100)}{cell.content.length > 100 ? '...' : ''}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1777,22 +1821,16 @@ const Edit: React.FC = () => {
 
 
   useEffect(() => {
-    if (!artifactInfo) return;
-
-    // Set agent config based on manifest
-    setAgentConfig({
-      // Basic Info
-      name: artifactInfo.manifest.name || '',
-      description: artifactInfo.manifest.description || '',
-      welcomeMessage: artifactInfo.manifest.welcomeMessage || 'Hello, how can I assist you today?',
-      
-      // Model Settings
-      model: artifactInfo.manifest.model || 'gpt-4o-mini',
-      temperature: artifactInfo.manifest.temperature || 0.8,
-      
-      // Startup Script
-      startup_script: artifactInfo.manifest.startup_script || ''
-    });
+    if (artifactInfo) {
+      setAgentConfig({
+        name: artifactInfo.manifest.name || '',
+        description: artifactInfo.manifest.description || '',
+        welcomeMessage: artifactInfo.manifest.welcomeMessage || 'Hello, how can I assist you today?',
+        model: artifactInfo.manifest.model || 'gpt-4o-mini',
+        temperature: artifactInfo.manifest.temperature || 0.8,
+        startup_script: artifactInfo.manifest.startup_script || ''
+      });
+    }
   }, [artifactInfo]);
 
   // Add function to save agent config
@@ -1941,11 +1979,11 @@ const Edit: React.FC = () => {
 
           {/* Startup Script */}
           <div className="border-t pt-6 space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">Startup Script</h3>
+            <h3 className="text-lg font-medium text-gray-900">System Cell (Startup Script)</h3>
             
             <div className="space-y-2">
               <Editor
-                height="200px"
+                height="300px"
                 language="python"
                 theme="vs-light"
                 value={agentConfig.startup_script || ''}
@@ -1962,10 +2000,33 @@ const Edit: React.FC = () => {
                 }}
               />
               <FormHelperText>
-                Python code that will be executed automatically when starting a chat session
+                Python code that defines the agent's system behavior. This code will be executed at the beginning of each chat session.
               </FormHelperText>
             </div>
           </div>
+
+          {/* Chat Template Preview (if available) */}
+          {artifactInfo?.manifest?.chat_template && (
+            <div className="border-t pt-6 space-y-4">
+              <h3 className="text-lg font-medium text-gray-900">Chat Template</h3>
+              <div className="bg-gray-50 p-4 rounded-md text-sm border">
+                <div className="mb-3">
+                  <h4 className="font-semibold">{artifactInfo.manifest.chat_template.metadata.title}</h4>
+                  <p className="text-gray-600 text-xs">{artifactInfo.manifest.chat_template.metadata.description}</p>
+                </div>
+                <p className="text-gray-700 mb-2">This template contains {artifactInfo.manifest.chat_template.cells.length} messages:</p>
+                <div className="space-y-2">
+                  {artifactInfo.manifest.chat_template.cells.map((cell, index) => (
+                    <div key={index} className="p-2 rounded border">
+                      <div className="font-medium">{cell.metadata?.role || cell.role || 'Unknown'}</div>
+                      <div className="text-gray-600 text-xs">{cell.type}</div>
+                      <div className="mt-1 text-xs line-clamp-2">{cell.content.substring(0, 100)}{cell.content.length > 100 ? '...' : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

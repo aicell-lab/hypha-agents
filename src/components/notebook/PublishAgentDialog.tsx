@@ -1,14 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import { NotebookCell, OutputItem } from '../../types/notebook';
 
 interface PublishAgentDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (name: string, description: string) => void;
+  onConfirm: (agentData: PublishAgentData) => void;
   title: string;
   systemCell: NotebookCell | null;
   notebookTitle: string;
+  existingId?: string;
+  existingVersion?: string;
+  welcomeMessage?: string;
+}
+
+export interface PublishAgentData {
+  id?: string;
+  name: string;
+  description: string;
+  version: string;
+  license: string;
+  welcomeMessage: string;
 }
 
 const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
@@ -17,13 +29,44 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
   onConfirm,
   title,
   systemCell,
-  notebookTitle
+  notebookTitle,
+  existingId,
+  existingVersion,
+  welcomeMessage: defaultWelcomeMessage
 }) => {
+  const [id, setId] = useState(existingId || '');
   const [name, setName] = useState(notebookTitle || 'Untitled Agent');
   const [description, setDescription] = useState('');
+  const [version, setVersion] = useState(existingVersion || '1.0.0');
+  const [license, setLicense] = useState('CC-BY-4.0');
+  const [welcomeMessage, setWelcomeMessage] = useState(defaultWelcomeMessage || 'Hi, how can I help you today?');
+  const [isUpdatingExisting, setIsUpdatingExisting] = useState(!!existingId);
+  
+  // Reset the form when the dialog is opened with new values
+  useEffect(() => {
+    if (isOpen) {
+      setId(existingId || '');
+      setName(notebookTitle || 'Untitled Agent');
+      setVersion(existingVersion || '1.0.0');
+      setWelcomeMessage(defaultWelcomeMessage || 'Hi, how can I help you today?');
+      setIsUpdatingExisting(!!existingId);
+    }
+  }, [isOpen, existingId, notebookTitle, existingVersion, defaultWelcomeMessage]);
   
   const handleSubmit = () => {
-    onConfirm(name, description);
+    onConfirm({
+      id: isUpdatingExisting ? id.trim() : undefined, // Only include ID if updating existing agent
+      name,
+      description,
+      version,
+      license,
+      welcomeMessage
+    });
+  };
+
+  const handleCreateNew = () => {
+    setId('');
+    setIsUpdatingExisting(false);
   };
 
   // Format cell output for display
@@ -64,12 +107,45 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="mx-auto max-w-2xl w-full rounded bg-white p-6 shadow-xl">
+        <Dialog.Panel className="mx-auto max-w-2xl w-full rounded bg-white p-6 shadow-xl overflow-y-auto max-h-[90vh]">
           <Dialog.Title className="text-lg font-medium text-gray-900 mb-4">
             {title}
+            {isUpdatingExisting && <span className="ml-2 text-sm text-green-600 font-normal">(Update Existing Agent)</span>}
           </Dialog.Title>
           
           <div className="mb-6 space-y-4">
+            {/* Optional ID Field */}
+            <div>
+              <label htmlFor="agent-id" className="block text-sm font-medium text-gray-700 mb-1">
+                Agent ID <span className="text-gray-400 font-normal">(Optional - Leave empty for a new agent)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  id="agent-id"
+                  value={id}
+                  onChange={(e) => setId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter existing agent ID to update"
+                  disabled={isUpdatingExisting}
+                />
+                {isUpdatingExisting && (
+                  <button
+                    onClick={handleCreateNew}
+                    className="px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Create New
+                  </button>
+                )}
+              </div>
+              {isUpdatingExisting && (
+                <p className="mt-1 text-xs text-green-600">
+                  This agent has already been published. Updates will create a new version.
+                </p>
+              )}
+            </div>
+            
+            {/* Agent Name */}
             <div>
               <label htmlFor="agent-name" className="block text-sm font-medium text-gray-700 mb-1">
                 Agent Name
@@ -85,6 +161,7 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
               />
             </div>
             
+            {/* Agent Description */}
             <div>
               <label htmlFor="agent-description" className="block text-sm font-medium text-gray-700 mb-1">
                 Agent Description
@@ -100,23 +177,72 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
               />
             </div>
             
+            {/* Version and License in a flex row */}
+            <div className="flex space-x-4">
+              <div className="flex-1">
+                <label htmlFor="agent-version" className="block text-sm font-medium text-gray-700 mb-1">
+                  Version
+                </label>
+                <input
+                  type="text"
+                  id="agent-version"
+                  value={version}
+                  onChange={(e) => setVersion(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="1.0.0"
+                />
+              </div>
+              <div className="flex-1">
+                <label htmlFor="agent-license" className="block text-sm font-medium text-gray-700 mb-1">
+                  License
+                </label>
+                <select
+                  id="agent-license"
+                  value={license}
+                  onChange={(e) => setLicense(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="CC-BY-4.0">CC-BY-4.0</option>
+                  <option value="CC-BY-SA-4.0">CC-BY-SA-4.0</option>
+                  <option value="CC-BY-NC-4.0">CC-BY-NC-4.0</option>
+                  <option value="MIT">MIT</option>
+                  <option value="Apache-2.0">Apache-2.0</option>
+                </select>
+              </div>
+            </div>
+            
+            {/* Welcome Message */}
             <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Agent Configuration Preview</h3>
+              <label htmlFor="welcome-message" className="block text-sm font-medium text-gray-700 mb-1">
+                Welcome Message
+              </label>
+              <textarea
+                id="welcome-message"
+                value={welcomeMessage}
+                onChange={(e) => setWelcomeMessage(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Welcome message when agent starts"
+              />
+            </div>
+            
+            {/* System Cell / Startup Script Preview */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Startup Script</h3>
               <div className="border border-gray-200 rounded-md p-4 bg-gray-50 space-y-2">
                 {systemCell ? (
                   <div>
-                    <div className="text-xs font-semibold text-gray-700">System Cell Content:</div>
                     <pre className="text-xs bg-white p-2 rounded border border-gray-200 overflow-auto max-h-32 mt-1">
                       {systemCell.content}
                     </pre>
                     
-                    <div className="text-xs font-semibold text-gray-700 mt-3">System Cell Output:</div>
+                    <div className="text-xs font-semibold text-gray-700 mt-3">Startup Script Output:</div>
                     <div className="mt-1">
                       {formatCellOutput(systemCell)}
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-500 italic">No system cell found</div>
+                  <div className="text-sm text-gray-500 italic">No startup script found</div>
                 )}
               </div>
             </div>
@@ -138,7 +264,7 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              Publish Agent
+              {isUpdatingExisting ? 'Update Agent' : 'Publish Agent'}
             </button>
           </div>
         </Dialog.Panel>

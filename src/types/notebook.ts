@@ -67,6 +67,14 @@ export interface NotebookMetadata {
   modified: string;
   projectId?: string;
   filePath?: string;
+  agentArtifact?: {
+    id: string;
+    version: string;
+    name: string;
+    description: string;
+    manifest?: any;
+    config?: any;
+  };
 }
 
 export interface NotebookData {

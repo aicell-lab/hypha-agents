@@ -559,7 +559,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
 
       {/* Output Area - only show if not fully collapsed */}
       {!isFullyCollapsed && ((output && output.length > 0) || isExecuting) && (
-        <div className={`jupyter-cell-flex-container ml-4 mt-1 ${parent ? 'child-cell' : 'parent-cell'}`}>
+        <div className={`jupyter-cell-flex-container mt-1 ${parent ? 'child-cell' : 'parent-cell'}`}>
           {/* Empty execution count to align with code - only shown when output is visible */}
           {!hideOutput && (
             <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
