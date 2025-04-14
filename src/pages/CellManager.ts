@@ -178,6 +178,18 @@ export class CellManager {
     return uuidv4();
   }
 
+  // Function to clear the 'running' state of any cells
+  clearRunningState(): void {
+    this.setCells((prev) =>
+      prev.map((cell) =>
+        cell.executionState === "running"
+          ? { ...cell, executionState: "idle" }
+          : cell
+      )
+    );
+    console.log("[DEBUG] Cleared any lingering 'running' cell states.");
+  }
+
   // Add a cell of specified type and content after a specific cell (or at the end)
   addCell(
     type: CellType,

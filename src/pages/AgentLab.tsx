@@ -63,13 +63,6 @@ const defaultNotebookMetadata: NotebookMetadata = {
   projectId: undefined
 };
 
-const defaultNotebookData: NotebookData = {
-  nbformat: 4,
-  nbformat_minor: 5,
-  metadata: defaultNotebookMetadata,
-  cells: []
-};
-
 // Define additional types
 interface ProjectManifest {
   name: string;
@@ -99,12 +92,10 @@ const NotebookPage: React.FC = () => {
   const lastUserCellRef = useRef<string | null>(null);
   const lastAgentCellRef = useRef<string | null>(null);
   const { server, isLoggedIn } = useHyphaStore();
-  const [isExecutingCode, setIsExecutingCode] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [isAIReady, setIsAIReady] = useState(false);
   const [agentSettings, setAgentSettings] = useState(() => loadSavedAgentSettings());
   const [hyphaCoreApi, setHyphaCoreApi] = useState<any>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
   const {
     selectedProject,
     setSelectedProject,
@@ -189,7 +180,6 @@ const NotebookPage: React.FC = () => {
   const handleExecuteCode = useCallback(async (completionId: string, code: string, cellId?: string): Promise<string> => {
     let actualCellId = cellId;
     try {
-      setIsExecutingCode(true);
       const manager = cellManager.current;
       if (!manager) {
         console.error('CellManager not initialized in handleExecuteCode');
@@ -227,7 +217,6 @@ const NotebookPage: React.FC = () => {
       if (actualCellId) {
         cellManager.current?.collapseCodeCell(actualCellId);
       }
-      setIsExecutingCode(false);
     }
   }, [executeCode]);
 
@@ -272,7 +261,6 @@ const NotebookPage: React.FC = () => {
         if (resolvedProjectId !== IN_BROWSER_PROJECT.id) {
           paramsToSet.project = resolvedProjectId;
         }
-        setSearchParams(paramsToSet, { replace: true });
         // --- End URL update ---
 
         const visibleCells = loadedCells.filter(cell => cell.metadata?.role !== CELL_ROLES.THINKING);
@@ -307,7 +295,6 @@ const NotebookPage: React.FC = () => {
       lastUserCellRef.current = null;
       lastAgentCellRef.current = null;
       setSelectedProject(null);
-      setSearchParams({}, { replace: true });
     } finally {
       dismissToast(loadingToastId);
     }
@@ -322,7 +309,6 @@ const NotebookPage: React.FC = () => {
     setCells,
     setExecutionCounter,
     setSelectedProject,
-    setSearchParams
   ]);
 
   // Initialization Hook
@@ -363,12 +349,19 @@ const NotebookPage: React.FC = () => {
     setCells
   });
 
+  const handleAbortExecution = useCallback(() => {
+    console.log('[AgentLab] Aborting execution');
+    // TODO: Implement abort execution
+ 
+  }, []);
+
   // --- Notebook Action Handlers (Moved Up) ---
   const handleRestartKernel = useCallback(async () => {
     if (!cellManager.current) return;
     showToast('Restarting kernel...', 'loading');
     try {
       await restartKernel();
+      cellManager.current?.clearRunningState();
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
       showToast('Kernel restarted successfully', 'success');
@@ -424,6 +417,7 @@ const NotebookPage: React.FC = () => {
       return;
     }
     // Otherwise, send it as a chat message using the hook's function
+    cellManager.current?.clearRunningState();
     handleSendChatMessage(message);
   }, [isReady, handleCommand, handleSendChatMessage, setInitializationError]);
 
@@ -874,7 +868,7 @@ const NotebookPage: React.FC = () => {
                       isReady={isReady}
                       activeAbortController={activeAbortController}
                       showCanvasPanel={showCanvasPanel}
-                      onAbortExecution={handleStopChatCompletion}
+                      onAbortExecution={handleAbortExecution}
                     />
                   </div>
                 </div>
