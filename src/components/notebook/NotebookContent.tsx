@@ -83,7 +83,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
     <div className="flex flex-1 overflow-hidden">
       {/* Main cell area - hidden on small screens when canvas is open */}
       <div className={`flex-1 overflow-y-auto ${showCanvasPanel ? 'hidden md:block' : ''}`}>
-        <div className="max-w-4xl mx-auto p-0 sm:p-2">
+        <div className="max-w-4xl mx-auto mt-2 p-0 sm:p-2">
           {cells.length > 0 ? (
             cells.map((cell) => (
               <div
@@ -152,7 +152,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
 
                   {/* Cell Toolbar - Show on hover */}
                   <div
-                    className="absolute right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
+                    className="absolute right-4 top-[-16px] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
                     style={{ pointerEvents: 'auto' }}
                   >
                     {/* Cell Type Indicator */}
@@ -160,7 +160,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                       {cell.type === 'code' ? (
                         <span className="flex items-center gap-1">
                           <VscCode className="w-3 h-3" />
-                          Code
+                          <span className="hidden sm:inline">Code</span>
                           {cell.metadata?.staged && (
                             <span className="ml-1 px-1 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
                               Staged
@@ -170,7 +170,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                       ) : (
                         <span className="flex items-center gap-1">
                           <MdOutlineTextFields className="w-3 h-3" />
-                          Markdown
+                          <span className="hidden sm:inline">Markdown</span>
                           {cell.metadata?.staged && (
                             <span className="ml-1 px-1 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
                               Staged
@@ -193,7 +193,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                             title="Commit this staged cell"
                           >
                             <FaCheckCircle className="w-3.5 h-3.5" />
-                            <span className="text-xs">Commit</span>
+                            <span className="hidden sm:inline text-xs">Commit</span>
                           </button>
                         ) : (
                           <button
@@ -205,7 +205,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                             title="Uncommit this cell (mark as staged)"
                           >
                             <FaUndo className="w-3.5 h-3.5" />
-                            <span className="text-xs">Uncommit</span>
+                            <span className="hidden sm:inline text-xs">Uncommit</span>
                           </button>
                         )}
                         <div className="h-4 w-px bg-gray-200 mx-1"></div> {/* Separator */}
@@ -225,7 +225,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                           title="Copy code"
                         >
                           <FaCopy className="w-3.5 h-3.5" />
-                          <span className="text-xs">Copy</span>
+                          <span className="hidden sm:inline text-xs">Copy</span>
                         </button>
 
                         {/* Hide/Show Code Button - Moved before Run button */}
@@ -253,7 +253,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                               }
                             />
                           </svg>
-                          <span className="text-xs">
+                          <span className="hidden sm:inline text-xs">
                             {cell.metadata?.isCodeVisible === false ? 'Show' : 'Hide'}
                           </span>
                         </button>
@@ -272,7 +272,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           )}
-                          <span className="text-xs">Run</span>
+                          <span className="hidden sm:inline text-xs">Run</span>
                         </button>
 
                         <button
@@ -284,7 +284,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                           </svg>
-                          <span className="text-xs">Convert</span>
+                          <span className="hidden sm:inline text-xs">Convert</span>
                         </button>
                       </>
                     )}
@@ -300,7 +300,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
-                            <span className="text-xs">Render</span>
+                            <span className="hidden sm:inline text-xs">Render</span>
                           </button>
                         ) : (
                           <>
@@ -314,7 +314,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                               title="Copy markdown"
                             >
                               <FaCopy className="w-3.5 h-3.5" />
-                              <span className="text-xs">Copy</span>
+                              <span className="hidden sm:inline text-xs">Copy</span>
                             </button>
                             <button
                               onClick={() => onToggleCellEditing(cell.id, true)}
@@ -324,7 +324,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                               <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
                                 <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                               </svg>
-                              <span className="text-xs">Edit</span>
+                              <span className="hidden sm:inline text-xs">Edit</span>
                             </button>
                           </>
                         )}
@@ -337,7 +337,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                           </svg>
-                          <span className="text-xs">Convert</span>
+                          <span className="hidden sm:inline text-xs">Convert</span>
                         </button>
                       </>
                     )}
@@ -351,7 +351,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                         title="Regenerate AI response"
                       >
                         <FaSyncAlt className="w-3 h-3" />
-                        <span className="text-xs">Regenerate</span>
+                        <span className="hidden sm:inline text-xs">Regenerate</span>
                       </button>
                     )}
 
@@ -372,7 +372,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                             title="Delete options"
                           >
                             <FaTrash className="w-4 h-4" />
-                            <span className="text-xs">Delete</span>
+                            <span className="hidden sm:inline text-xs">Delete</span>
                           </button>
 
                           {/* Additional delete options - initially hidden */}
@@ -384,7 +384,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                               }}
                               className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
                             >
-                              <span className="text-xs">This Cell</span>
+                              <span className="hidden sm:inline text-xs">This Cell</span>
                             </button>
                             <button
                               onClick={(e) => {
@@ -393,7 +393,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                               }}
                               className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
                             >
-                              <span className="text-xs">With Responses</span>
+                              <span className="hidden sm:inline text-xs">With Responses</span>
                             </button>
                           </div>
                         </div>
@@ -408,7 +408,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                         title="Delete cell"
                       >
                         <FaTrash className="w-4 h-4" />
-                        <span className="text-xs">Delete</span>
+                        <span className="hidden sm:inline text-xs">Delete</span>
                       </button>
                     )}
                   </div>

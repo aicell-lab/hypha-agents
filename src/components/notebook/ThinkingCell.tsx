@@ -180,7 +180,15 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
                       const match = /language-(\w+)/.exec(className || '');
                       const language = match ? match[1] : 'text';
                       
-                      return !inline ? (
+                      if (inline) {
+                        return (
+                          <code className={`bg-gray-100 rounded px-1 py-0.5 font-mono text-sm ${className || ''}`}>
+                            {children}
+                          </code>
+                        );
+                      }
+
+                      return (
                         <SyntaxHighlighter
                           language={language}
                           style={oneLight}
@@ -192,10 +200,6 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
                         >
                           {String(children).replace(/\n$/, '')}
                         </SyntaxHighlighter>
-                      ) : (
-                        <code className={className}>
-                          {children}
-                        </code>
                       );
                     }) as CodeComponent
                   }}
