@@ -56,6 +56,8 @@ interface ProjectsContextType {
   listInBrowserFiles: () => Promise<ProjectFile[]>;
   deleteInBrowserFile: (filePath: string) => Promise<void>;
   getInBrowserFileContent: (filePath: string) => Promise<any>;
+  // Add rename file method
+  renameFile: (projectId: string, oldPath: string, newPath: string) => Promise<void>;
 }
 
 const ProjectsContext = createContext<ProjectsContextType | null>(null);
@@ -494,6 +496,114 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [artifactManager, user, deleteInBrowserFile]);
 
+  // Rename a file (copy content to new path, then delete old path)
+  const renameFile = useCallback(async (projectId: string, oldPath: string, newPath: string) => {
+    if (oldPath === newPath) {
+      console.info('[ProjectsProvider] No rename needed, paths are identical');
+      return;
+    }
+
+    try {
+      console.info('[ProjectsProvider] Renaming file:', { projectId, oldPath, newPath });
+      
+      if (projectId === 'in-browser') {
+        // For in-browser project
+        // 1. Get content from old file
+        const content = await getInBrowserFileContent(oldPath);
+        
+        // 2. Save content to new path
+        await saveInBrowserFile(newPath, content);
+        
+        // 3. Delete the old file
+        await deleteInBrowserFile(oldPath);
+        
+        console.info('[ProjectsProvider] In-browser file renamed successfully');
+        return;
+      }
+      
+      // For remote projects
+      if (!artifactManager || !user) {
+        const errorMsg = 'Cannot rename file: Artifact manager or user not available.';
+        console.error(`[ProjectsProvider] ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+      
+      // --- Start of remote file rename operation ---
+      console.info('[ProjectsProvider] Starting remote file rename operation');
+      
+      // 1. Prepare for editing first to ensure we have a lock
+      await artifactManager.edit({
+        artifact_id: projectId,
+        version: "stage",
+        _rkwargs: true
+      });
+      
+      // 2. Get current file content via URL
+      const url = await artifactManager.get_file({
+        artifact_id: projectId,
+        file_path: oldPath,
+        version: 'stage',
+        _rkwargs: true
+      });
+      console.info('[ProjectsProvider] Got URL for file content');
+      
+      // 3. Fetch the content
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file content for rename: ${response.statusText}`);
+      }
+      console.info('[ProjectsProvider] Fetched file content');
+      
+      // 4. Get the content blob
+      const contentBlob = await response.blob();
+      console.info('[ProjectsProvider] Got content as blob');
+      
+      // 5. Get presigned URL for new path
+      const presignedUrl = await artifactManager.put_file({
+        artifact_id: projectId,
+        file_path: newPath,
+        _rkwargs: true
+      });
+      console.info('[ProjectsProvider] Got presigned URL for new file location');
+      
+      // 6. Upload content to new path
+      const uploadResponse = await fetch(presignedUrl, {
+        method: 'PUT',
+        body: contentBlob,
+        headers: {
+          'Content-Type': '' // important for s3
+        }
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload of renamed file failed with status: ${uploadResponse.status}`);
+      }
+      console.info('[ProjectsProvider] Uploaded content to new location');
+      
+      // 7. Delete the old file
+      await artifactManager.remove_file({
+        artifact_id: projectId,
+        file_path: oldPath,
+        _rkwargs: true
+      });
+      console.info('[ProjectsProvider] Removed old file');
+      
+      // 8. Add a small delay before returning to ensure server-side propagation
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      console.info('[ProjectsProvider] Remote file renamed successfully');
+    } catch (err) {
+      console.error('[ProjectsProvider] Error renaming file:', err);
+      throw new Error(`Failed to rename file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }, [
+    artifactManager, 
+    user, 
+    getInBrowserFileContent, 
+    saveInBrowserFile, 
+    deleteInBrowserFile
+  ]);
+
   // Get file content
   const getFileContent = useCallback(async (projectId: string, filePath: string): Promise<string> => {
     if (projectId === 'in-browser') {
@@ -578,7 +688,8 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     saveInBrowserFile,
     listInBrowserFiles,
     deleteInBrowserFile,
-    getInBrowserFileContent
+    getInBrowserFileContent,
+    renameFile
   };
 
   return (

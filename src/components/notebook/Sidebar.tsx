@@ -1,18 +1,24 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
-import { FaBook, FaCode, FaFolder, FaSync, FaPlus, FaFile, FaTrash, FaLaptop, FaChevronDown, FaUpload, FaComment } from 'react-icons/fa';
+import { FaFolder, FaSync, FaPlus, FaFile, FaTrash, FaLaptop, FaChevronDown, FaUpload, FaComment } from 'react-icons/fa';
 import { useProjects, ProjectFile, IN_BROWSER_PROJECT, Project } from '../../providers/ProjectsProvider';
-import ProjectFileTree from './ProjectFileTree';
+import FileTree from '../FileTree';
 import { useDropzone } from 'react-dropzone';
 import { useHyphaStore } from '../../store/hyphaStore';
 import ConfirmDialog from '../common/ConfirmDialog';
-import { CellManager } from '../../pages/CellManager';
-import localforage from 'localforage';
+
+import { convertProjectFilesToTreeNodes } from '../../utils/fileTreeConverter';
+import { TreeNode } from '../../hooks/useTraverseTree';
+import { useParams } from 'react-router-dom';
 
 interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   onResize?: (width: number) => void;
   onLoadNotebook: (project: Project, file: ProjectFile) => void;
+  notebookMetadata?: {
+    filePath?: string;
+    [key: string]: any;
+  };
 }
 
 // Add upload status type
@@ -55,13 +61,15 @@ const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onToggle,
   onResize,
-  onLoadNotebook
+  onLoadNotebook,
+  notebookMetadata
 }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<string | null>(null); // Added for file deletion
   const { artifactManager, isLoggedIn } = useHyphaStore();
   const { 
     projects, 
@@ -74,24 +82,33 @@ const Sidebar: React.FC<SidebarProps> = ({
     deleteProject,
     listInBrowserFiles,
     saveInBrowserFile,
-    getInBrowserProject
+    getInBrowserProject,
+    deleteFile,
+    deleteInBrowserFile,
+    renameFile
   } = useProjects();
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'list' | 'details'>('list');
   const [inBrowserFiles, setInBrowserFiles] = useState<ProjectFile[]>([]);
-  const [selectedInBrowserFile, setSelectedInBrowserFile] = useState<string | null>(null);
   const [isInBrowserProject, setIsInBrowserProject] = useState(false);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const addButtonRef = useRef<HTMLDivElement>(null);
+  // Add new state for TreeNode data
+  const [fileTreeData, setFileTreeData] = useState<TreeNode | null>(null);
   // isLoadingFiles: Tracks the loading state for fetching remote project files.
   // This prevents the file tree from rendering with potentially stale data
   // while asynchronous file fetching is in progress.
   // NOW: Also used for loading in-browser files.
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  // Add state for selected files
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
 
   // Log the received prop on render
   // console.log("[Sidebar Render] Type of onLoadNotebook prop:", typeof onLoadNotebook, onLoadNotebook); // Removed render log
+
+  // Add a helper function at the top of the component to filter out .__dir__ files
+  const filterHiddenFiles = (files: ProjectFile[]): ProjectFile[] => {
+    return files.filter(file => !file.path.endsWith('.__dir__'));
+  };
 
   // Load project files when a project is selected
   useEffect(() => {
@@ -111,15 +128,24 @@ const Sidebar: React.FC<SidebarProps> = ({
           setIsLoadingFiles(true); // Set loading true before fetch
           const files = await getProjectFiles(selectedProject.id);
           // console.log('[Sidebar Debug] Fetched files:', files); // Removed debug
-          console.info('[Sidebar] Loaded files:', files.length); // Keep info
+          
+          // Filter out hidden files
+          const filteredFiles = filterHiddenFiles(files);
+          
+          console.info('[Sidebar] Loaded files:', filteredFiles.length); // Keep info
           setProjectFiles(prevFiles => {
             // console.log('[Sidebar Debug] Updating projectFiles state. Previous:', prevFiles, 'New:', files); // Removed debug
-            return files;
+            return filteredFiles;
           });
+          
+          // Convert to TreeNode format for our FileTree component
+          const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+          setFileTreeData(treeData);
         } catch (error) {
           console.error('Error loading project files:', error); // Keep error
           // console.log('[Sidebar Debug] Error loading project files:', error); // Removed debug
           setProjectFiles([]); // Clear files on error
+          setFileTreeData(null); // Clear tree data
         } finally {
           setIsLoadingFiles(false); // Set loading false after fetch/error
         }
@@ -162,21 +188,26 @@ const Sidebar: React.FC<SidebarProps> = ({
       setIsInBrowserProject(true);
       const inBrowserProject = getInBrowserProject(); 
       setSelectedProject(inBrowserProject);
-      setSelectedInBrowserFile(null);
       // --- Trigger loading --- 
       setIsLoadingFiles(true);
       try {
         const files = await listInBrowserFiles();
-        setInBrowserFiles(files.map(f => ({
+        const mappedFiles = files.map(f => ({
           ...f,
           id: f.path,
           created_at: new Date().toISOString(),
           modified_at: new Date().toISOString(),
           size: 0
-        })));
+        }));
+        setInBrowserFiles(mappedFiles);
+        
+        // Convert to TreeNode format for our FileTree component
+        const treeData = convertProjectFilesToTreeNodes(files);
+        setFileTreeData(treeData);
       } catch (error) {
         console.error("Failed to load in-browser files on click:", error);
         setInBrowserFiles([]);
+        setFileTreeData(null);
       } finally {
         setIsLoadingFiles(false);
       }
@@ -244,13 +275,179 @@ const Sidebar: React.FC<SidebarProps> = ({
         size: 0 // Placeholder
       }));
       setInBrowserFiles(mappedFiles); // This should trigger re-render
+      
+      // Convert to TreeNode format for our FileTree component
+      const treeData = convertProjectFilesToTreeNodes(files);
+      setFileTreeData(treeData);
+      
       // console.log('[Sidebar] Called setInBrowserFiles.'); // Removed simple call log
     } catch (error) {
       console.error('[Sidebar] Failed to refresh in-browser files:', error); // Keep error
+      setFileTreeData(null);
     } finally {
       setIsLoadingFiles(false); // Unset loading
     }
   }, [listInBrowserFiles]);
+
+  // Add handlers for FileTree component
+  const handleInsertNode = (folderId: string, itemName: string, isFolder: boolean) => {
+    // This would be a placeholder until we implement actual file/folder creation
+    console.log(`Creating ${isFolder ? 'folder' : 'file'} "${itemName}" in "${folderId}"`);
+    // In a real implementation, you would call an API to create the file/folder
+  };
+
+  const handleDeleteNode = (nodeId: string) => {
+    // Find the file by path
+    const filePath = nodeId;
+    if (!selectedProject) return;
+
+    // Confirm delete (reuse existing delete functionality)
+    setFileToDelete(filePath);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleUpdateFolder = async (nodeId: string, newName: string, isFolder: boolean) => {
+    if (!selectedProject) return;
+    
+    try {
+      // Currently we only support file renaming, not folders
+      if (isFolder) {
+        console.warn("Folder renaming not yet implemented");
+        return;
+      }
+      
+      // Get the old path (nodeId represents the full path)
+      const oldPath = nodeId;
+      
+      // Extract directory part from the old path if it exists
+      let directory = '';
+      const lastSlashIndex = oldPath.lastIndexOf('/');
+      if (lastSlashIndex >= 0) {
+        directory = oldPath.substring(0, lastSlashIndex + 1);
+      }
+      
+      // Construct new path by combining directory and new name
+      const newPath = directory + newName;
+      
+      console.log(`Renaming "${oldPath}" to "${newPath}"`);
+      
+      // Don't set loading state - keep current tree visible
+      
+      try {
+        // Step 1: Create an optimistic update of the file tree to show the rename immediately
+        if (fileTreeData) {
+          // Find the node in the tree and update it optimistically
+          const updatedTree = JSON.parse(JSON.stringify(fileTreeData)); // Deep clone
+          const updateNodeInTree = (node: TreeNode) => {
+            if (node.id === oldPath) {
+              node.id = newPath;
+              node.name = newName;
+              return true;
+            }
+            if (node.items) {
+              for (const item of node.items) {
+                if (updateNodeInTree(item)) return true;
+              }
+            }
+            return false;
+          };
+          
+          // Try to update the tree
+          if (updateNodeInTree(updatedTree)) {
+            // If we found and updated the node, update the tree data
+            setFileTreeData(updatedTree);
+            // Also update the selection
+            setSelectedFileIds([newPath]);
+          }
+        }
+        
+        // Step 2: Perform the actual rename operation
+        await renameFile(selectedProject.id, oldPath, newPath);
+        
+        // Step 3: Refresh the file list in the background
+        let newFiles: ProjectFile[] = [];
+        
+        if (isInBrowserProject) {
+          const inBrowserFiles = await listInBrowserFiles();
+          newFiles = inBrowserFiles;
+          
+          const mappedFiles = inBrowserFiles.map(f => ({
+            ...f,
+            id: f.path,
+            created_at: new Date().toISOString(),
+            modified_at: new Date().toISOString(),
+            size: 0
+          }));
+          setInBrowserFiles(mappedFiles);
+        } else {
+          // For remote projects, explicitly refresh the file list
+          console.log('Refreshing remote files after rename');
+          newFiles = await getProjectFiles(selectedProject.id);
+          console.log('Updated files:', newFiles);
+          
+          // Set state
+          setProjectFiles(newFiles);
+        }
+        
+        // Step 4: Update the tree data with the refreshed files
+        const treeData = convertProjectFilesToTreeNodes(newFiles);
+        setFileTreeData(treeData);
+        
+        // Ensure selection is set to the new file path
+        setSelectedFileIds([newPath]);
+        console.log('Updated selection to:', newPath);
+      } catch (err) {
+        console.error('Error during rename operation:', err);
+        
+        // If there's an error, we need to refresh to get the correct state
+        setIsLoadingFiles(true);
+        
+        try {
+          // Refresh files to get the correct state
+          if (isInBrowserProject) {
+            const inBrowserFiles = await listInBrowserFiles();
+            const mappedFiles = inBrowserFiles.map(f => ({
+              ...f,
+              id: f.path,
+              created_at: new Date().toISOString(),
+              modified_at: new Date().toISOString(),
+              size: 0
+            }));
+            setInBrowserFiles(mappedFiles);
+            
+            const treeData = convertProjectFilesToTreeNodes(inBrowserFiles);
+            setFileTreeData(treeData);
+          } else {
+            const files = await getProjectFiles(selectedProject.id);
+            setProjectFiles(files);
+            
+            const treeData = convertProjectFilesToTreeNodes(files);
+            setFileTreeData(treeData);
+          }
+        } catch (refreshErr) {
+          console.error('Error refreshing files after failed rename:', refreshErr);
+        } finally {
+          setIsLoadingFiles(false);
+        }
+        
+        throw err; // Rethrow to be caught by outer try/catch
+      }
+    } catch (error) {
+      console.error("Error renaming file:", error);
+      // Could show an error toast here
+    }
+  };
+
+  // File click handler that works with TreeNode structure
+  const handleFileDoubleClick = (fileId: string) => {
+    const currentFiles = isInBrowserProject ? inBrowserFiles : projectFiles;
+    const selectedFile = currentFiles.find(f => f.path === fileId);
+    
+    if (selectedFile && selectedProject) {
+      console.log(`Loading file: ${fileId}`);
+      onLoadNotebook(selectedProject, selectedFile);
+    }
+  };
 
   // Add file upload handler
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -420,12 +617,45 @@ const Sidebar: React.FC<SidebarProps> = ({
     setShowDeleteConfirm(true);
   };
 
-  const confirmDelete = async () => {
+  const confirmProjectDelete = async () => {
     if (!projectToDelete) return;
     try {
       await deleteProject(projectToDelete);
     } catch (error) {
       console.error('Error deleting project:', error);
+    } finally {
+      setShowDeleteConfirm(false);
+      setProjectToDelete(null);
+    }
+  };
+
+  // Handle file deletion
+  const confirmDelete = async () => {
+    if (!fileToDelete) return;
+
+    try {
+      if (selectedProject?.id === 'in-browser') {
+        await deleteInBrowserFile(fileToDelete);
+        await refreshInBrowserFiles(); // This already updates the tree data
+      } else if (selectedProject?.id) {
+        await deleteFile(selectedProject.id, fileToDelete);
+        const files = await getProjectFiles(selectedProject.id);
+        
+        // Filter out hidden files
+        const filteredFiles = filterHiddenFiles(files);
+        setProjectFiles(filteredFiles);
+        
+        // Update tree data with filtered files
+        const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+        setFileTreeData(treeData);
+      } else {
+        console.error('No project selected or invalid project ID for deletion');
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+    } finally {
+      setShowDeleteConfirm(false);
+      setFileToDelete(null);
     }
   };
 
@@ -543,7 +773,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         })));
       } else if (selectedProject) {
         const files = await getProjectFiles(selectedProject.id);
-        setProjectFiles(files);
+        // Filter out hidden files
+        const filteredFiles = filterHiddenFiles(files);
+        setProjectFiles(filteredFiles);
+        
+        // Update tree with filtered files
+        const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+        setFileTreeData(treeData);
       }
     } catch (error) {
       console.error("Error refreshing files:", error);
@@ -555,6 +791,40 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   // Determine if the current selected project is the in-browser one
   const isSelectedProjectInBrowser = selectedProject?.id === IN_BROWSER_PROJECT.id;
+
+  // Add a function to handle file selection from FileTree
+  const handleFileSelection = useCallback((fileIds: string[]) => {
+    setSelectedFileIds(fileIds);
+    
+    // If a single file is selected, find the file and handle the double-click action
+    if (fileIds.length === 1) {
+      const selectedFileId = fileIds[0];
+      const currentFiles = isInBrowserProject ? inBrowserFiles : projectFiles;
+      const selectedFile = currentFiles.find(f => f.path === selectedFileId);
+      
+      if (selectedFile) {
+        // We could load the file here if needed, but we'll keep that for double-click
+        console.log(`File selected: ${selectedFile.path}`);
+      }
+    }
+  }, [isInBrowserProject, inBrowserFiles, projectFiles]);
+
+  // Set initial selection based on current notebook file
+  useEffect(() => {
+    if (notebookMetadata?.filePath && selectedProject) {
+      // Determine which files array to use based on the project type
+      const files = isInBrowserProject ? inBrowserFiles : projectFiles;
+      
+      // Find the matching file by path
+      const fileToSelect = files.find(file => file.path === notebookMetadata.filePath);
+      
+      if (fileToSelect) {
+        // Set the selected file ID 
+        setSelectedFileIds([fileToSelect.path]);
+        console.log('Auto-selected file:', fileToSelect.path);
+      }
+    }
+  }, [notebookMetadata?.filePath, selectedProject, projectFiles, inBrowserFiles, isInBrowserProject]);
 
   if (!isOpen) {
     return null;
@@ -711,74 +981,122 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                 {/* File Tree */}
                 <div className="border-t border-gray-100 pt-2 flex-1 overflow-hidden">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-medium text-gray-700">Files</h4>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={handleRefreshFiles}
-                        className="p-1 rounded-md hover:bg-gray-100 cursor-pointer text-gray-600 transition-colors"
-                        title="Refresh files"
-                      >
-                        <FaSync className="w-3 h-3" />
-                      </button>
-                      <div className="relative" ref={addButtonRef}>
-                        <button
-                          onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
-                          className="p-1 rounded-md hover:bg-gray-100 cursor-pointer text-gray-600 transition-colors flex items-center"
-                          title="Add new item"
-                        >
-                          <FaPlus className="w-3 h-3" />
-                          <FaChevronDown className="w-2 h-2 ml-1" />
-                        </button>
-                        <Dropdown 
-                          isOpen={isAddMenuOpen} 
-                          onClose={() => setIsAddMenuOpen(false)}
-                          className="text-sm"
-                        >
-                          <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
-                            {isInBrowserProject ? 'In-Browser Project' : selectedProject?.manifest.name}
-                          </div>
-                          <button
-                            onClick={() => handleCreateNewChat(isInBrowserProject)}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
-                          >
-                            <FaComment className="w-3 h-3 mr-2" />
-                            <span>New Chat</span>
-                          </button>
-                          <label className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center cursor-pointer">
-                            <FaUpload className="w-3 h-3 mr-2" />
-                            <span>Upload File</span>
-                            <input
-                              type="file"
-                              multiple
-                              onChange={(e) => {
-                                if (e.target.files) {
-                                  onDrop(Array.from(e.target.files));
-                                }
-                              }}
-                              className="hidden"
-                            />
-                          </label>
-                        </Dropdown>
-                      </div>
-                    </div>
-                  </div>
                   <div className="h-[300px] min-h-[200px] overflow-y-auto relative border border-gray-100 rounded-md">
-                    {isLoadingFiles ? (
-                      <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                        Loading files...
-                      </div>
-                    ) : (
-                      <ProjectFileTree
-                        // key: Force remounting ProjectFileTree when the selected project changes.
-                        // This ensures the tree component correctly initializes with the new project's
-                        // files, especially crucial when switching from/to projects where file 
-                        // loading is asynchronous (like remote projects), preventing display issues.
-                        key={selectedProject?.id || 'no-project'} 
-                        files={isInBrowserProject ? inBrowserFiles : projectFiles}
-                        onSelectFile={handleFileSelectWrapper}
-                        onDoubleClickFile={handleFileDoubleClickWrapper}
-                        onRefreshInBrowserFiles={refreshInBrowserFiles}
+                    {fileTreeData && (
+                      <FileTree
+                        explorerData={fileTreeData}
+                        handleInsertNode={handleInsertNode}
+                        handleDeleteNode={handleDeleteNode}
+                        handleUpdateFolder={handleUpdateFolder}
+                        onFileDoubleClick={handleFileDoubleClick}
+                        showRoot={false}
+                        selectedFiles={selectedFileIds}
+                        onSelection={handleFileSelection}
+                        showControls={true}
+                        onRefresh={handleRefreshFiles}
+                        isLoading={isLoadingFiles}
+                        rootActions={[
+                          {
+                            label: "New Chat",
+                            icon: <FaComment className="w-3 h-3" />,
+                            onClick: () => handleCreateNewChat(isInBrowserProject)
+                          },
+                          {
+                            label: "New File",
+                            icon: <FaFile className="w-3 h-3" />,
+                            onClick: async () => {
+                              if (!selectedProject) return;
+                              
+                              // Create a timestamp-based file name
+                              const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                              const fileName = `file-${timestamp}.txt`;
+                              
+                              try {
+                                if (isInBrowserProject) {
+                                  // For in-browser project, create an empty file
+                                  await saveInBrowserFile(fileName, "");
+                                  await refreshInBrowserFiles();
+                                } else {
+                                  // For remote projects
+                                  // Create an empty blob
+                                  const emptyBlob = new Blob([""], { type: 'text/plain' });
+                                  const emptyFile = new File([emptyBlob], fileName, { type: 'text/plain' });
+                                  
+                                  // Upload the empty file
+                                  await uploadFile(selectedProject.id, emptyFile);
+                                  
+                                  // Refresh the files list
+                                  const files = await getProjectFiles(selectedProject.id);
+                                  setProjectFiles(files);
+                                  
+                                  // Update the tree
+                                  const treeData = convertProjectFilesToTreeNodes(files);
+                                  setFileTreeData(treeData);
+                                }
+                              } catch (error) {
+                                console.error("Error creating new file:", error);
+                              }
+                            }
+                          },
+                          {
+                            label: "New Folder",
+                            icon: <FaFolder className="w-3 h-3" />,
+                            onClick: async () => {
+                              if (!selectedProject) return;
+                              
+                              // Prompt for folder name
+                              const folderName = prompt("Enter folder name:");
+                              if (!folderName) return;
+                              
+                              try {
+                                if (isInBrowserProject) {
+                                  // For in-browser project, we just need to create a file with the path structure
+                                  // We'll create an empty file with the folder path to represent the folder
+                                  await saveInBrowserFile(`${folderName}/.folder`, "");
+                                  await refreshInBrowserFiles();
+                                } else {
+                                  // For remote S3 projects, create a hidden marker file to represent the folder
+                                  const markerFileName = `${folderName}/.__dir__`;
+                                  const emptyBlob = new Blob([""], { type: 'text/plain' });
+                                  const markerFile = new File([emptyBlob], markerFileName, { type: 'text/plain' });
+                                  
+                                  // Upload the marker file
+                                  await uploadFile(selectedProject.id, markerFile);
+                                  
+                                  // Refresh the files list
+                                  const files = await getProjectFiles(selectedProject.id);
+                                  
+                                  // Filter out the .__dir__ files before display
+                                  const filteredFiles = filterHiddenFiles(files);
+                                  setProjectFiles(filteredFiles);
+                                  
+                                  // Update the tree, but filter out .__dir__ files
+                                  const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+                                  setFileTreeData(treeData);
+                                }
+                              } catch (error) {
+                                console.error("Error creating new folder:", error);
+                              }
+                            }
+                          },
+                          {
+                            label: "Upload File",
+                            icon: <FaUpload className="w-3 h-3" />,
+                            onClick: () => {
+                              // Create a hidden file input and trigger it
+                              const input = document.createElement('input');
+                              input.type = 'file';
+                              input.multiple = true;
+                              input.onchange = (e) => {
+                                const target = e.target as HTMLInputElement;
+                                if (target.files) {
+                                  onDrop(Array.from(target.files));
+                                }
+                              };
+                              input.click();
+                            }
+                          }
+                        ]}
                       />
                     )}
                   </div>
@@ -805,14 +1123,25 @@ const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         <ConfirmDialog
-          isOpen={showDeleteConfirm}
+          isOpen={showDeleteConfirm && projectToDelete !== null}
           onClose={() => {
             setShowDeleteConfirm(false);
             setProjectToDelete(null);
           }}
-          onConfirm={confirmDelete}
+          onConfirm={confirmProjectDelete}
           title="Delete Project"
           message="Are you sure you want to delete this project? This action cannot be undone."
+        />
+
+        <ConfirmDialog
+          isOpen={showDeleteConfirm && fileToDelete !== null}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setFileToDelete(null);
+          }}
+          onConfirm={confirmDelete}
+          title="Delete File"
+          message="Are you sure you want to delete this file? This action cannot be undone."
         />
       </div>
     </div>
