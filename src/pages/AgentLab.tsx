@@ -242,6 +242,10 @@ const NotebookPage: React.FC = () => {
       let rawContent: string | NotebookData;
       let resolvedProjectId = projectId || IN_BROWSER_PROJECT.id;
 
+      // Reset setupCompletedRef to allow service reinitialization for the new file
+      setupCompletedRef.current = false;
+      setHyphaCoreApi(null);
+
       if (resolvedProjectId === IN_BROWSER_PROJECT.id) {
         rawContent = await getInBrowserFileContent(filePath);
       } else {
@@ -772,13 +776,16 @@ const NotebookPage: React.FC = () => {
   // --- Effect to setup Hypha Core notebook service after login and kernel ready ---
   useEffect(() => {
     const setupService = async () => {
-      // Skip if already set up or missing initial conditions
-      if (setupCompletedRef.current || hyphaCoreApi || !hasInitializedRef.current || !notebookMetadata.filePath) {
+      // Skip if missing initial conditions
+      if (setupCompletedRef.current || !hasInitializedRef.current || !notebookMetadata.filePath) {
         return;
       }
 
       // Guard clauses: ensure all necessary components are ready
       if (!isLoggedIn || !server || !isReady || !cellManager.current || !executeCode) {
+        if (!isLoggedIn) {
+          showToast('You need to be logged in to use Hypha Core Service', 'warning');
+        }
         console.log('[AgentLab] Setup Service skipped - prerequisites not ready:', {
           isLoggedIn,
           server: !!server,
@@ -789,37 +796,36 @@ const NotebookPage: React.FC = () => {
         return;
       }
 
-      // Mark as completed to prevent duplicate attempts
-      setupCompletedRef.current = true;
+      // Reset flags to allow setup
+      setupCompletedRef.current = false;
+      setHyphaCoreApi(null);
 
       console.log('[AgentLab] Setting up Hypha Core service for notebook:', notebookMetadata.filePath);
-      showToast('Connecting Hypha Core Service...', 'loading');
 
       // Use the signal from the current AbortController
       const currentSignal = hyphaServiceAbortControllerRef.current.signal;
 
       try {
         const api = await setupNotebookService({
-          onAddWindow: handleAddWindow, // Pass the callback
+          onAddWindow: handleAddWindow,
           server,
-          executeCode, // Pass the wrapped executeCode from cellManager
+          executeCode,
           agentSettings,
-          abortSignal: currentSignal // Pass the current abort signal
+          abortSignal: currentSignal
         });
         // Check if the operation was aborted *before* setting the API
         if (currentSignal.aborted) {
             console.log('[AgentLab] Hypha Core service setup aborted before completion.');
-            showToast('Hypha Core Service connection cancelled.', 'warning');
             setupCompletedRef.current = false; // Reset flag to allow retry
             return;
         }
         setHyphaCoreApi(api); // Store the API object
+        setupCompletedRef.current = true; // Mark as completed only after successful setup
         console.log('[AgentLab] Hypha Core service successfully set up.');
         showToast('Hypha Core Service Connected', 'success');
       } catch (error: any) {
         if (error.name === 'AbortError') {
             console.log('[AgentLab] Hypha Core service setup explicitly aborted.');
-            showToast('Hypha Core Service connection cancelled.', 'warning');
         } else {
             console.error('[AgentLab] Failed to set up notebook service:', error);
             showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
@@ -831,7 +837,7 @@ const NotebookPage: React.FC = () => {
     };
 
     setupService();
-  }, [isReady, hasInitializedRef, notebookMetadata.filePath]);
+  }, [isReady, hasInitializedRef, notebookMetadata.filePath, handleAddWindow, setupCompletedRef.current]);
 
   // Create a separate effect to handle agentSettings changes
   useEffect(() => {
