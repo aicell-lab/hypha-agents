@@ -826,6 +826,69 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   }, [notebookMetadata?.filePath, selectedProject, projectFiles, inBrowserFiles, isInBrowserProject]);
 
+  // Define the function to handle directory opening
+  const handleOpenDirectory = useCallback(async (path: string) => {
+    if (!selectedProject || selectedProject.id === 'in-browser') {
+      // In-browser files are always fully loaded, no action needed
+      return;
+    }
+
+    // Check if children for this path are already loaded (simple check)
+    const findNode = (node: TreeNode | null, targetPath: string): TreeNode | null => {
+      if (!node) return null;
+      if (node.id === targetPath) return node;
+      if (node.items) {
+        for (const item of node.items) {
+          const found = findNode(item, targetPath);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const targetNode = findNode(fileTreeData, path);
+    if (targetNode && targetNode.items && targetNode.items.length > 0) {
+      console.info(`[Sidebar] Children for ${path} already loaded.`);
+      return; // Already loaded
+    }
+
+    console.info(`[Sidebar] Opening directory: ${path}`);
+    setIsLoadingFiles(true); // Indicate loading
+    try {
+      const childFiles = await getProjectFiles(selectedProject.id, path + '/'); // Add trailing slash for prefix
+      const filteredChildFiles = filterHiddenFiles(childFiles);
+
+      // Update the main projectFiles state if needed (or just update the tree)
+      // It might be better to just merge into the tree structure directly
+
+      // Update the fileTreeData state by merging the new children
+      const updateTree = (node: TreeNode): TreeNode => {
+        if (node.id === path) {
+          // Convert fetched files to TreeNode format, passing the base path
+          const childrenNodes = convertProjectFilesToTreeNodes(filteredChildFiles, path + '/').items;
+          return { ...node, items: childrenNodes };
+        }
+        if (node.items) {
+          return { ...node, items: node.items.map(updateTree) };
+        }
+        return node;
+      };
+
+      setFileTreeData(prevTreeData => {
+        if (!prevTreeData) return null;
+        const newTree = updateTree(prevTreeData);
+        console.log("[Sidebar] Updated tree data after opening dir:", newTree);
+        return newTree;
+      });
+
+    } catch (error) {
+      console.error(`[Sidebar] Error loading directory contents for ${path}:`, error);
+      // Optionally show error toast
+    } finally {
+      setIsLoadingFiles(false);
+    }
+  }, [selectedProject, getProjectFiles, fileTreeData, listInBrowserFiles, filterHiddenFiles]);
+
   if (!isOpen) {
     return null;
   }
@@ -995,6 +1058,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         showControls={true}
                         onRefresh={handleRefreshFiles}
                         isLoading={isLoadingFiles}
+                        onOpenDirectory={handleOpenDirectory}
                         rootActions={[
                           {
                             label: "New Chat",
@@ -1052,7 +1116,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 if (isInBrowserProject) {
                                   // For in-browser project, we just need to create a file with the path structure
                                   // We'll create an empty file with the folder path to represent the folder
-                                  await saveInBrowserFile(`${folderName}/.folder`, "");
+                                  await saveInBrowserFile(`${folderName}/.__dir__`, "");
                                   await refreshInBrowserFiles();
                                 } else {
                                   // For remote S3 projects, create a hidden marker file to represent the folder

@@ -43,7 +43,7 @@ interface ProjectsContextType {
   refreshProjects: () => Promise<void>;
   createProject: (name: string, description: string) => Promise<Project>;
   deleteProject: (projectId: string) => Promise<void>;
-  getProjectFiles: (projectId: string) => Promise<ProjectFile[]>;
+  getProjectFiles: (projectId: string, pathPrefix?: string) => Promise<ProjectFile[]>;
   uploadFile: (projectId: string, file: File) => Promise<void>;
   deleteFile: (projectId: string, filePath: string) => Promise<void>;
   getFileContent: (projectId: string, filePath: string) => Promise<string>;
@@ -384,9 +384,21 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [artifactManager, user, selectedProject, refreshProjects]);
 
   // Get project files
-  const getProjectFiles = useCallback(async (projectId: string): Promise<ProjectFile[]> => {
+  const getProjectFiles = useCallback(async (projectId: string, pathPrefix?: string): Promise<ProjectFile[]> => {
     if (projectId === 'in-browser') {
-      return listInBrowserFiles();
+      // For in-browser, list all and filter by prefix locally if needed
+      const allFiles = await listInBrowserFiles();
+      if (pathPrefix) {
+        // Filter for files directly under the prefix
+        return allFiles.filter(file => 
+          file.path.startsWith(pathPrefix) && 
+          file.path !== pathPrefix && 
+          !file.path.substring(pathPrefix.length).includes('/')
+        );
+      } else {
+        // Return only top-level files if no prefix
+        return allFiles.filter(file => !file.path.includes('/'));
+      }
     }
 
     if (!artifactManager || !user) {
@@ -397,26 +409,36 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       console.info('[ProjectsProvider] Fetching files for project:', projectId);
+      // Remove unsupported arguments: recursive, prefix
       const fileList = await artifactManager.list_files({
         artifact_id: projectId,
         version: 'stage',
+        dir_path: pathPrefix,
         _rkwargs: true
       });
 
+      // Map the response, S3 list_files might return different structure
       const files = fileList.map((file: any) => ({
-        name: file.name,
-        path: file.name,
+        name: file.name, // Get base name
+        path: pathPrefix ? `${pathPrefix}${file.name}` : file.name, // Full path from S3
+        // Infer type based on path ending (S3 doesn't always provide reliable type)
         type: file.type,
-        created_at: new Date().toISOString(),
-        modified_at: new Date().toISOString(),
-        size: 0
+        created_at: file.created_at || new Date().toISOString(),
+        modified_at: file.last_modified || new Date().toISOString(), 
+        size: file.size || 0 
       }));
 
-      console.info('[ProjectsProvider] Fetched files:', files.length);
+      console.info('[ProjectsProvider] Fetched all files:', files);
       return files;
+
     } catch (err) {
       console.error('[ProjectsProvider] Error fetching project files:', err);
-      throw new Error('Failed to fetch project files');
+      // Rethrow with a more specific message if possible
+      if (err instanceof Error && err.message.includes("list_files")) {
+        throw new Error('Failed to fetch project files from artifact manager.');
+      } else {
+        throw new Error('Failed to fetch project files.');
+      }
     }
   }, [artifactManager, user, listInBrowserFiles]);
 

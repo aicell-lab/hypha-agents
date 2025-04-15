@@ -6,13 +6,16 @@ import { ProjectFile } from '../providers/ProjectsProvider';
  * for use with the FileTree component
  * 
  * @param files Array of ProjectFile objects
+ * @param basePathPrefix Optional base path to correctly construct node IDs
  * @returns A TreeNode object representing the root of the file tree
  */
-export function convertProjectFilesToTreeNodes(files: ProjectFile[]): TreeNode {
-  // Create root node
+export function convertProjectFilesToTreeNodes(files: ProjectFile[], basePathPrefix: string = 'root'): TreeNode {
+  // Create root node based on prefix or default
+  const rootNodeId = basePathPrefix === 'root' ? 'root' : basePathPrefix.endsWith('/') ? basePathPrefix.slice(0, -1) : basePathPrefix;
+  const rootNodeName = rootNodeId === 'root' ? 'Files' : rootNodeId.split('/').pop() || 'Files';
   const root: TreeNode = {
-    id: 'root',
-    name: 'Files',
+    id: rootNodeId,
+    name: rootNodeName,
     isFolder: true,
     items: []
   };
@@ -21,67 +24,56 @@ export function convertProjectFilesToTreeNodes(files: ProjectFile[]): TreeNode {
     return root;
   }
 
-  // First, organize files by their path for quick lookup
-  const pathMap = new Map<string, TreeNode>();
-  pathMap.set('root', root);
+  // Use a Map to build the structure efficiently
+  const nodeMap = new Map<string, TreeNode>();
+  if (basePathPrefix === 'root') {
+    nodeMap.set('root', root); // Add the actual root if basePathPrefix is 'root'
+  }
 
-  // Helper to ensure a directory node exists
-  const ensureDirectoryExists = (path: string, name: string): TreeNode => {
-    if (pathMap.has(path)) {
-      return pathMap.get(path) as TreeNode;
-    }
-
-    // Create directory node
-    const dirNode: TreeNode = {
-      id: path,
-      name: name,
-      isFolder: true,
-      items: []
-    };
-
-    pathMap.set(path, dirNode);
-    return dirNode;
-  };
-
-  // Process each file
   files.forEach(file => {
-    // Skip if this is a directory that will be created by ensureDirectoryExists
-    if (file.type === 'directory' && pathMap.has(file.path)) {
-      return;
+    const parts = file.path.split('/');
+    let currentPath = '';
+    let parentNode = basePathPrefix === 'root' ? root : null; // Start from root only if basePathPrefix is 'root'
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLastPart = i === parts.length - 1;
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+      // Only process parts that are within or below the basePathPrefix
+      if (!currentPath.startsWith(rootNodeId) && rootNodeId !== 'root') continue;
+
+      if (!nodeMap.has(currentPath)) {
+        // Create node if it doesn't exist
+        const newNode: TreeNode = {
+          id: currentPath,
+          name: part,
+          isFolder: !isLastPart || file.type === 'directory',
+          items: []
+        };
+        nodeMap.set(currentPath, newNode);
+
+        // Link to parent if parent exists
+        if (parentNode) {
+          // Avoid adding duplicates
+          if (!parentNode.items.some(item => item.id === newNode.id)) {
+             parentNode.items.push(newNode);
+          }
+        }
+      } else {
+         // If node exists, ensure its isFolder status is correct if it's a directory
+         const existingNode = nodeMap.get(currentPath)!;
+         if (!isLastPart && !existingNode.isFolder) {
+            existingNode.isFolder = true; // Mark as folder if it has children
+         }
+      }
+      
+      // Update parentNode for the next iteration
+      parentNode = nodeMap.get(currentPath)!;
     }
-
-    const isFolder = file.type === 'directory';
-    const pathParts = file.path.split('/');
-    const fileName = pathParts[pathParts.length - 1];
-    
-    // Create node for this file
-    const fileNode: TreeNode = {
-      id: file.path,
-      name: fileName || file.name,
-      isFolder: isFolder,
-      items: []
-    };
-
-    // Add to path map
-    pathMap.set(file.path, fileNode);
-
-    // If root level file
-    if (pathParts.length === 1) {
-      root.items.push(fileNode);
-      return;
-    }
-
-    // Otherwise, ensure parent directory exists and add as child
-    const parentPath = pathParts.slice(0, -1).join('/');
-    const parentName = pathParts[pathParts.length - 2];
-    const parentNode = ensureDirectoryExists(parentPath, parentName);
-    
-    // Add to parent's items
-    parentNode.items.push(fileNode);
   });
 
-  // Create the tree structure by adding children to their parents
-  // (we've already done this via the ensureDirectoryExists and direct pushing)
-
-  return root;
+  // If basePathPrefix is not 'root', we return the node corresponding to the prefix
+  // Otherwise, we return the actual root node.
+  return nodeMap.get(rootNodeId) || root;
 } 

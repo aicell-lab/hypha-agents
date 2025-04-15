@@ -31,6 +31,7 @@ interface FolderProps {
     onClick: () => void;
   }[];
   isLoading?: boolean;
+  onOpenDirectory?: (path: string) => Promise<void>;
 }
 
 const FileTree: React.FC<FolderProps> = ({
@@ -48,6 +49,7 @@ const FileTree: React.FC<FolderProps> = ({
   onRefresh,
   rootActions = [],
   isLoading = false,
+  onOpenDirectory,
 }) => {
   // State for dropdown menu
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -217,6 +219,7 @@ const FileTree: React.FC<FolderProps> = ({
               onSelection={onSelection}
               isSelectedFile={isSelectedFile}
               insideTree={true}
+              onOpenDirectory={onOpenDirectory}
             />
           </div>
         )}
@@ -237,6 +240,7 @@ const FileTree: React.FC<FolderProps> = ({
       onSelection={onSelection}
       isSelectedFile={isSelectedFile}
       insideTree={insideTree}
+      onOpenDirectory={onOpenDirectory}
     />
   );
 };
@@ -253,6 +257,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
   onSelection,
   isSelectedFile = false,
   insideTree = false,
+  onOpenDirectory,
 }) => {
   const [nodeName, setNodeName] = useState<string>(explorerData?.name || "");
   const [expand, setExpand] = useState<boolean>(showRoot ? false : true);
@@ -278,6 +283,13 @@ const FileTreeItem: React.FC<FolderProps> = ({
 
   // Check if this file is selected
   const isSelected = selectedFiles.includes(explorerData.id) || isSelectedFile;
+
+  // Determine if the node is a folder
+  const isDirectory = explorerData.isFolder || explorerData.name.endsWith('.__dir__');
+  // Get the display name (remove .__dir__ if present)
+  const displayName = explorerData.name.endsWith('.__dir__')
+    ? explorerData.name.replace('.__dir__', '')
+    : explorerData.name;
 
   const handleNewFolderButton = (
     e: React.MouseEvent<HTMLButtonElement>,
@@ -319,11 +331,17 @@ const FileTreeItem: React.FC<FolderProps> = ({
     }
   };
 
-  // Handle file selection
-  const handleFileClick = (e: React.MouseEvent) => {
+  // Modify handleFileClick for folders
+  const handleFileClick = async (e: React.MouseEvent) => {
     if (updateInput.visible || showInput.visible) return;
-    if (explorerData.isFolder) {
-      setExpand(!expand);
+    if (isDirectory) {
+      // If not expanded and onOpenDirectory is provided, call it
+      if (!expand && onOpenDirectory) {
+        // Show loading state or indicator if needed
+        await onOpenDirectory(explorerData.id); 
+      }
+      // Always toggle expand state for folders
+      setExpand(!expand); 
       return;
     }
     
@@ -347,22 +365,27 @@ const FileTreeItem: React.FC<FolderProps> = ({
     }
   };
 
-  // Handle keyboard events
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  // Modify handleKeyDown for folders
+  const handleKeyDown = useCallback(async (e: React.KeyboardEvent) => {
     if (updateInput.visible || showInput.visible) return;
     
-    // Enter key opens files (like double-click)
+    // Enter key
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (!explorerData.isFolder && onFileDoubleClick) {
+      if (!isDirectory && onFileDoubleClick) {
         onFileDoubleClick(explorerData.id);
-      } else if (explorerData.isFolder) {
+      } else if (isDirectory) {
+        // If not expanded and onOpenDirectory is provided, call it
+        if (!expand && onOpenDirectory) {
+          await onOpenDirectory(explorerData.id); 
+        }
+        // Always toggle expand state
         setExpand(!expand);
       }
     }
     
     // Space key toggles selection
-    if (e.key === ' ' && !explorerData.isFolder && onSelection) {
+    if (e.key === ' ' && !isDirectory && onSelection) {
       e.preventDefault();
       if (isSelected) {
         onSelection(selectedFiles.filter(id => id !== explorerData.id));
@@ -370,7 +393,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
         onSelection([...selectedFiles, explorerData.id]);
       }
     }
-  }, [explorerData, onFileDoubleClick, onSelection, selectedFiles, isSelected, expand]);
+  }, [explorerData, onFileDoubleClick, onSelection, selectedFiles, isSelected, expand, isDirectory, onOpenDirectory]);
 
   // Focus this element when it becomes selected
   useEffect(() => {
@@ -381,7 +404,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
 
   // Handle touch events for touch screens
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (explorerData.isFolder) return; // Only handle file touches
+    if (isDirectory) return; // Only handle file touches
     
     const now = Date.now();
     const timeSinceLastTap = now - lastTapTimeRef.current;
@@ -459,13 +482,14 @@ const FileTreeItem: React.FC<FolderProps> = ({
             onSelection={onSelection}
             isSelectedFile={item.id === selectedFiles[0] && selectedFiles.length === 1}
             insideTree={insideTree}
+            onOpenDirectory={onOpenDirectory}
           />
         ))}
       </>
     );
   }
 
-  if (explorerData.isFolder) {
+  if (isDirectory) {
     // Only use ARIA roles when inside a tree
     const folderProps = insideTree ? {
       role: "treeitem",
@@ -510,7 +534,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
               aria-label="Edit folder name"
             />
           ) : (
-            <span className="ml-1 text-sm truncate max-w-[150px] select-none">{explorerData.name}</span>
+            <span className="ml-1 text-sm truncate max-w-[150px] select-none">{displayName}</span>
           )}
 
           <div className="buttons-container ml-auto flex space-x-1 invisible group-hover:visible">
@@ -559,6 +583,10 @@ const FileTreeItem: React.FC<FolderProps> = ({
           className={`pl-4 ${expand ? "block" : "hidden"}`} 
           {...(insideTree && expand ? { role: "group" } : {})}
         >
+          {/* Add loading indicator if children haven't been loaded yet */}
+          {expand && (!explorerData.items) && (
+            <div className="pl-4 text-xs text-gray-400 italic">Loading...</div>
+          )}
           {showInput.visible && (
             <div className="flex items-center my-1 text-gray-700">
               <span className="mr-1">
@@ -584,7 +612,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
             </div>
           )}
           
-          {explorerData.items.map((item) => (
+          {explorerData.items && explorerData.items.map((item) => (
             <FileTree
               key={item.id}
               explorerData={item}
@@ -597,6 +625,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
               onSelection={onSelection}
               isSelectedFile={item.id === selectedFiles[0] && selectedFiles.length === 1}
               insideTree={insideTree}
+              onOpenDirectory={onOpenDirectory}
             />
           ))}
         </div>
@@ -642,7 +671,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
             aria-label="Edit file name"
           />
         ) : (
-          <span className="ml-1 text-sm truncate max-w-[180px] select-none">{explorerData.name}</span>
+          <span className="ml-1 text-sm truncate max-w-[180px] select-none">{displayName}</span>
         )}
 
         <div className="buttons-container ml-auto flex space-x-1 invisible group-hover:visible">
