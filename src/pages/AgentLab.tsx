@@ -782,8 +782,8 @@ const NotebookPage: React.FC = () => {
       }
 
       // Guard clauses: ensure all necessary components are ready
-      if (!isLoggedIn || !server || !isReady || !cellManager.current || !executeCode) {
-        if (!isLoggedIn) {
+      if (!isLoggedIn || !server || !isReady || !cellManager.current) {
+        if (!isLoggedIn && isReady) {
           showToast('You need to be logged in to use Hypha Core Service', 'warning');
         }
         console.log('[AgentLab] Setup Service skipped - prerequisites not ready:', {
