@@ -78,11 +78,11 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
   // Style for container visibility
   const containerStyle = React.useMemo(() => ({
-    width: isVisible ? (isMobile ? '100%' : width) : '36px',
+    width: isVisible ? (isMobile ? '100%' : `${width}px`) : '36px',
     maxWidth: '100vw',
     opacity: 1,
     visibility: 'visible' as const,
-    transition: 'width 300ms ease-in-out'
+    transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
   }), [isVisible, width, isMobile]);
 
   // Render collapsed view with icons

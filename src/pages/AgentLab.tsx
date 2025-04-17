@@ -121,6 +121,7 @@ const NotebookPage: React.FC = () => {
   const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
   const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const lastCanvasPanelWidthRef = useRef<number>(600); // Add ref to store last width
 
   // Initialize the cell manager
   const cellManager = useRef<CellManager | null>(null);
@@ -639,11 +640,18 @@ const NotebookPage: React.FC = () => {
 
   // --- Canvas Panel Handlers (Placeholders) ---
   const handleCanvasPanelResize = useCallback((newWidth: number) => {
-    setCanvasPanelWidth(newWidth); // Assuming this state exists
+    setCanvasPanelWidth(newWidth);
+    lastCanvasPanelWidthRef.current = newWidth; // Store the last width when resizing
   }, []);
 
   const toggleCanvasPanel = useCallback(() => {
-    setShowCanvasPanel(prev => !prev); // Assuming this state exists
+    setShowCanvasPanel(prev => {
+      if (!prev) {
+        // When opening, restore the last known width
+        setCanvasPanelWidth(lastCanvasPanelWidthRef.current);
+      }
+      return !prev;
+    });
   }, []);
 
   const handleTabClose = useCallback((tabId: string) => {
@@ -669,16 +677,17 @@ const NotebookPage: React.FC = () => {
       const isSmall = window.innerWidth <= 480;
       setIsSmallScreen(isSmall);
       if (isSmall && showCanvasPanel) {
-          setShowCanvasPanel(false);
-          setCanvasPanelWidth(0);
+        setShowCanvasPanel(false);
+        lastCanvasPanelWidthRef.current = canvasPanelWidth; // Store width before closing
+        setCanvasPanelWidth(0);
       } else if (!isSmall && showCanvasPanel) {
-          setCanvasPanelWidth(600);
+        setCanvasPanelWidth(lastCanvasPanelWidthRef.current); // Restore last width
       }
     };
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
-  }, [showCanvasPanel]);
+  }, [showCanvasPanel, canvasPanelWidth]);
 
   // URL Sync Hook
   useUrlSync({
