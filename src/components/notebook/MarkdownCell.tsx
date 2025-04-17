@@ -176,16 +176,8 @@ const handleRegenerateResponse = useCallback(() => {
       });
     }
 
-    // Focus the editor if it's active
-    if (isActive) {
-      setTimeout(() => {
-        if (typeof editor.focus === 'function') {
-          editor.focus();
-        } else if (editor.getContainerDomNode) {
-          editor.getContainerDomNode()?.focus();
-        }
-      }, 100);
-    }
+    // Remove automatic focus when cell becomes active
+    // The editor will only be focused when clicked directly
   };
 
   // Handle Monaco instance before mounting the editor
@@ -289,6 +281,13 @@ const handleRegenerateResponse = useCallback(() => {
         // Only set unfocused if the focus is leaving the entire cell
         if (!editorDivRef.current?.contains(e.relatedTarget as Node)) {
           setIsFocused(false);
+        }
+      }}
+      onClick={(e) => {
+        // Only focus the editor if clicking directly in the editor area
+        const isEditorClick = (e.target as HTMLElement)?.closest('.monaco-editor');
+        if (isEditorClick && internalEditorRef.current) {
+          internalEditorRef.current.focus();
         }
       }}
     >

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export type CellRole = 'user' | 'assistant' | 'system';
 
@@ -9,7 +10,8 @@ interface RoleSelectorProps {
 
 export const RoleSelector: React.FC<RoleSelectorProps> = ({ role = 'user', onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
 
   const roleInfo = {
     user: { icon: '👤', label: 'User' },
@@ -17,19 +19,37 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ role = 'user', onCha
     system: { icon: '⚙️', label: 'System' }
   };
 
+  // Update dropdown position when opening
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const scrollY = window.scrollY;
+      const scrollX = window.scrollX;
+      
+      // Position the dropdown below the button by default
+      setDropdownPosition({
+        top: rect.bottom + scrollY,
+        left: rect.left + scrollX
+      });
+    }
+  }, [isOpen]);
+
   // Handle click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [isOpen]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent click from bubbling up to cell
@@ -42,12 +62,10 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ role = 'user', onCha
   };
 
   return (
-    <div 
-      ref={dropdownRef}
-      className="relative inline-block"
-    >
+    <>
       {/* Trigger button - shows only icon */}
       <button
+        ref={buttonRef}
         onClick={handleClick}
         className="text-xl text-gray-500 hover:text-gray-700 transition-colors focus:outline-none"
         title="Change cell role"
@@ -55,9 +73,15 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ role = 'user', onCha
         {roleInfo[role].icon}
       </button>
 
-      {/* Dropdown menu */}
-      {isOpen && (
-        <div className="absolute left-0 mt-1 py-1 bg-white rounded-md shadow-lg border border-gray-200 z-50">
+      {/* Dropdown menu rendered in portal */}
+      {isOpen && createPortal(
+        <div 
+          className="fixed z-[9999] bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[120px]"
+          style={{
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+          }}
+        >
           {Object.entries(roleInfo).map(([roleKey, { icon, label }]) => (
             <button
               key={roleKey}
@@ -67,11 +91,12 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ role = 'user', onCha
               onClick={() => handleRoleSelect(roleKey as CellRole)}
             >
               <span className="text-base">{icon}</span>
-              <span className="text-sm text-gray-700">{label}</span>
+              <span className="text-sm text-gray-700 whitespace-nowrap">{label}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }; 

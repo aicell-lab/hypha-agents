@@ -3,6 +3,8 @@ import { OutputItem } from "../types/notebook";
 import Convert from "ansi-to-html";
 import { v4 as uuidv4 } from 'uuid';
 import localforage from 'localforage';
+import { ChatMessage } from '../utils/chatCompletion';
+import { CellHistoryManager } from '../utils/CellHistoryManager';
 // REMOVE useProjects import
 // import { useProjects } from '../providers/ProjectsProvider';
 
@@ -110,6 +112,7 @@ export class CellManager {
   notebookMetadata: NotebookMetadata;
   lastAgentCellRef: React.MutableRefObject<string | null>;
   executeCodeFn: any;
+  historyManager: CellHistoryManager;
   // REMOVE file operation functions
   // private getFileContentFn: (projectId: string, filePath: string) => Promise<string>;
   // private uploadFileFn: (projectId: string, file: File) => Promise<void>;
@@ -142,6 +145,7 @@ export class CellManager {
     // REMOVE assignment of file functions
     // this.getFileContentFn = getFileContentFn;
     // this.uploadFileFn = uploadFileFn;
+    this.historyManager = new CellHistoryManager();
   }
 
   // Generate a unique ID for cells
@@ -171,6 +175,9 @@ export class CellManager {
     insertIndex?: number,
     cellId?: string
   ): string {
+    // Save state before adding cell
+    this.saveState();
+    
     const newCell: NotebookCell = {
       id: cellId || this.generateId(),
       type,
@@ -245,6 +252,9 @@ export class CellManager {
     parent?: string | undefined,
     insertIndex?: number
   ): string {
+    // Save state before adding cell
+    this.saveState();
+    
     const newCell: NotebookCell = {
       id: this.generateId(),
       type,
@@ -292,11 +302,15 @@ export class CellManager {
       return [...prev, newCell];
     });
 
+    this.saveState();
     return newCell.id;
   }
 
   // Delete a cell by ID
   deleteCell(id: string): void {
+    // Save state before deleting cell
+    this.saveState();
+    
     this.setCells((prev) => {
       const index = prev.findIndex((cell) => cell.id === id);
       if (index === -1) return prev;
@@ -337,6 +351,7 @@ export class CellManager {
         }
       }
 
+      this.saveState();
       return newCells;
     });
   }
@@ -350,6 +365,9 @@ export class CellManager {
 
   // Update cell content
   updateCellContent(id: string, content: string): void {
+    // Save state before updating content
+    this.saveState();
+    
     this.setCells((prev) =>
       prev.map((cell) => (cell.id === id ? { ...cell, content } : cell))
     );
@@ -394,6 +412,7 @@ export class CellManager {
         return cell;
       })
     );
+    this.saveState();
   }
 
   // Process output items for ANSI codes
@@ -870,6 +889,9 @@ export class CellManager {
 
   // Delete a cell and its children
   deleteCellWithChildren(cellId: string): void {
+    // Save state before deleting cells
+    this.saveState();
+    
     // Find the cell and its children
     const cell = this.findCell((c) => c.id === cellId);
     if (!cell) return;
@@ -916,6 +938,7 @@ export class CellManager {
         }
       });
 
+      this.saveState();
       return newCells;
     });
   }
@@ -1161,6 +1184,7 @@ export class CellManager {
         // Update the current agent cell reference
         this.lastAgentCellRef.current = cellId;
 
+        this.saveState();
         return newCells;
       }
     });
@@ -1455,5 +1479,90 @@ export class CellManager {
       this.setCells(remainingCells);
       return true;
     }
+  }
+
+  // Add method to save current state
+  private saveState() {
+    this.historyManager.pushState(this.cells, this.activeCellId);
+  }
+
+  // Add undo/redo methods
+  undo() {
+    const previousState = this.historyManager.undo();
+    if (previousState) {
+      // Apply the previous state
+      this.setCells(previousState.cells);
+      this.setActiveCellId(previousState.activeCellId);
+      return true;
+    }
+    return false;
+  }
+
+  redo() {
+    const nextState = this.historyManager.redo();
+    if (nextState) {
+      // Apply the next state
+      this.setCells(nextState.cells);
+      this.setActiveCellId(nextState.activeCellId);
+      return true;
+    }
+    return false;
+  }
+
+  // Add cut/copy/paste methods
+  cutCells(selectedCellIds: string[]) {
+    const remainingCells = this.historyManager.cutCells(this.cells, selectedCellIds);
+    if (remainingCells) {
+      // Save state before making changes
+      this.saveState();
+      this.setCells(remainingCells);
+      // Set active cell to the one after the cut cells, or the last cell
+      const lastCutIndex = Math.max(...selectedCellIds.map(id => 
+        this.cells.findIndex(cell => cell.id === id)
+      ));
+      const nextCell = remainingCells[lastCutIndex] || remainingCells[remainingCells.length - 1];
+      if (nextCell) {
+        this.setActiveCellId(nextCell.id);
+      }
+    }
+  }
+
+  copyCells(selectedCellIds: string[]) {
+    this.historyManager.copyCells(this.cells, selectedCellIds);
+  }
+
+  pasteCells() {
+    // Save state before pasting
+    this.saveState();
+    
+    const result = this.historyManager.pasteCells(this.cells, this.activeCellId);
+    if (result.newCells !== this.cells) {
+      this.setCells(result.newCells);
+      
+      // Make the last pasted cell active
+      if (result.lastPastedId) {
+        this.setActiveCellId(result.lastPastedId);
+        // Focus the newly activated cell
+        this.focusCell(result.lastPastedId);
+      }
+    }
+  }
+
+  // Add state check methods
+  canUndo(): boolean {
+    return this.historyManager.canUndo();
+  }
+
+  canRedo(): boolean {
+    return this.historyManager.canRedo();
+  }
+
+  hasClipboardContent(): boolean {
+    return this.historyManager.hasClipboardContent();
+  }
+
+  // Add method to clear history
+  clearHistory() {
+    this.historyManager.clearHistory();
   }
 }

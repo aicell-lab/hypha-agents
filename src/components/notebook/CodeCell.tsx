@@ -273,16 +273,8 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       });
     }
 
-    // Focus the editor if this is active
-    if (isActive) {
-      setTimeout(() => {
-        if (typeof editor.focus === 'function') {
-          editor.focus();
-        } else if (editor.getContainerDomNode) {
-          editor.getContainerDomNode()?.focus();
-        }
-      }, 100);
-    }
+    // Remove automatic focus when cell becomes active
+    // The editor will only be focused when clicked directly
   };
 
   // Handle Monaco instance before mounting the editor
@@ -298,9 +290,9 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       return; // Don't shift focus if clicking in output area
     }
     
-    // If there's a way to set active cell in parent, this would be done through props
-    if (internalEditorRef.current) {
-      // Force focus on the editor
+    // Only focus the editor if clicking directly in the editor area
+    const isEditorClick = (e.target as HTMLElement)?.closest('.monaco-editor');
+    if (isEditorClick && internalEditorRef.current) {
       internalEditorRef.current.focus();
     }
   }, []);

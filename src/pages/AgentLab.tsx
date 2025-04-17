@@ -30,6 +30,7 @@ import { useChatCompletion } from '../hooks/useChatCompletion';
 import { useNotebookCommands } from '../hooks/useNotebookCommands';
 import { useNotebookInitialization } from '../hooks/useNotebookInitialization';
 import { useUrlSync } from '../hooks/useUrlSync';
+import { useNotebookKeyboardShortcuts } from '../hooks/useNotebookKeyboardShortcuts';
 
 // Add imports for Sidebar components
 import Sidebar from '../components/notebook/Sidebar';
@@ -87,6 +88,7 @@ const NotebookPage: React.FC = () => {
   const [executionCounter, setExecutionCounter] = useState(1);
   const { isReady, executeCode, restartKernel } = useThebe();
   const [isShortcutsDialogOpen, setIsShortcutsDialogOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const hasInitialized = useRef(false); // Tracks if the initial load effect has completed
   const systemCellsExecutedRef = useRef(false);
   const [notebookMetadata, setNotebookMetadata] = useState<NotebookMetadata>(defaultNotebookMetadata);
@@ -135,6 +137,12 @@ const NotebookPage: React.FC = () => {
 
   // Ref to track if service setup has completed
   const setupCompletedRef = useRef(false);
+
+  // Add the keyboard shortcuts hook
+  useNotebookKeyboardShortcuts({
+    cellManager: cellManager.current,
+    isEditing
+  });
 
   // --- Define handleAddWindow callback ---
   const handleAddWindow = useCallback((config: any) => {
@@ -597,7 +605,13 @@ const NotebookPage: React.FC = () => {
     return cellManager.current?.executeCell(id, true) || Promise.resolve('Error: CellManager not ready');
   }, []);
   const handleUpdateCellContent = useCallback((id: string, content: string) => cellManager.current?.updateCellContent(id, content), []);
-  const handleToggleCellEditing = useCallback((id: string, isEditing: boolean) => cellManager.current?.toggleCellEditing(id, isEditing), []);
+
+  // Update handleToggleCellEditing to track editing state
+  const handleToggleCellEditing = useCallback((id: string, editing: boolean) => {
+    setIsEditing(editing);
+    cellManager.current?.toggleCellEditing(id, editing);
+  }, []);
+
   const handleToggleCodeVisibility = useCallback((id: string) => cellManager.current?.toggleCodeVisibility(id), []);
   const handleToggleOutputVisibility = useCallback((id: string) => cellManager.current?.toggleOutputVisibility(id), []);
   const handleCellTypeChange = useCallback((id: string, cellType: CellType) => {
