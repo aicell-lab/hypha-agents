@@ -410,7 +410,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                 </div>
                 {/* Active cell indicator strip */}
                 {activeCellId === cell.id && (
-                  <div className={`absolute left-0 top-0 bottom-0 w-1 bg-blue-500 ${cell.metadata?.parent ? 'ml-2' : ''}`}></div>
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 ${cell.metadata?.parent ? 'ml-2 bg-blue-300' : 'bg-blue-500'}`}></div>
                 )}
               </div>
             ))
