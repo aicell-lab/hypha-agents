@@ -79,18 +79,6 @@
   position: relative;
 }
 
-/* Active Cell Indicator - Default for Parent Cells */
-.notebook-cell-container-active::before {
-  content: '';
-  position: absolute;
-  left: -1px; /* Position for parent cells */
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background-color: #3b82f6;
-  transition: opacity 0.2s ease-in-out;
-}
-
 
 .child-cell::before {
   content: '';
@@ -219,19 +207,11 @@
   outline: none !important;
 }
 
-/* Add specific focus styles for active cells only */
-.notebook-cell-container:focus-within:not(.notebook-cell-container-active) {
-  outline: none !important;
-}
 
 .notebook-cell-container:focus {
   outline: none !important;
 }
 
-/* Ensure only active cells show focus styles */
-.notebook-cell-container-active:focus-within {
-  outline: none !important;
-}
 
 /* Remove any lingering focus styles */
 .notebook-cell-container *:focus {
@@ -333,15 +313,6 @@
   margin-left: 16px;
 }
 
-.notebook-cell-container-active {
-  /* Keep existing active shadow for parent cells */
-  box-shadow: -2px 2px 5px -1px rgba(59, 130, 246, 0.1), 0 0 0 1px rgba(59, 130, 246, 0.3);
-}
-
-/* Remove active shadow specifically from child cells */
-.child-cell.notebook-cell-container-active {
-  box-shadow: none !important;
-}
 
 /* System cell specific styling */
 .system-cell {

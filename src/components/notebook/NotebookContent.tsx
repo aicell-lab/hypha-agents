@@ -91,15 +91,10 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                 data-cell-id={cell.id}
                 className={`notebook-cell-container group relative ${
                   cell.executionState === 'error' ? 'border-red-200' : ''
-                } ${activeCellId === cell.id ? 'notebook-cell-container-active' : ''
                 } ${cell.metadata?.parent ? 'child-cell' : ''} mb-1 bg-white overflow-hidden rounded-md`}
                 onClick={() => onActiveCellChange(cell.id)}
                 tabIndex={0}
               >
-                {/* Active cell indicator strip */}
-                {activeCellId === cell.id && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
-                )}
                 {/* Cell Content */}
                 <div className="flex relative w-full">
                   <div className="flex-1 min-w-0 w-full overflow-x-hidden">
@@ -413,6 +408,10 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                     )}
                   </div>
                 </div>
+                {/* Active cell indicator strip */}
+                {activeCellId === cell.id && (
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 bg-blue-500 ${cell.metadata?.parent ? 'ml-2' : ''}`}></div>
+                )}
               </div>
             ))
           ) : (
