@@ -291,7 +291,13 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   };
 
   // Handle click on the editor container
-  const handleEditorClick = useCallback(() => {
+  const handleEditorClick = useCallback((e: React.MouseEvent) => {
+    // Check if the click is within an output area
+    const isOutputAreaClick = (e.target as HTMLElement)?.closest('.jupyter-output-container');
+    if (isOutputAreaClick) {
+      return; // Don't shift focus if clicking in output area
+    }
+    
     // If there's a way to set active cell in parent, this would be done through props
     if (internalEditorRef.current) {
       // Force focus on the editor

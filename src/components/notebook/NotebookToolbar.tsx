@@ -107,12 +107,20 @@ interface CellControlsProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
+  onMoveCellUp?: () => void;
+  onMoveCellDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 export const CellControls: React.FC<CellControlsProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
-  onShowKeyboardShortcuts
+  onShowKeyboardShortcuts,
+  onMoveCellUp,
+  onMoveCellDown,
+  canMoveUp,
+  canMoveDown
 }) => (
   <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
     <button 
@@ -131,6 +139,28 @@ export const CellControls: React.FC<CellControlsProps> = ({
       <MdOutlineTextFields className="w-3.5 h-3.5" />
       <AiOutlinePlus className="w-3.5 h-3.5" />
     </button>
+    <div className="flex items-center ml-1 border-l border-gray-200 pl-1">
+      <button
+        onClick={onMoveCellUp}
+        disabled={!canMoveUp}
+        className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Move cell up"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
+      <button
+        onClick={onMoveCellDown}
+        disabled={!canMoveDown}
+        className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Move cell down"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+    </div>
     <button
       onClick={onShowKeyboardShortcuts}
       className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition ml-1"
@@ -159,6 +189,10 @@ export interface NotebookToolbarProps {
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
+  onMoveCellUp?: () => void;
+  onMoveCellDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   isProcessing: boolean;
   isKernelReady: boolean;
   isAIReady: boolean;
@@ -184,6 +218,10 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
+  onMoveCellUp,
+  onMoveCellDown,
+  canMoveUp,
+  canMoveDown,
   isProcessing,
   isKernelReady,
   isAIReady,
@@ -328,6 +366,26 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
           <MdOutlineTextFields className="w-3.5 h-3.5 mr-2" />
           Add Markdown Cell
         </button>
+        <button
+          onClick={onMoveCellUp}
+          disabled={!canMoveUp}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg className="w-3.5 h-3.5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+          </svg>
+          Move Cell Up
+        </button>
+        <button
+          onClick={onMoveCellDown}
+          disabled={!canMoveDown}
+          className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg className="w-3.5 h-3.5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+          Move Cell Down
+        </button>
       </div>
 
       <div className="border-t border-gray-200 mt-1 pt-1">
@@ -388,6 +446,10 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
+  onMoveCellUp,
+  onMoveCellDown,
+  canMoveUp,
+  canMoveDown,
   isProcessing,
   isKernelReady,
   isAIReady,
@@ -413,6 +475,10 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
           onAddCodeCell={onAddCodeCell}
           onAddMarkdownCell={onAddMarkdownCell}
           onShowKeyboardShortcuts={onShowKeyboardShortcuts}
+          onMoveCellUp={onMoveCellUp}
+          onMoveCellDown={onMoveCellDown}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
         />
         <LoginSection />
       </div>
@@ -466,6 +532,10 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onAddCodeCell={onAddCodeCell}
             onAddMarkdownCell={onAddMarkdownCell}
             onShowKeyboardShortcuts={onShowKeyboardShortcuts}
+            onMoveCellUp={onMoveCellUp}
+            onMoveCellDown={onMoveCellDown}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
             isProcessing={isProcessing}
             isKernelReady={isKernelReady}
             isAIReady={isAIReady}

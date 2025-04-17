@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { NotebookToolbar } from './NotebookToolbar';
 import { NotebookMetadata } from '../../types/notebook';
 import { FaBars } from 'react-icons/fa';
 
-interface NotebookHeaderProps {
+export interface NotebookHeaderProps {
   metadata: NotebookMetadata;
   fileName: string;
   onMetadataChange: (metadata: NotebookMetadata) => void;
@@ -23,6 +23,10 @@ interface NotebookHeaderProps {
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
   onPublish: () => void;
+  onMoveCellUp: () => void;
+  onMoveCellDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }
 
 const NotebookHeader: React.FC<NotebookHeaderProps> = ({
@@ -43,7 +47,11 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   isAIReady,
   onToggleSidebar,
   isSidebarOpen,
-  onPublish
+  onPublish,
+  onMoveCellUp,
+  onMoveCellDown,
+  canMoveUp,
+  canMoveDown,
 }) => {
   return (
     <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
@@ -107,6 +115,10 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           onToggleSidebar={onToggleSidebar}
           isSidebarOpen={isSidebarOpen}
           onPublish={onPublish}
+          onMoveCellUp={onMoveCellUp}
+          onMoveCellDown={onMoveCellDown}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
         />
       </div>
     </div>

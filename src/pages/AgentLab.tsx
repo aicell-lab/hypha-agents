@@ -538,7 +538,7 @@ const NotebookPage: React.FC = () => {
       try {
         const content = e.target?.result as string;
         const loadedNotebookData: NotebookData = JSON.parse(content);
-        const newFilePath = `uploaded_${file.name}`;
+        const newFilePath = `${file.name}`;
         const metadata: NotebookMetadata = {
           ...defaultNotebookMetadata,
           ...(loadedNotebookData.metadata || {}),
@@ -981,6 +981,32 @@ const NotebookPage: React.FC = () => {
       });
   }, [artifactManager, isLoggedIn, systemCell, cells, notebookMetadata, saveNotebook, navigate, setNotebookMetadata]);
 
+  // Add handlers for moving cells up and down
+  const handleMoveCellUp = useCallback(() => {
+    if (!activeCellId || !cellManager.current) return;
+    cellManager.current.moveCellUp(activeCellId);
+    cellManager.current.scrollCellIntoView(activeCellId);
+  }, [activeCellId]);
+
+  const handleMoveCellDown = useCallback(() => {
+    if (!activeCellId || !cellManager.current) return;
+    cellManager.current.moveCellDown(activeCellId);
+    cellManager.current.scrollCellIntoView(activeCellId);
+  }, [activeCellId]);
+
+  // Add canMoveUp and canMoveDown calculations
+  const canMoveUp = useMemo(() => {
+    if (!activeCellId || !cellManager.current) return false;
+    const cellIndex = cells.findIndex(cell => cell.id === activeCellId);
+    return cellIndex > 0;
+  }, [activeCellId, cells]);
+
+  const canMoveDown = useMemo(() => {
+    if (!activeCellId || !cellManager.current) return false;
+    const cellIndex = cells.findIndex(cell => cell.id === activeCellId);
+    return cellIndex < cells.length - 1;
+  }, [activeCellId, cells]);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Header goes first and spans full width */}
@@ -1003,6 +1029,10 @@ const NotebookPage: React.FC = () => {
             onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
             isSidebarOpen={isSidebarOpen}
             onPublish={() => setIsPublishDialogOpen(true)}
+            onMoveCellUp={handleMoveCellUp}
+            onMoveCellDown={handleMoveCellDown}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
           />
 
       {/* Container for Sidebar + Main Content Area (takes remaining height) */}

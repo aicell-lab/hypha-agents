@@ -87,35 +87,6 @@ interface NotebookMetadata {
   modified: string;
 }
 
-// Interface for stored notebook data
-interface StoredNotebookData {
-  cells: NotebookCell[];
-  metadata: NotebookMetadata;
-}
-
-// Storage key constant
-const STORAGE_KEY = "notebook_state";
-
-// Helper to safely stringify notebook state
-const safeStringify = (data: any) => {
-  try {
-    return JSON.stringify(data);
-  } catch (error) {
-    console.error("Error stringifying notebook data:", error);
-    return null;
-  }
-};
-
-// Helper to safely parse notebook state
-const safeParse = (str: string | null) => {
-  if (!str) return null;
-  try {
-    return JSON.parse(str);
-  } catch (error) {
-    console.error("Error parsing notebook data:", error);
-    return null;
-  }
-};
 
 export interface SavedState {
   cells: NotebookCell[];
@@ -858,11 +829,22 @@ export class CellManager {
     return this.findChildrenCells(parentId).map(cell => cell.id);
   }
 
+  // Add public method to scroll a cell into view
+  scrollCellIntoView(cellId: string, timeout: number = 0): void {
+    setTimeout(() => {
+      const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
+      if (cellElement) {
+        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, timeout);
+  }
+
   // Helper method to focus a cell
   private focusCell(cellId: string): void {
     const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
     if (cellElement) {
-      // cellElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Use the new scrollCellIntoView method with a small delay
+      this.scrollCellIntoView(cellId, 100);
 
       const editor = this.editorRefs.current[cellId]?.current;
       if (editor) {
@@ -1338,5 +1320,140 @@ export class CellManager {
       })
     );
     console.log(`[DEBUG] Toggled commit status for cell ${id}`);
+  }
+
+  moveCellUp(cellId: string): boolean {
+    const cellIndex = this.cells.findIndex(cell => cell.id === cellId);
+    if (cellIndex <= 0) return false; // Can't move first cell up
+
+    const cell = this.cells[cellIndex];
+    const parentId = cell.metadata?.parent;
+
+    if (parentId) {
+      // For child cells, only allow movement within siblings
+      const siblings = this.findChildrenCells(parentId);
+      const siblingIndex = siblings.findIndex(c => c.id === cellId);
+      if (siblingIndex <= 0) return false; // Already first sibling
+
+      // Find the actual indices in the main cells array
+      const prevSiblingId = siblings[siblingIndex - 1].id;
+      const prevSiblingIndex = this.cells.findIndex(c => c.id === prevSiblingId);
+
+      // Swap the cells
+      const updatedCells = [...this.cells];
+      [updatedCells[prevSiblingIndex], updatedCells[cellIndex]] = [updatedCells[cellIndex], updatedCells[prevSiblingIndex]];
+      
+      this.setCells(updatedCells);
+      return true;
+    } else {
+      // For parent cells, move with all children
+      const childrenCells = this.findChildrenCells(cellId);
+      const allCellsToMove = [cell, ...childrenCells];
+      const cellsToMoveIds = new Set(allCellsToMove.map(c => c.id));
+
+      // Find the first cell in our moving group
+      const firstMovingCellIndex = cellIndex;
+      
+      // Find the previous cell before our group that's not part of what we're moving
+      let prevCellIndex = firstMovingCellIndex - 1;
+      while (prevCellIndex >= 0 && cellsToMoveIds.has(this.cells[prevCellIndex].id)) {
+        prevCellIndex--;
+      }
+      if (prevCellIndex < 0) return false;
+
+      // Find the target position to insert our group
+      let targetInsertIndex = prevCellIndex;
+      const prevCell = this.cells[prevCellIndex];
+
+      if (!prevCell.metadata?.parent) {
+        // Previous cell is a parent, move before it
+        targetInsertIndex = prevCellIndex;
+      } else {
+        // Previous cell is a child, find its parent and move before the parent
+        const prevCellParentId = prevCell.metadata.parent;
+        if (prevCellParentId) {
+          const parentIndex = this.cells.findIndex(c => c.id === prevCellParentId);
+          if (parentIndex !== -1) {
+            targetInsertIndex = parentIndex;
+          }
+        }
+      }
+
+      // Create new array without the cells we're moving
+      const remainingCells = this.cells.filter(c => !cellsToMoveIds.has(c.id));
+      
+      // Insert the moving group at the calculated position
+      remainingCells.splice(targetInsertIndex, 0, ...allCellsToMove);
+      
+      this.setCells(remainingCells);
+      return true;
+    }
+  }
+
+  moveCellDown(cellId: string): boolean {
+    const cellIndex = this.cells.findIndex(cell => cell.id === cellId);
+    if (cellIndex === -1 || cellIndex >= this.cells.length - 1) return false;
+
+    const cell = this.cells[cellIndex];
+    const parentId = cell.metadata?.parent;
+
+    if (parentId) {
+      // For child cells, only allow movement within siblings
+      const siblings = this.findChildrenCells(parentId);
+      const siblingIndex = siblings.findIndex(c => c.id === cellId);
+      if (siblingIndex === siblings.length - 1) return false; // Already last sibling
+
+      // Find the actual indices in the main cells array
+      const nextSiblingId = siblings[siblingIndex + 1].id;
+      const nextSiblingIndex = this.cells.findIndex(c => c.id === nextSiblingId);
+
+      // Swap the cells
+      const updatedCells = [...this.cells];
+      [updatedCells[cellIndex], updatedCells[nextSiblingIndex]] = [updatedCells[nextSiblingIndex], updatedCells[cellIndex]];
+      
+      this.setCells(updatedCells);
+      return true;
+    } else {
+      // For parent cells, move with all children
+      const childrenCells = this.findChildrenCells(cellId);
+      const allCellsToMove = [cell, ...childrenCells];
+      const allCellsToMoveIds = new Set(allCellsToMove.map(c => c.id));
+
+      // Find the last cell in our moving group
+      const lastMovingCellIndex = cellIndex + childrenCells.length;
+      
+      // Find the next cell after our group that's not part of what we're moving
+      let nextCellIndex = lastMovingCellIndex + 1;
+      while (nextCellIndex < this.cells.length && allCellsToMoveIds.has(this.cells[nextCellIndex].id)) {
+        nextCellIndex++;
+      }
+      if (nextCellIndex >= this.cells.length) return false;
+
+      // Find the target position to insert our group
+      let targetInsertIndex = nextCellIndex + 1;
+      const nextCell = this.cells[nextCellIndex];
+
+      if (!nextCell.metadata?.parent) {
+        // Next cell is a parent, move after its children
+        const nextCellChildren = this.findChildrenCells(nextCell.id);
+        if (nextCellChildren.length > 0) {
+          // Move after the last child of the next parent
+          const lastChildId = nextCellChildren[nextCellChildren.length - 1].id;
+          targetInsertIndex = this.cells.findIndex(c => c.id === lastChildId) + 1;
+        } else {
+          // Move after the next parent cell
+          targetInsertIndex = nextCellIndex + 1;
+        }
+      }
+
+      // Create new array without the cells we're moving
+      const remainingCells = this.cells.filter(c => !allCellsToMoveIds.has(c.id));
+      
+      // Insert the moving group at the calculated position
+      remainingCells.splice(targetInsertIndex - allCellsToMove.length, 0, ...allCellsToMove);
+      
+      this.setCells(remainingCells);
+      return true;
+    }
   }
 }

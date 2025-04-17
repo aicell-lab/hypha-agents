@@ -101,7 +101,11 @@ export function useChatCompletion({
         userCellId
       );
 
+      // Wait for next tick to ensure cell is rendered
       await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Scroll the thinking cell into view with a small delay
+      cellManager.scrollCellIntoView(thinkingCellId, 100);
 
       // Create an abort controller for this chat completion
       const abortController = new AbortController();
