@@ -147,7 +147,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
 
                   {/* Cell Toolbar - Show on hover */}
                   <div
-                    className="absolute right-4 top-[-16px] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100"
+                    className="absolute right-4 top-[-16px] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm rounded px-1 z-10 hover:opacity-100 border border-gray-200"
                     style={{ pointerEvents: 'auto' }}
                   >
                     {/* Cell Type Indicator */}

@@ -26,6 +26,12 @@
   border-radius: 0.375rem;
   overflow: visible; /* Ensure shadow isn't clipped */
   background: white;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+.notebook-cell-container:hover {
+  border-color: rgb(229 231 235); /* Tailwind gray-200 */
 }
 
 /* Add subtle shadow for parent cells only */
