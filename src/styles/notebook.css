@@ -77,7 +77,7 @@
 .code-cell .editor-container-active,
 .markdown-cell.editing .editor-container-active,
 .markdown-cell.editing .editor-container:focus-within {
-  border-color: rgb(59 130 246) !important; /* Tailwind blue-500 */
+  border-color: rgba(59, 131, 246, 0.417) !important; /* Tailwind blue-500 */
   box-shadow: 0 2px 4px -1px rgba(59, 130, 246, 0.1);
 }
 

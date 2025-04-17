@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 export type CellRole = 'user' | 'assistant' | 'system';
 
@@ -8,39 +8,70 @@ interface RoleSelectorProps {
 }
 
 export const RoleSelector: React.FC<RoleSelectorProps> = ({ role = 'user', onChange }) => {
-  const roleIcons = {
-    user: '👤',
-    assistant: '🤖',
-    system: '⚙️'
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const roleInfo = {
+    user: { icon: '👤', label: 'User' },
+    assistant: { icon: '🤖', label: 'Assistant' },
+    system: { icon: '⚙️', label: 'System' }
   };
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent click from bubbling up to cell
+    setIsOpen(!isOpen);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    e.stopPropagation(); // Prevent change event from bubbling
-    onChange(e.target.value as CellRole);
+  const handleRoleSelect = (selectedRole: CellRole) => {
+    onChange(selectedRole);
+    setIsOpen(false);
   };
 
   return (
     <div 
+      ref={dropdownRef}
       className="relative inline-block"
-      onClick={handleClick}
     >
-      <select
-        value={role}
-        onChange={handleChange}
-        className="appearance-none bg-transparent border-none text-xl leading-none p-0 text-gray-500 cursor-pointer hover:text-gray-700 transition-colors focus:outline-none focus:ring-0"
+      {/* Trigger button - shows only icon */}
+      <button
+        onClick={handleClick}
+        className="text-xl text-gray-500 hover:text-gray-700 transition-colors focus:outline-none"
         title="Change cell role"
-        style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
       >
-        {Object.entries(roleIcons).map(([roleKey, icon]) => (
-          <option key={roleKey} value={roleKey} className="text-base">
-            {icon}
-          </option>
-        ))}
-      </select>
+        {roleInfo[role].icon}
+      </button>
+
+      {/* Dropdown menu */}
+      {isOpen && (
+        <div className="absolute left-0 mt-1 py-1 bg-white rounded-md shadow-lg border border-gray-200 z-50">
+          {Object.entries(roleInfo).map(([roleKey, { icon, label }]) => (
+            <button
+              key={roleKey}
+              className={`w-full px-4 py-1.5 text-left hover:bg-gray-50 flex items-center gap-2 ${
+                roleKey === role ? 'bg-gray-50' : ''
+              }`}
+              onClick={() => handleRoleSelect(roleKey as CellRole)}
+            >
+              <span className="text-base">{icon}</span>
+              <span className="text-sm text-gray-700">{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }; 
