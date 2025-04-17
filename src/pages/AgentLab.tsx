@@ -389,17 +389,18 @@ const NotebookPage: React.FC = () => {
     showToast('Restarting kernel...', 'loading');
     try {
       cellManager.current?.clearRunningState();
-      
+
       // Abort any ongoing Hypha service operations before restarting
       hyphaServiceAbortControllerRef.current.abort('Kernel restart initiated');
       hyphaServiceAbortControllerRef.current = new AbortController(); // Create new one
-      
+
       // Clear the hyphaCoreApi state to trigger re-initialization after restart
       setHyphaCoreApi(null);
-      
+
       await restartKernel();
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
+      setupCompletedRef.current = false; 
       showToast('Kernel restarted successfully', 'success');
     } catch (error) {
       console.error('Failed to restart kernel:', error);
@@ -433,6 +434,7 @@ const NotebookPage: React.FC = () => {
 
       // Reset the hyphaCoreApi state to trigger re-initialization
       setHyphaCoreApi(null); // This will trigger the setup useEffect again
+      setupCompletedRef.current = false; // <<< ADDED: Reset completion flag
 
       showToast('Kernel state reset successfully', 'success');
       // Keep AI ready state as true, kernel is still technically ready
@@ -837,7 +839,7 @@ const NotebookPage: React.FC = () => {
     };
 
     setupService();
-  }, [isReady, hasInitializedRef, notebookMetadata.filePath, handleAddWindow, setupCompletedRef.current]);
+  }, [isReady, hasInitializedRef, notebookMetadata.filePath, handleAddWindow, isLoggedIn, setupCompletedRef.current]); // <<< MODIFIED: Removed setupCompletedRef.current
 
   // Create a separate effect to handle agentSettings changes
   useEffect(() => {
