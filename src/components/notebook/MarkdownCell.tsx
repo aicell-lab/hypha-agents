@@ -221,10 +221,15 @@ const handleRegenerateResponse = useCallback(() => {
 
       if (!isEditorFocused) return;
 
-      if (e.key === 'Enter' && e.shiftKey && isEditing) {
+      // Handle Shift+Enter
+      if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
         e.stopPropagation(); // Stop event from bubbling to other handlers
-        handleRun();
+        if (isEditing) {
+          handleRun();
+        } else {
+          handleRegenerateResponse();
+        }
       }
     };
 
