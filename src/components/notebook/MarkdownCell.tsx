@@ -57,7 +57,7 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = useState<number>(0);
-  const lineHeightPx = 19;
+  const lineHeightPx = 20;
   const minLines = 3;
   const paddingHeight = 16;
   const monacoRef = useRef<any>(null);
@@ -103,10 +103,28 @@ const handleRegenerateResponse = useCallback(() => {
       const model = internalEditorRef.current.getModel();
       if (model) {
         const lineCount = model.getLineCount();
-        const newHeight = Math.max(lineCount * lineHeightPx + paddingHeight, minLines * lineHeightPx + paddingHeight);
+        // Add extra padding to ensure all content is visible
+        const newHeight = Math.max(
+          lineCount * lineHeightPx + (paddingHeight * 2), // Double padding (top and bottom)
+          minLines * lineHeightPx + (paddingHeight * 2)
+        );
         setEditorHeight(newHeight);
+        
+        // Force editor to update its layout
+        setTimeout(() => {
+          internalEditorRef.current?.layout?.();
+        }, 0);
       }
     }
+  }, []);
+
+  // Calculate initial height based on content
+  const calculateInitialHeight = useCallback((content: string) => {
+    const lineCount = content.split('\n').length;
+    return Math.max(
+      lineCount * lineHeightPx + (paddingHeight * 2),
+      minLines * lineHeightPx + (paddingHeight * 2)
+    );
   }, []);
 
   // Update height when content changes
@@ -386,7 +404,7 @@ const handleRegenerateResponse = useCallback(() => {
                   options={{
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,
-                    wordWrap: 'on',
+                    wordWrap: 'off',
                     lineNumbers: 'off',
                     renderWhitespace: 'selection',
                     folding: true,

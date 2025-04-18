@@ -91,7 +91,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = useState<number>(0);
-  const lineHeightPx = 19;
+  const lineHeightPx = 20;
   const minLines = 2;
   const paddingHeight = 16;
   const monacoRef = useRef<any>(null);
@@ -106,12 +106,37 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   // Calculate initial height based on content
   const calculateInitialHeight = useCallback((content: string) => {
     const lineCount = content.split('\n').length;
-    return Math.max(lineCount * lineHeightPx + paddingHeight, minLines * lineHeightPx + paddingHeight);
+    return Math.max(
+      lineCount * lineHeightPx + (paddingHeight * 2), // Double padding (top and bottom)
+      minLines * lineHeightPx + (paddingHeight * 2)
+    );
+  }, []);
+
+  // Update editor height when content changes
+  const updateEditorHeight = useCallback(() => {
+    if (internalEditorRef.current) {
+      const model = internalEditorRef.current.getModel();
+      if (model) {
+        const lineCount = model.getLineCount();
+        // Add extra padding to ensure all content is visible
+        const newHeight = Math.max(
+          lineCount * lineHeightPx + (paddingHeight * 2), // Double padding (top and bottom)
+          minLines * lineHeightPx + (paddingHeight * 2)
+        );
+        setEditorHeight(newHeight);
+        
+        // Force editor to update its layout
+        setTimeout(() => {
+          internalEditorRef.current?.layout?.();
+        }, 0);
+      }
+    }
   }, []);
 
   // Set initial height when component mounts
   useEffect(() => {
-    setEditorHeight(calculateInitialHeight(code));
+    const initialHeight = calculateInitialHeight(code);
+    setEditorHeight(initialHeight);
   }, [code, calculateInitialHeight]);
 
   // Expose methods through ref
@@ -148,28 +173,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
       }
     };
   }, []);
-
-  // Update editor height when content changes
-  const updateEditorHeight = useCallback(() => {
-    if (internalEditorRef.current) {
-      const model = internalEditorRef.current.getModel();
-      if (model) {
-        const lineCount = model.getLineCount();
-        // Add extra lines to account for widgets and prevent scrolling issues
-        const extraLines = 1;
-        const newHeight = Math.max(
-          (lineCount + extraLines) * lineHeightPx + paddingHeight, 
-          minLines * lineHeightPx + paddingHeight
-        );
-        setEditorHeight(newHeight);
-      }
-    }
-  }, []);
-
-  // Update height when content changes
-  useEffect(() => {
-    updateEditorHeight();
-  }, [codeValue, updateEditorHeight]);
 
   // Handle wheel events to prevent editor from capturing page scrolls
   useEffect(() => {
@@ -518,7 +521,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                   options={{
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,
-                    wordWrap: 'on',
+                    wordWrap: 'off',
                     lineNumbers: 'on',
                     renderWhitespace: 'selection',
                     folding: true,
@@ -535,7 +538,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                       vertical: 'auto',
                       horizontalSliderSize: 4,
                       verticalSliderSize: 4,
-                      horizontal: 'hidden',
+                      horizontal: 'auto',
                       useShadows: false,
                       verticalHasArrows: false,
                       horizontalHasArrows: false,
