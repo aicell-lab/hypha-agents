@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { Resource } from '../types/index';
 import { Card, CardMedia, CardContent, IconButton, Button } from '@mui/material';
-import DownloadIcon from '@mui/icons-material/Download';
+import ChatIcon from '@mui/icons-material/Chat';
 import { resolveHyphaUrl } from '../utils/urlHelpers';
 import { SITE_ID, SERVER_URL } from '../utils/env';
 
@@ -30,17 +30,14 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({ resource }) => {
     navigate(`/resources/${id}`);
   };
 
-  const handleDownload = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const id = resource.id.split('/').pop();
-    window.open(`${SERVER_URL}/${SITE_ID}/artifacts/${id}/create-zip-file`, '_blank');
-  };
-
   // Get the resolved cover URL for the current index
   const getCurrentCoverUrl = () => {
     if (covers.length === 0) return '';
     return resolveHyphaUrl(covers[currentImageIndex], resource.id);
   };
+
+  // Determine if the chat button should be disabled
+  const shouldDisableChat = !resource?.manifest?.type?.includes('agent');
 
   return (
     <Card 
@@ -56,7 +53,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({ resource }) => {
           boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
           transform: 'translateY(-2px)',
           transition: 'all 0.2s ease-in-out',
-          '& .download-button': {
+          '& .action-button': {
             opacity: 1,
             transform: 'translateY(0)',
           },
@@ -168,11 +165,14 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({ resource }) => {
       </CardContent>
 
       <Button
-        className="download-button"
-        onClick={handleDownload}
-        startIcon={<DownloadIcon />}
+        className="action-button"
+        component={RouterLink}
+        to={`/lab?agent=${encodeURIComponent(resource.id)}`}
+        startIcon={<ChatIcon />}
         variant="contained"
         size="small"
+        disabled={shouldDisableChat}
+        onClick={(e) => e.stopPropagation()}
         sx={{
           position: 'absolute',
           bottom: 16,
@@ -180,14 +180,19 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({ resource }) => {
           opacity: 0,
           transform: 'translateY(10px)',
           transition: 'all 0.2s ease-in-out',
-          backgroundColor: '#2563eb',
+          backgroundColor: '#3b82f6',
           color: 'white',
           '&:hover': {
-            backgroundColor: '#1d4ed8',
+            backgroundColor: '#2563eb',
+          },
+          '&.Mui-disabled': {
+            backgroundColor: '#d1d5db',
+            cursor: 'not-allowed',
+            pointerEvents: 'auto'
           },
         }}
       >
-        Download
+        Start Chat
       </Button>
     </Card>
   );

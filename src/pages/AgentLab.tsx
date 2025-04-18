@@ -12,7 +12,7 @@ import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
 import { CanvasPanel } from '../components/notebook/CanvasPanel';
 import { HyphaCoreWindow } from '../components/services/hyphaCoreServices';
 import { ChatMessage } from '../utils/chatCompletion';
-import axios from 'axios';
+
 
 // Import components
 import NotebookHeader from '../components/notebook/NotebookHeader';
@@ -20,9 +20,10 @@ import NotebookContent from '../components/notebook/NotebookContent';
 import NotebookFooter from '../components/notebook/NotebookFooter';
 import KeyboardShortcutsDialog from '../components/notebook/KeyboardShortcutsDialog';
 import PublishAgentDialog, { PublishAgentData } from '../components/notebook/PublishAgentDialog';
+import WelcomeScreen from '../components/notebook/WelcomeScreen';
 
 // Import utilities and types
-import { NotebookCell, NotebookData, NotebookMetadata, CellType, CellRole, OutputItem } from '../types/notebook';
+import { NotebookCell, NotebookData, NotebookMetadata, CellType, CellRole } from '../types/notebook';
 import { showToast, dismissToast } from '../utils/notebookUtils';
 
 // Import hooks
@@ -42,6 +43,9 @@ import { ProjectsProvider, useProjects, IN_BROWSER_PROJECT } from '../providers/
 // Import setupNotebookService
 import { setupNotebookService } from '../components/services/hyphaCoreServices';
 import { SITE_ID } from '../utils/env';
+
+// Import the hook's return type
+import { InitialUrlParams } from '../hooks/useNotebookInitialization';
 
 // Add CellRole enum values
 const CELL_ROLES = {
@@ -111,10 +115,16 @@ const NotebookPage: React.FC = () => {
     getInBrowserFileContent,
     isLoading: isProjectsLoading,
     initialLoadComplete,
+    projects,
   } = useProjects();
 
+  // === New State ===
+  const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
+  const [parsedUrlParams, setParsedUrlParams] = useState<InitialUrlParams | null>(null);
+  // === End New State ===
+
   // Get projects list for the initialization hook
-  const { projects } = useProjects();
+  const { projects: projectsFromHook } = useProjects();
 
   const [canvasPanelWidth, setCanvasPanelWidth] = useState(600);
   const [showCanvasPanel, setShowCanvasPanel] = useState(false);
@@ -242,7 +252,7 @@ const NotebookPage: React.FC = () => {
     }
   }, [executeCode]);
 
-  // --- Core Notebook Loading & Saving Functions --- (Moved Up)
+  // --- Core Notebook Loading & Saving Functions ---
   const loadNotebookContent = useCallback(async (projectId: string | undefined, filePath: string) => {
     const loadingToastId = 'loading-notebook';
     showToast('Loading notebook...', 'loading', { id: loadingToastId });
@@ -306,6 +316,7 @@ const NotebookPage: React.FC = () => {
         lastUserCellRef.current = userCells[userCells.length - 1]?.id || null;
         lastAgentCellRef.current = assistantCells[assistantCells.length - 1]?.id || null;
         cellManager.current?.clearRunningState();
+        setShowWelcomeScreen(false);
         showToast('Notebook loaded successfully', 'success');
       } else {
         console.warn('Invalid notebook file format found after parsing:', { projectId: resolvedProjectId, filePath });
@@ -337,62 +348,6 @@ const NotebookPage: React.FC = () => {
     setSelectedProject,
   ]);
 
-  // Initialization Hook
-  const hasInitializedRef = useNotebookInitialization({
-    isLoggedIn,
-    initialLoadComplete,
-    loadNotebookContent, // Now defined above
-    setSelectedProject,
-    getInBrowserProject,
-    setNotebookMetadata,
-    setCells,
-    setExecutionCounter,
-    defaultNotebookMetadata,
-    cellManagerRef: cellManager,
-    projects,
-  });
-
-  // Notebook Commands Hook
-  const { handleCommand } = useNotebookCommands({
-    cellManager: cellManager.current,
-    hasInitialized: hasInitializedRef
-  });
-
-  // Use the chat completion hook (Moved down, needs handleExecuteCode)
-  const {
-    isProcessingAgentResponse,
-    activeAbortController,
-    handleSendChatMessage,
-    handleRegenerateClick,
-    handleStopChatCompletion,
-    setInitializationError: setChatInitializationError
-  } = useChatCompletion({
-    cellManager: cellManager.current,
-    executeCode: handleExecuteCode, // Needs definition before this
-    agentSettings,
-    getConversationHistory,
-    isReady,
-    setCells
-  });
-
-  // Modify handleAbortExecution to use the ref
-  const handleAbortExecution = useCallback(() => {
-    console.log('[AgentLab] Aborting Hypha Core service operations...');
-    // Abort the current controller
-    hyphaServiceAbortControllerRef.current.abort();
-    console.log(`[AgentLab] Abort signal sent. Reason: ${hyphaServiceAbortControllerRef.current.signal.reason}`);
-
-    // Create a new controller for future operations
-    hyphaServiceAbortControllerRef.current = new AbortController();
-    console.log('[AgentLab] New AbortController created for subsequent operations.');
-
-    // Additionally, stop any ongoing chat completion if needed (assuming different mechanism)
-    handleStopChatCompletion();
-
-  }, [handleStopChatCompletion]); // Dependency on handleStopChatCompletion if it's used
-
-
-  // --- Notebook Action Handlers (Moved Up) ---
   const handleRestartKernel = useCallback(async () => {
     if (!cellManager.current) return;
     showToast('Restarting kernel...', 'loading');
@@ -456,22 +411,152 @@ const NotebookPage: React.FC = () => {
     }
   }, [isReady, executeCode, setExecutionCounter, showToast, handleRestartKernel]); // Added dependencies
 
+  // Add createNotebookFromAgentTemplate function
+  const createNotebookFromAgentTemplate = useCallback(async (agentId: string, projectId?: string) => {
+    if (!artifactManager || !isLoggedIn) {
+      showToast('You need to be logged in to create a notebook from an agent template', 'error');
+      return;
+    }
 
-  // Handle sending a message with command checking
-  const handleCommandOrSendMessage = useCallback((message: string) => {
-    if (!isReady) {
-      setInitializationError("AI assistant is not ready. Please wait.");
-      return;
+    const loadingToastId = 'creating-notebook';
+    showToast('Creating notebook from agent template...', 'loading', { id: loadingToastId });
+
+    try {
+      // Get the agent artifact
+      const agent = await artifactManager.read({ artifact_id: agentId, _rkwargs: true });
+      if (!agent || !agent.manifest) {
+        throw new Error('Agent not found or invalid manifest');
+      }
+
+      // Get template from manifest
+      const template = agent.manifest.chat_template;
+      if (!template) {
+        throw new Error('Agent does not have a chat template');
+      }
+
+      // Generate a new filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filePath = `${agent.manifest.name}_${timestamp}.ipynb`;
+      const resolvedProjectId = projectId || IN_BROWSER_PROJECT.id;
+
+      // Create notebook data from template
+      const notebookData: NotebookData = {
+        nbformat: 4,
+        nbformat_minor: 5,
+        metadata: {
+          ...defaultNotebookMetadata,
+          ...(template.metadata || {}),
+          title: agent.manifest.name || 'Agent Chat',
+          modified: new Date().toISOString(),
+          created: new Date().toISOString(),
+          filePath: filePath,
+          projectId: resolvedProjectId,
+          agentArtifact: {
+            id: agent.id,
+            version: agent.version,
+            name: agent.manifest.name,
+            description: agent.manifest.description,
+            manifest: agent.manifest
+          }
+        },
+        cells: template.cells || []
+      };
+
+      // Save the notebook
+      if (resolvedProjectId === IN_BROWSER_PROJECT.id) {
+        await saveInBrowserFile(filePath, notebookData);
+        setSelectedProject(getInBrowserProject());
+      } else {
+        const blob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
+        const file = new File([blob], filePath.split('/').pop() || 'notebook.ipynb', { type: 'application/json' });
+        await uploadFile(resolvedProjectId, file);
+      }
+
+      // Load the newly created notebook
+      await loadNotebookContent(resolvedProjectId, filePath);
+      showToast('Notebook created successfully', 'success');
+      dismissToast(loadingToastId);
+      // Reset kernel state after loading
+      // await handleResetKernelState();
+
+    } catch (error) {
+      console.error('Error creating notebook from agent template:', error);
+      showToast(`Failed to create notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } finally {
+      dismissToast(loadingToastId);
     }
-    // Check if it's a command
-    if (message.startsWith('/') || message.startsWith('#')) {
-      handleCommand(message); // Corrected: pass only message
-      return;
+  }, [
+    artifactManager,
+    isLoggedIn,
+    saveInBrowserFile,
+    uploadFile,
+    loadNotebookContent,
+    setSelectedProject,
+    getInBrowserProject,
+    handleResetKernelState
+  ]);
+
+  // Initialization Hook - Now returns the correct ref type
+  const { hasInitialized: initRefObject, initialUrlParams } = useNotebookInitialization({
+    isLoggedIn,
+    initialLoadComplete,
+    setSelectedProject,
+    getInBrowserProject,
+    setNotebookMetadata,
+    setCells,
+    setExecutionCounter,
+    defaultNotebookMetadata,
+    cellManagerRef: cellManager,
+    projects,
+  });
+
+  // Store parsed params once initialization is done and set welcome screen visibility
+  useEffect(() => {
+    if (initRefObject.current && initialUrlParams) {
+      setParsedUrlParams(initialUrlParams);
+      // Only hide welcome screen if we have a filePath parameter
+      setShowWelcomeScreen(!initialUrlParams.filePath);
     }
-    // Otherwise, send it as a chat message using the hook's function
-    cellManager.current?.clearRunningState();
-    handleSendChatMessage(message);
-  }, [isReady, handleCommand, handleSendChatMessage, setInitializationError]);
+  }, [initRefObject.current, initialUrlParams]); // Depend on the ref's current value change
+
+  // Notebook Commands Hook
+  const { handleCommand } = useNotebookCommands({
+    cellManager: cellManager.current,
+    hasInitialized: initRefObject // Use the ref object directly
+  });
+
+  // Use the chat completion hook (Moved down, needs handleExecuteCode)
+  const {
+    isProcessingAgentResponse,
+    activeAbortController,
+    handleSendChatMessage,
+    handleRegenerateClick,
+    handleStopChatCompletion,
+    setInitializationError: setChatInitializationError
+  } = useChatCompletion({
+    cellManager: cellManager.current,
+    executeCode: handleExecuteCode, // Needs definition before this
+    agentSettings,
+    getConversationHistory,
+    isReady,
+    setCells
+  });
+
+  // Modify handleAbortExecution to use the ref
+  const handleAbortExecution = useCallback(() => {
+    console.log('[AgentLab] Aborting Hypha Core service operations...');
+    // Abort the current controller
+    hyphaServiceAbortControllerRef.current.abort();
+    console.log(`[AgentLab] Abort signal sent. Reason: ${hyphaServiceAbortControllerRef.current.signal.reason}`);
+
+    // Create a new controller for future operations
+    hyphaServiceAbortControllerRef.current = new AbortController();
+    console.log('[AgentLab] New AbortController created for subsequent operations.');
+
+    // Additionally, stop any ongoing chat completion if needed (assuming different mechanism)
+    handleStopChatCompletion();
+
+  }, [handleStopChatCompletion]); // Dependency on handleStopChatCompletion if it's used
 
 
   // Save notebook based on current notebookMetadata
@@ -572,7 +657,6 @@ const NotebookPage: React.FC = () => {
         lastAgentCellRef.current = null;
         setActiveCellId(null);
         setSelectedProject(getInBrowserProject());
-        showToast(`Notebook "${file.name}" loaded as a new in-browser file`, 'success');
         const notebookToSave: NotebookData = {
           nbformat: 4,
           nbformat_minor: 5,
@@ -692,16 +776,18 @@ const NotebookPage: React.FC = () => {
   // URL Sync Hook
   useUrlSync({
     notebookMetadata,
-    hasInitialized: hasInitializedRef.current,
+    // Use initRefObject.current directly
+    hasInitialized: !showWelcomeScreen && initRefObject.current, 
   });
 
-  // Run system cells on startup (Placed after hook definitions)
+  // Run system cells on startup (Adjusted)
   useEffect(() => {
     const executeSystemCell = async () => {
-      if (!isReady || !hasInitializedRef.current || systemCellsExecutedRef.current) return;
+      // Use initRefObject.current directly
+      if (showWelcomeScreen || !isReady || !initRefObject.current || systemCellsExecutedRef.current) return;
       const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
       if (!systemCell) {
-        systemCellsExecutedRef.current = true; // Mark as "executed" (or no-op if no system cell)
+        systemCellsExecutedRef.current = true; 
         return;
       }
       const systemCellId = systemCell.id;
@@ -725,8 +811,7 @@ const NotebookPage: React.FC = () => {
       }
     };
     executeSystemCell();
-    // Dependencies remain important here
-  }, [isReady, cells, hasInitializedRef, cellManager]); // Added cellManager dependency
+  }, [showWelcomeScreen, isReady, cells, initRefObject.current, cellManager]); // Depend on showWelcomeScreen & ref current value
 
   // New hook to set AI readiness based on kernel readiness
   useEffect(() => {
@@ -756,7 +841,7 @@ const NotebookPage: React.FC = () => {
       nbformat: 4,
       nbformat_minor: 5,
       metadata: notebookMetadata,
-      cells: cells,
+      cells: cellManager.current?.getCurrentCellsContent() || cells,
     };
     const blob = new Blob([JSON.stringify(notebookToSave, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -784,6 +869,7 @@ const NotebookPage: React.FC = () => {
   // Add keyboard shortcut for saving notebook
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (showWelcomeScreen) return; 
       if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault();
         console.log('Ctrl/Cmd+S detected, attempting to save notebook...');
@@ -796,56 +882,41 @@ const NotebookPage: React.FC = () => {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [saveNotebook]); // Dependency array includes saveNotebook
+  }, [saveNotebook, showWelcomeScreen]); // Depend on showWelcomeScreen
 
-  // --- Effect to setup Hypha Core notebook service after login and kernel ready ---
+  // --- Effect to setup Hypha Core notebook service (Adjusted) ---
   useEffect(() => {
     const setupService = async () => {
-      // Skip if missing initial conditions
-      if (setupCompletedRef.current || !hasInitializedRef.current || !notebookMetadata.filePath) {
+      // Use initRefObject.current directly
+      if (showWelcomeScreen || setupCompletedRef.current || !initRefObject.current || !notebookMetadata.filePath) {
         return;
       }
-
-      // Guard clauses: ensure all necessary components are ready
+      // Also skip if prerequisites like login, server, kernel aren't ready
       if (!isLoggedIn || !server || !isReady || !cellManager.current) {
-        if (!isLoggedIn && isReady) {
+        if (!isLoggedIn && isReady && !showWelcomeScreen) { // Only show toast if relevant
           showToast('You need to be logged in to use Hypha Core Service', 'warning');
         }
-        console.log('[AgentLab] Setup Service skipped - prerequisites not ready:', {
-          isLoggedIn,
-          server: !!server,
-          isReady,
-          cellManager: !!cellManager.current,
-          executeCode: !!executeCode
-        });
+        console.log('[AgentLab] Setup Service skipped - prerequisites not ready:', { isLoggedIn, server: !!server, isReady, cellManager: !!cellManager.current });
         return;
       }
-
-      // Reset flags to allow setup
+      // Proceed with setup
       setupCompletedRef.current = false;
       setHyphaCoreApi(null);
-
       console.log('[AgentLab] Setting up Hypha Core service for notebook:', notebookMetadata.filePath);
-
-      // Use the signal from the current AbortController
       const currentSignal = hyphaServiceAbortControllerRef.current.signal;
-
       try {
         const api = await setupNotebookService({
           onAddWindow: handleAddWindow,
-          server,
-          executeCode,
-          agentSettings,
+          server, executeCode, agentSettings,
           abortSignal: currentSignal
         });
-        // Check if the operation was aborted *before* setting the API
         if (currentSignal.aborted) {
             console.log('[AgentLab] Hypha Core service setup aborted before completion.');
-            setupCompletedRef.current = false; // Reset flag to allow retry
+            setupCompletedRef.current = false;
             return;
         }
-        setHyphaCoreApi(api); // Store the API object
-        setupCompletedRef.current = true; // Mark as completed only after successful setup
+        setHyphaCoreApi(api);
+        setupCompletedRef.current = true;
         console.log('[AgentLab] Hypha Core service successfully set up.');
         showToast('Hypha Core Service Connected', 'success');
       } catch (error: any) {
@@ -855,23 +926,16 @@ const NotebookPage: React.FC = () => {
             console.error('[AgentLab] Failed to set up notebook service:', error);
             showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
         }
-        // Reset flags to allow retry
         setupCompletedRef.current = false;
         setHyphaCoreApi(null);
       }
     };
 
     setupService();
-  }, [isReady, hasInitializedRef, notebookMetadata.filePath, handleAddWindow, isLoggedIn, setupCompletedRef.current]); // <<< MODIFIED: Removed setupCompletedRef.current
-
-  // Create a separate effect to handle agentSettings changes
-  useEffect(() => {
-    // Only update existing API with new settings if connected
-    if (hyphaCoreApi) {
-      console.log('[AgentLab] Updating existing Hypha Core service with new settings');
-      // Add implementation here if needed to update settings without reconnecting
-    }
-  }, [agentSettings, hyphaCoreApi]);
+  }, [
+      showWelcomeScreen, isReady, initRefObject.current, notebookMetadata.filePath, isLoggedIn, server, 
+      agentSettings, executeCode, handleAddWindow
+  ]);
 
   // Get system cell for publish dialog
   const systemCell = useMemo(() => {
@@ -1002,7 +1066,10 @@ const NotebookPage: React.FC = () => {
         showToast(`Failed to save notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error', { id: toastId });
         setIsPublishing(false);
       });
-  }, [artifactManager, isLoggedIn, systemCell, cells, notebookMetadata, saveNotebook, navigate, setNotebookMetadata]);
+  }, [
+      artifactManager, isLoggedIn, systemCell, cells, notebookMetadata, saveNotebook, 
+      navigate, setNotebookMetadata, cellManager
+  ]);
 
   // Add handlers for moving cells up and down
   const handleMoveCellUp = useCallback(() => {
@@ -1030,49 +1097,107 @@ const NotebookPage: React.FC = () => {
     return cellIndex < cells.length - 1;
   }, [activeCellId, cells]);
 
+  // Handle sending a message with command checking
+  const handleCommandOrSendMessage = useCallback((message: string) => {
+    if (!isReady) {
+      setInitializationError("AI assistant is not ready. Please wait.");
+      return;
+    }
+    // Check if it's a command
+    if (message.startsWith('/') || message.startsWith('#')) {
+      handleCommand(message); // Corrected: pass only message
+      return;
+    }
+    // Otherwise, send it as a chat message using the hook's function
+    cellManager.current?.clearRunningState();
+    handleSendChatMessage(message);
+  }, [isReady, handleCommand, handleSendChatMessage, setInitializationError]);
+
+  // Add handleCreateNewNotebook function before the return statement
+  const handleCreateNewNotebook = useCallback(async () => {
+    // Generate a new filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filePath = `Untitled_Chat_${timestamp}.ipynb`;
+
+    // Create empty notebook data
+    const notebookData: NotebookData = {
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: {
+        ...defaultNotebookMetadata,
+        title: 'New Chat',
+        modified: new Date().toISOString(),
+        created: new Date().toISOString(),
+        filePath: filePath,
+        projectId: IN_BROWSER_PROJECT.id
+      },
+      cells: []
+    };
+
+    try {
+      // Save to in-browser storage
+      await saveInBrowserFile(filePath, notebookData);
+      setSelectedProject(getInBrowserProject());
+      
+      // Load the newly created notebook
+      await loadNotebookContent(IN_BROWSER_PROJECT.id, filePath);
+      setShowWelcomeScreen(false);
+      showToast('Created new chat notebook', 'success');
+    } catch (error) {
+      console.error('Error creating new notebook:', error);
+      showToast(`Failed to create notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
+  }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent]);
+
+  // --- Render Logic --- 
+  if (!initRefObject.current) { 
+    return <div className="flex justify-center items-center h-screen">Initializing...</div>;
+  }
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      {/* Header goes first and spans full width */}
-          <NotebookHeader
-            metadata={notebookMetadata}
-            fileName={notebookFileName}
-            onMetadataChange={setNotebookMetadata}
-            onSave={saveNotebook}
-            onDownload={handleDownloadNotebook}
-            onLoad={loadNotebookFromFile}
-            onRunAll={handleRunAllCells}
-            onClearOutputs={handleClearAllOutputs}
-            onRestartKernel={handleRestartKernel}
-            onAddCodeCell={handleAddCodeCell}
-            onAddMarkdownCell={handleAddMarkdownCell}
-            onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
-            isProcessing={isProcessingAgentResponse}
-            isKernelReady={isReady}
-            isAIReady={isAIReady}
-            onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-            isSidebarOpen={isSidebarOpen}
-            onPublish={() => setIsPublishDialogOpen(true)}
-            onMoveCellUp={handleMoveCellUp}
-            onMoveCellDown={handleMoveCellDown}
-            canMoveUp={canMoveUp}
-            canMoveDown={canMoveDown}
+      <NotebookHeader
+        metadata={notebookMetadata}
+        fileName={notebookFileName}
+        onMetadataChange={setNotebookMetadata}
+        onSave={saveNotebook}
+        onDownload={handleDownloadNotebook}
+        onLoad={loadNotebookFromFile}
+        onRunAll={handleRunAllCells}
+        onClearOutputs={handleClearAllOutputs}
+        onRestartKernel={handleRestartKernel}
+        onAddCodeCell={handleAddCodeCell}
+        onAddMarkdownCell={handleAddMarkdownCell}
+        onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}
+        isProcessing={isProcessingAgentResponse}
+        isKernelReady={isReady}
+        isAIReady={isAIReady}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        isSidebarOpen={isSidebarOpen}
+        onPublish={() => setIsPublishDialogOpen(true)}
+        onMoveCellUp={handleMoveCellUp}
+        onMoveCellDown={handleMoveCellDown}
+        canMoveUp={canMoveUp}
+        canMoveDown={canMoveDown}
+      />
+      {showWelcomeScreen ? (
+        <WelcomeScreen 
+          urlParams={parsedUrlParams}
+          isLoggedIn={isLoggedIn}
+          onStartNewChat={handleCreateNewNotebook}
+          onStartFromAgent={createNotebookFromAgentTemplate}
+        />
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar
+            isOpen={isSidebarOpen}
+            onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+            onLoadNotebook={handleLoadNotebook}
           />
 
-      {/* Container for Sidebar + Main Content Area (takes remaining height) */}
-      <div className="flex flex-1 overflow-hidden">
-              {/* Sidebar */}
-              <Sidebar
-                isOpen={isSidebarOpen}
-                onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-          onLoadNotebook={handleLoadNotebook}
-        />
-
-        {/* Original Main notebook content area (now next to Sidebar) */}
-        <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden transition-all duration-300">
-          {/* Main content area with notebook and canvas panel */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* Notebook Content Area */}
-            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden transition-all duration-300">
+            <div className="flex-1 flex overflow-hidden">
+              <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
                 <div className="flex-1 overflow-y-auto overflow-x-hidden">
                   <div className="max-w-5xl mx-auto px-0 sm:px-4 py-1 pb-48">
                     <NotebookContent
@@ -1090,66 +1215,63 @@ const NotebookPage: React.FC = () => {
                       onDeleteCellWithChildren={handleDeleteCellWithChildren}
                       onToggleCellCommitStatus={handleToggleCellCommitStatus}
                       onRegenerateClick={handleRegenerateClick}
-                      onStopChatCompletion={handleStopChatCompletion} // Use the combined stop function
+                      onStopChatCompletion={handleAbortExecution}
                       getEditorRef={getEditorRef}
                       isReady={isReady}
-                      activeAbortController={activeAbortController} // Keep this for chat completion
+                      activeAbortController={activeAbortController}
                       showCanvasPanel={showCanvasPanel}
-                      onAbortExecution={handleAbortExecution} // Pass the new abort function
+                      onAbortExecution={handleAbortExecution}
                     />
                   </div>
                 </div>
 
-              {/* Footer with chat input */}
                 <div className="sticky bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm pt-1 px-4 pb-4 shadow-md z-100">
                   <NotebookFooter
-                  onSendMessage={handleCommandOrSendMessage}
-                    onStopChatCompletion={handleStopChatCompletion}
+                    onSendMessage={handleCommandOrSendMessage}
+                    onStopChatCompletion={handleAbortExecution}
                     isProcessing={isProcessingAgentResponse}
                     isThebeReady={isReady}
                     isAIReady={isAIReady}
                     initializationError={initializationError}
                     agentSettings={agentSettings}
-                  onSettingsChange={setAgentSettings}
+                    onSettingsChange={setAgentSettings}
                   />
+                </div>
+              </div>
+
+              <div className="h-full relative" style={{ width: isSmallScreen ? 0 : (showCanvasPanel ? canvasPanelWidth : 36) }}>
+                <CanvasPanel
+                  windows={hyphaCoreWindows}
+                  isVisible={showCanvasPanel}
+                  width={isSmallScreen ? 0 : canvasPanelWidth}
+                  activeTab={activeCanvasTab}
+                  onResize={handleCanvasPanelResize}
+                  onClose={toggleCanvasPanel}
+                  onTabChange={setActiveCanvasTab}
+                  onTabClose={handleTabClose}
+                />
               </div>
             </div>
 
-            {/* Right side: Canvas Panel */}
-            <div className="h-full relative" style={{ width: isSmallScreen ? 0 : (showCanvasPanel ? canvasPanelWidth : 36) }}>
-              <CanvasPanel
-                windows={hyphaCoreWindows}
-                isVisible={showCanvasPanel}
-                width={isSmallScreen ? 0 : canvasPanelWidth}
-                activeTab={activeCanvasTab}
-                onResize={handleCanvasPanelResize}
-                onClose={toggleCanvasPanel}
-                onTabChange={setActiveCanvasTab}
-                onTabClose={handleTabClose}
-              />
-            </div>
+            <KeyboardShortcutsDialog
+              isOpen={isShortcutsDialogOpen}
+              onClose={() => setIsShortcutsDialogOpen(false)}
+            />
+
+            <PublishAgentDialog
+              isOpen={isPublishDialogOpen}
+              onClose={() => setIsPublishDialogOpen(false)}
+              onConfirm={handlePublishAgent}
+              title="Publish Agent"
+              systemCell={systemCell}
+              notebookTitle={notebookMetadata.title || notebookFileName || 'Untitled Agent'}
+              existingId={notebookMetadata.agentArtifact?.id}
+              existingVersion={notebookMetadata.agentArtifact?.version}
+              welcomeMessage={notebookMetadata.agentArtifact?.manifest?.welcomeMessage}
+            />
           </div>
-
-          {/* Keyboard Shortcuts Dialog */}
-          <KeyboardShortcutsDialog
-            isOpen={isShortcutsDialogOpen}
-            onClose={() => setIsShortcutsDialogOpen(false)}
-          />
-
-          {/* Publish Agent Dialog */}
-          <PublishAgentDialog
-            isOpen={isPublishDialogOpen}
-            onClose={() => setIsPublishDialogOpen(false)}
-            onConfirm={handlePublishAgent}
-            title="Publish Agent"
-            systemCell={systemCell}
-            notebookTitle={notebookMetadata.title || notebookFileName || 'Untitled Agent'}
-            existingId={notebookMetadata.agentArtifact?.id}
-            existingVersion={notebookMetadata.agentArtifact?.version}
-            welcomeMessage={notebookMetadata.agentArtifact?.manifest?.welcomeMessage}
-          />
         </div>
-      </div>
+      )}
     </div>
   );
 };

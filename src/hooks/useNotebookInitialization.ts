@@ -1,4 +1,4 @@
-import { useEffect, useRef, MutableRefObject } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import localforage from 'localforage';
 import { useProjects, Project, ProjectFile, IN_BROWSER_PROJECT } from '../providers/ProjectsProvider';
@@ -11,29 +11,39 @@ const CELL_ROLES = {
   ASSISTANT: 'assistant' as CellRole
 };
 
+// Define the structure for the returned URL parameters
+export interface InitialUrlParams {
+  projectId: string | null;
+  filePath: string | null;
+  agentId: string | null;
+}
+
 interface UseNotebookInitializationProps {
-  isLoggedIn: boolean | null;
-  initialLoadComplete: boolean; // From ProjectsProvider
-  loadNotebookContent: (projectId: string | undefined, filePath: string) => Promise<void>;
+  isLoggedIn: boolean;
+  initialLoadComplete: boolean;
   setSelectedProject: (project: Project | null) => void;
   getInBrowserProject: () => Project;
-  setNotebookMetadata: React.Dispatch<React.SetStateAction<NotebookMetadata>>;
-  setCells: React.Dispatch<React.SetStateAction<NotebookCell[]>>;
-  setExecutionCounter: React.Dispatch<React.SetStateAction<number>>;
+  setNotebookMetadata: (metadata: NotebookMetadata) => void;
+  setCells: (cells: NotebookCell[]) => void;
+  setExecutionCounter: (count: number) => void;
   defaultNotebookMetadata: NotebookMetadata;
-  cellManagerRef: MutableRefObject<CellManager | null>; // Use Ref for cellManager
-  projects: Project[]; // Pass projects list directly
+  cellManagerRef: React.MutableRefObject<CellManager | null>;
+  projects: Project[];
+}
+
+// Return type includes the parsed URL parameters
+interface UseNotebookInitializationResult {
+  hasInitialized: React.MutableRefObject<boolean>;
+  initialUrlParams: InitialUrlParams | null;
 }
 
 /**
- * Custom hook to handle the initial loading logic for the notebook.
- * Determines whether to load from URL params (project, file), local storage (last state), or a default state.
- * Returns a ref indicating whether initialization has completed.
+ * Custom hook to handle initial setup checks like login status, project loading,
+ * and parsing URL parameters. It no longer automatically loads or creates notebooks.
  */
 export function useNotebookInitialization({
   isLoggedIn,
   initialLoadComplete,
-  loadNotebookContent,
   setSelectedProject,
   getInBrowserProject,
   setNotebookMetadata,
@@ -41,182 +51,105 @@ export function useNotebookInitialization({
   setExecutionCounter,
   defaultNotebookMetadata,
   cellManagerRef,
-  projects, // Use passed projects list
-}: UseNotebookInitializationProps) {
+  projects,
+}: UseNotebookInitializationProps): UseNotebookInitializationResult {
   const [searchParams] = useSearchParams();
-  const hasInitialized = useRef(false); // Manages initialization state internally
+  const hasInitialized = useRef<boolean>(false);
+  const [initialUrlParams, setInitialUrlParams] = useState<InitialUrlParams | null>(null);
 
   useEffect(() => {
     // --- PRIMARY GUARD: Only run this effect once ---
     if (hasInitialized.current) {
-      console.log('[useNotebookInit] Initialization already attempted, skipping effect run.');
       return;
     }
-    // --- Mark initialization as attempted immediately ---
-    // This prevents re-entry if dependencies change while async operations are pending.
-    hasInitialized.current = true;
-    console.log('[useNotebookInit] Marked initialization as attempted.');
 
-    // --- Read NEW parameter names ---
-    const urlProject = searchParams.get('project');
-    const urlFile = searchParams.get('file');
+    // --- Logic to determine initial state ---
+    const determineInitialState = async () => {
+      // Get URL parameters
+      const urlProject = searchParams.get('project');
+      const urlFile = searchParams.get('file');
+      const urlAgent = searchParams.get('agent');
 
-    // --- Logic to determine initial load target ---
-    const determineInitialLoad = async () => {
-      let loadAttempted = false;
-      let initializationFinalized = false; // Tracks if a final state (load/default) was reached
+      // Store parsed params
+      setInitialUrlParams({
+        projectId: urlProject,
+        filePath: urlFile,
+        agentId: urlAgent
+      });
 
-      // Determine if dependencies are ready for a potential remote load
+      // Determine if dependencies are ready for potential remote actions later
       const dependenciesReady = initialLoadComplete;
 
-      // --- Use NEW parameter names in the condition ---
-      if (urlProject && urlFile) {
-        // --- Attempt 1: Load from URL ---
-        console.log('[useNotebookInit] Attempting load from URL:', { urlProject, urlFile });
-        if (urlProject !== IN_BROWSER_PROJECT.id && !dependenciesReady) {
-          console.log('[useNotebookInit] Waiting for project load before processing URL...');
-          // Reset the flag so the effect can run again when dependencies ARE ready
-          hasInitialized.current = false;
-          console.log('[useNotebookInit] Resetting initialization attempted flag due to pending dependencies.');
-          return; // Defer until projects are loaded
-        }
-        try {
-          // --- Pass NEW parameter names to load function ---
-          await loadNotebookContent(urlProject, urlFile);
-          loadAttempted = true;
-          initializationFinalized = true; // Assume success finalizes init
-        } catch (error) {
-          console.error('[useNotebookInit] Error loading from URL:', error);
-          loadAttempted = true; // Still counts as an attempt
-          // Reset state is handled within loadNotebookContent on error
-          initializationFinalized = true; // Finalize even on error to prevent loops
-        }
-      } else if (urlFile && !urlProject) {
-          // --- Handle case: Only 'file' param is present (implies 'in-browser' project) ---
-          console.log('[useNotebookInit] Attempting load from URL (in-browser implied):', { urlFile });
-          try {
-            // Load with undefined projectId, which loadNotebookContent resolves to IN_BROWSER_PROJECT.id
-            await loadNotebookContent(undefined, urlFile);
-            loadAttempted = true;
-            initializationFinalized = true;
-          } catch (error) {
-            console.error('[useNotebookInit] Error loading from URL (in-browser implied):', error);
-            loadAttempted = true;
-            initializationFinalized = true;
-          }
-      } else {
-        // --- Attempt 2: Load from Local Storage (Last State) ---
-        console.log('[useNotebookInit] No URL params, checking last state.');
-        let loadedFromLastState = false;
-        try {
-          // Local storage still uses projectId/filePath keys
-          const lastState = await localforage.getItem<{ projectId: string | null, filePath: string | null }>('lastNotebookState');
-          if (lastState?.filePath) {
-            const lastProjectId = lastState.projectId || IN_BROWSER_PROJECT.id;
-            const lastFilePath = lastState.filePath;
-            console.log('[useNotebookInit Fallback] Found last state:', { lastProjectId, lastFilePath });
+      console.log('[useNotebookInit] Parsing URL params:', { urlProject, urlFile, urlAgent });
+      console.log('[useNotebookInit] Dependencies ready:', dependenciesReady);
+      console.log('[useNotebookInit] Logged in:', isLoggedIn);
 
-            if (lastProjectId !== IN_BROWSER_PROJECT.id && !dependenciesReady) {
-              console.log('[useNotebookInit] Waiting for project load before processing last state...');
-              // Reset the flag so the effect can run again when dependencies ARE ready
-              hasInitialized.current = false;
-              console.log('[useNotebookInit] Resetting initialization attempted flag due to pending dependencies for last state.');
-              return; // Defer until projects are loaded
-            }
+      // Basic initialization is now considered complete after parsing params
+      // and checking initial load state.
+      // Actual notebook loading/creation will be user-triggered.
+      hasInitialized.current = true;
+      console.log('[useNotebookInit] Basic initialization complete. Ready for user actions.');
 
-            const projectExists = lastProjectId === IN_BROWSER_PROJECT.id || projects.some(p => p.id === lastProjectId);
-
-            if (projectExists) {
-              console.log('[useNotebookInit Fallback] Attempting to load from last state...');
-              try {
-                // loadNotebookContent expects projectId/filePath internally
-                await loadNotebookContent(lastProjectId, lastFilePath);
-                loadAttempted = true;
-                loadedFromLastState = true;
-                initializationFinalized = true; // Assume success finalizes init
-              } catch (loadError) {
-                console.error('[useNotebookInit] Error loading from last state:', loadError);
-                localforage.removeItem('lastNotebookState');
-                loadAttempted = true;
-                initializationFinalized = true; // Finalize even on error
-              }
-            } else {
-              console.warn(`[useNotebookInit Fallback] Project '${lastProjectId}' not found. Clearing last state.`);
-              localforage.removeItem('lastNotebookState');
-            }
-          }
-        } catch (err) {
-          console.error('[useNotebookInit Fallback] Error reading last state:', err);
-        }
-
-        // --- Attempt 3: Load Default/Welcome State ---
-        // Only load default if no other load was attempted or succeeded
-        if (!loadedFromLastState && !loadAttempted) {
-          console.log('[useNotebookInit Fallback] Setting default welcome state.');
-          setNotebookMetadata({
-            ...defaultNotebookMetadata,
-            title: 'Untitled Chat',
-            filePath: undefined,
-            projectId: IN_BROWSER_PROJECT.id,
-          });
-          setCells([]);
-          setExecutionCounter(1);
-          const manager = cellManagerRef.current;
-          if (manager) {
-            const systemCellId = manager.addCell('code', `# System startup script\nprint("System Ready")`, CELL_ROLES.SYSTEM);
-            manager.addCell('markdown', `# Welcome to Hypha Agents\nStart chatting or create code/markdown cells.`, CELL_ROLES.ASSISTANT);
-            if (systemCellId) {
-              setCells(prev => prev.map(cell => cell.id === systemCellId ? { ...cell, metadata: { ...cell.metadata, isCodeVisible: false, isOutputVisible: false } } : cell));
-            }
-          }
-          setSelectedProject(getInBrowserProject());
-          loadAttempted = true;
-          initializationFinalized = true; // Default state finalizes init
-        }
+      // Set a default empty state initially, user action will load/create real content
+      setNotebookMetadata(defaultNotebookMetadata);
+      setCells([]);
+      setExecutionCounter(1);
+      // If a project was specified in URL, select it, otherwise default to in-browser
+      // This might be needed for the sidebar to show the correct context
+      if (urlProject && projects.find(p => p.id === urlProject)) {
+        setSelectedProject(projects.find(p => p.id === urlProject) || null);
+      } else if (!urlProject && urlFile) {
+        // If only file is present, assume in-browser
+        setSelectedProject(getInBrowserProject());
       }
-
-      // --- Finalization Notification ---
-      // Log if the initialization process reached a concluding state
-      if (initializationFinalized) {
-         console.log('[useNotebookInit] Initialization sequence complete.');
+      // If agent is present, select project if specified, otherwise default to in-browser
+      else if (urlAgent) {
+          if (urlProject && projects.find(p => p.id === urlProject)) {
+              setSelectedProject(projects.find(p => p.id === urlProject) || null);
+          } else {
+              setSelectedProject(getInBrowserProject());
+          }
       } else {
-        // This case should ideally not happen if the logic covers all paths
-        // but indicates the init process didn't conclude with a load/default action.
-        console.warn('[useNotebookInit] Initialization sequence finished without a final load action.');
+        // If nothing in URL, try loading last state project (if any)
+        // This part might need adjustment depending on how we handle last state now
+        // For now, let's default to in-browser if nothing else specified
+        localforage.getItem('lastNotebookState').then(value => {
+          const lastState = value as { projectId: string; filePath: string } | null;
+          if (lastState?.projectId && lastState.projectId !== IN_BROWSER_PROJECT.id && projects.find(p => p.id === lastState.projectId)) {
+            // Don't load the file, just select the project
+            // setSelectedProject(projects.find(p => p.id === lastState.projectId) || null);
+          } else {
+            // setSelectedProject(getInBrowserProject());
+          }
+        }).catch(err => {
+           console.warn('Error reading last state:', err);
+           // setSelectedProject(getInBrowserProject());
+        });
       }
     };
 
-    // Run initialization logic only when login status is known and dependencies are met,
-    // but *only* if initialization hasn't been successfully marked as attempted yet.
-    if (isLoggedIn !== null && initialLoadComplete) {
-        console.log('[useNotebookInit] Conditions met (logged in, projects loaded), proceeding with load determination.');
-        determineInitialLoad();
-    } else if (isLoggedIn !== null && !initialLoadComplete && urlFile && !urlProject) { // Allow in-browser URL load even if remote projects aren't finished loading
-        console.log('[useNotebookInit] Conditions met (logged in, in-browser file param), proceeding with load determination.');
-        determineInitialLoad();
-    } else if (isLoggedIn !== null && !initialLoadComplete && !urlProject && !urlFile) { // Allow last state/default load check even if remote projects aren't finished
-        console.log('[useNotebookInit] Conditions met (logged in, no project/file requested), proceeding with fallback load determination.');
-        determineInitialLoad();
-    } else {
-        // If conditions aren't met, reset the flag so it can try again when they are.
-        hasInitialized.current = false;
-        console.log('[useNotebookInit] Waiting for login/initial project load... Resetting init attempt flag.', { isLoggedIn, initialLoadComplete });
+    // Only run determineInitialState if projects are loaded or if we are only dealing
+    // with in-browser project scenarios (agent without project, file without project, or nothing)
+    const urlProject = searchParams.get('project');
+    if (initialLoadComplete || !urlProject) {
+        determineInitialState();
+    }
+    else{
+        console.log('[useNotebookInit] Waiting for projects to load...');
     }
 
   }, [
     isLoggedIn,
-    initialLoadComplete,
-    projects, // Depend on the actual projects list
-    searchParams,
-    loadNotebookContent,
+    initialLoadComplete, // Re-run when projects load if needed
     setSelectedProject,
     getInBrowserProject,
     setNotebookMetadata,
     setCells,
     setExecutionCounter,
     defaultNotebookMetadata,
-    cellManagerRef
+    searchParams,
+    projects, // Need projects list to select project from URL
   ]);
 
-  return hasInitialized; // Note: This ref now indicates if an attempt *started*, not if it *completed*.
+  return { hasInitialized, initialUrlParams };
 } 

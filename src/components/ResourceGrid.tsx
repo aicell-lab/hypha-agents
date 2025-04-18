@@ -4,6 +4,7 @@ import { useHyphaStore } from '../store/hyphaStore';
 import SearchBar from './SearchBar';
 import ResourceCard from './ResourceCard';
 import { Grid } from '@mui/material';
+import { Resource } from '../types';
 
 interface ResourceGridProps {
   type?: 'model' | 'application' | 'notebook' | 'dataset' | 'agent';
@@ -14,6 +15,12 @@ interface PaginationProps {
   totalPages: number;
   onPageChange: (page: number) => void;
 }
+
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center w-full py-12">
+    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+  </div>
+);
 
 const Pagination = ({ currentPage, totalPages, onPageChange }: PaginationProps) => {
   return (
@@ -148,32 +155,39 @@ export const ResourceGrid: React.FC<ResourceGridProps> = ({ type }) => {
           onSearchConfirm={handleSearchConfirm}
         />
       </div>
-      <Grid container spacing={2} sx={{ padding: { xs: 0.5, sm: 1, md: 2 } }}>
-        {resources.map((resource) => (
-          <Grid 
-            item 
-            key={resource.id} 
-            xs={12}
-            sm={6} 
-            md={4} 
-            lg={3} 
-            sx={{
-              minWidth: { xs: 'auto', sm: 280 },
-              maxWidth: { xs: '100%', sm: 320 },
-              margin: '0 auto'
-            }}
-          >
-            <ResourceCard resource={resource} />
-          </Grid>
-        ))}
-      </Grid>
       
-      {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-        />
+      {loading ? (
+        <LoadingSpinner />
+      ) : (
+        <>
+          <Grid container spacing={2} sx={{ padding: { xs: 0.5, sm: 1, md: 2 } }}>
+            {resources.map((resource) => (
+              <Grid 
+                item 
+                key={resource.id} 
+                xs={12}
+                sm={6} 
+                md={4} 
+                lg={3} 
+                sx={{
+                  minWidth: { xs: 'auto', sm: 280 },
+                  maxWidth: { xs: '100%', sm: 320 },
+                  margin: '0 auto'
+                }}
+              >
+                <ResourceCard resource={resource} />
+              </Grid>
+            ))}
+          </Grid>
+          
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          )}
+        </>
       )}
     </div>
   );

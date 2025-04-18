@@ -104,22 +104,8 @@ const ResourceDetails = () => {
         
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           <Button
-            onClick={handleDownload}
-            startIcon={<DownloadIcon />}
-            variant="contained"
-            size="medium"
-            sx={{
-              backgroundColor: '#2563eb',
-              '&:hover': {
-                backgroundColor: '#1d4ed8',
-              },
-            }}
-          >
-            Download
-          </Button>
-          <Button
             component={RouterLink}
-            to={`/chat/${selectedResource.id.split('/').pop()}`}
+            to={`/lab?agent=${encodeURIComponent(selectedResource.id)}`}
             variant="contained"
             size="medium"
             startIcon={<ChatIcon />}

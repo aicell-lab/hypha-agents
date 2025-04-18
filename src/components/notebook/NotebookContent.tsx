@@ -64,21 +64,6 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
     return editorRefs.current[cellId];
   }, []);
 
-  // Helper function to scroll to bottom
-  const scrollToBottom = () => {
-    if (endRef.current) {
-      endRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  // Scroll to bottom of content area when new cells are added
-  useEffect(() => {
-    // Only auto-scroll if the new cell is added at the end
-    if (cells.length > 0 && activeCellId === cells[cells.length - 1].id) {
-      scrollToBottom();
-    }
-  }, [cells.length, activeCellId]);
-
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Main cell area - hidden on small screens when canvas is open */}

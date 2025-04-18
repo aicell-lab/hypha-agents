@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { hyphaWebsocketClient } from 'hypha-rpc';
 // import { hRPC } from 'hypha';
-import { Resource } from '../types/resource';
+import { Resource } from '../types';
 import { SITE_ID, SERVER_URL } from '../utils/env';
 
 
