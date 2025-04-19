@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaUpload } from 'react-icons/fa';
+import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -12,10 +12,9 @@ interface FileOperationsProps {
   onSave: () => void;
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onPublish: () => void;
 }
 
-export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownload, onLoad, onPublish }) => (
+export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownload, onLoad }) => (
   <div className="flex items-center">
     <input
       type="file"
@@ -45,13 +44,6 @@ export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownlo
       title="Download notebook (Ctrl/Cmd + Shift + S)"
     >
       <FaDownload className="w-3.5 h-3.5" />
-    </button>
-    <button
-      onClick={onPublish}
-      className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition"
-      title="Publish agent"
-    >
-      <FaUpload className="w-3.5 h-3.5" />
     </button>
   </div>
 );
@@ -198,10 +190,9 @@ export interface NotebookToolbarProps {
   isAIReady: boolean;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
-  onPublish: () => void;
 }
 
-interface ToolbarDropdownProps extends NotebookToolbarProps {
+interface ToolbarDropdownProps extends Omit<NotebookToolbarProps, 'onPublish'> {
   isOpen: boolean;
   onClose: () => void;
 }
@@ -227,7 +218,6 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   isAIReady,
   onToggleSidebar,
   isSidebarOpen,
-  onPublish,
   isOpen,
   onClose
 }) => {
@@ -339,16 +329,6 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
         <FaDownload className="w-3.5 h-3.5 mr-2" />
         Download
       </button>
-      <button
-        onClick={() => {
-          onPublish();
-          onClose();
-        }}
-        className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-      >
-        <FaUpload className="w-3.5 h-3.5 mr-2" />
-        Publish Agent
-      </button>
 
       <div className="border-t border-gray-200 mt-1 pt-1">
         <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Cells</div>
@@ -454,99 +434,86 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   isKernelReady,
   isAIReady,
   onToggleSidebar,
-  isSidebarOpen,
-  onPublish
+  isSidebarOpen
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  // Handle window resize
+  const handleResize = () => {
+    setIsMobile(window.innerWidth < 768);
+  };
+
+  // Render standard toolbar for larger screens
+  const renderStandardToolbar = () => (
+    <div className="flex items-center">
+      <FileOperations 
+        onSave={onSave} 
+        onDownload={onDownload} 
+        onLoad={onLoad} 
+      />
+      <div className="h-5 w-px bg-gray-200 mx-1"></div>
+      <KernelControls 
+        onRunAll={onRunAll} 
+        onClearOutputs={onClearOutputs} 
+        onRestartKernel={onRestartKernel} 
+        isProcessing={isProcessing} 
+        isReady={isKernelReady} 
+      />
+      <CellControls 
+        onAddCodeCell={onAddCodeCell} 
+        onAddMarkdownCell={onAddMarkdownCell} 
+        onShowKeyboardShortcuts={onShowKeyboardShortcuts}
+        onMoveCellUp={onMoveCellUp}
+        onMoveCellDown={onMoveCellDown}
+        canMoveUp={canMoveUp}
+        canMoveDown={canMoveDown}
+      />
+      <LoginSection />
+    </div>
+  );
+
+  // Render dropdown for smaller screens
+  const renderDropdownToolbar = () => (
+    <div className="relative">
+      <button
+        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+        className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
+        title="Toggle menu"
+      >
+        <FaBars className="w-4 h-4" />
+      </button>
+
+      <ToolbarDropdown
+        metadata={metadata}
+        onMetadataChange={onMetadataChange}
+        onSave={onSave}
+        onDownload={onDownload}
+        onLoad={onLoad}
+        onRunAll={onRunAll}
+        onClearOutputs={onClearOutputs}
+        onRestartKernel={onRestartKernel}
+        onAddCodeCell={onAddCodeCell}
+        onAddMarkdownCell={onAddMarkdownCell}
+        onShowKeyboardShortcuts={onShowKeyboardShortcuts}
+        onMoveCellUp={onMoveCellUp}
+        onMoveCellDown={onMoveCellDown}
+        canMoveUp={canMoveUp}
+        canMoveDown={canMoveDown}
+        isProcessing={isProcessing}
+        isKernelReady={isKernelReady}
+        isAIReady={isAIReady}
+        onToggleSidebar={onToggleSidebar}
+        isSidebarOpen={isSidebarOpen}
+        isOpen={isDropdownOpen}
+        onClose={() => setIsDropdownOpen(false)}
+      />
+    </div>
+  );
 
   return (
-    <div className="flex items-center justify-between px-2 py-1 border-b border-gray-200 bg-white">
-      {/* Desktop toolbar - hidden on small screens */}
-      <div className="hidden md:flex items-center space-x-2 flex-1">
-        <FileOperations onSave={onSave} onDownload={onDownload} onLoad={onLoad} onPublish={onPublish} />
-        <KernelControls
-          onRunAll={onRunAll}
-          onClearOutputs={onClearOutputs}
-          onRestartKernel={onRestartKernel}
-          isProcessing={isProcessing}
-          isReady={isKernelReady}
-        />
-        <CellControls
-          onAddCodeCell={onAddCodeCell}
-          onAddMarkdownCell={onAddMarkdownCell}
-          onShowKeyboardShortcuts={onShowKeyboardShortcuts}
-          onMoveCellUp={onMoveCellUp}
-          onMoveCellDown={onMoveCellDown}
-          canMoveUp={canMoveUp}
-          canMoveDown={canMoveDown}
-        />
-        <LoginSection />
-      </div>
-
-      {/* Mobile toolbar */}
-      <div className="md:hidden flex items-center justify-between w-full">
-        {/* Essential buttons always visible on mobile */}
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={onAddCodeCell}
-            className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition flex items-center"
-            title="Add code cell"
-          >
-            <VscCode className="w-3.5 h-3.5" />
-            <AiOutlinePlus className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={onRunAll}
-            className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
-            title="Run all cells"
-            disabled={isProcessing}
-          >
-            {isProcessing ? (
-              <FaSpinner className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <FaPlay className="w-3.5 h-3.5" />
-            )}
-          </button>
-          <LoginSection />
-        </div>
-
-        {/* Mobile menu button and dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
-            title="Toggle menu"
-          >
-            <FaBars className="w-4 h-4" />
-          </button>
-
-          <ToolbarDropdown
-            metadata={metadata}
-            onMetadataChange={onMetadataChange}
-            onSave={onSave}
-            onDownload={onDownload}
-            onLoad={onLoad}
-            onRunAll={onRunAll}
-            onClearOutputs={onClearOutputs}
-            onRestartKernel={onRestartKernel}
-            onAddCodeCell={onAddCodeCell}
-            onAddMarkdownCell={onAddMarkdownCell}
-            onShowKeyboardShortcuts={onShowKeyboardShortcuts}
-            onMoveCellUp={onMoveCellUp}
-            onMoveCellDown={onMoveCellDown}
-            canMoveUp={canMoveUp}
-            canMoveDown={canMoveDown}
-            isProcessing={isProcessing}
-            isKernelReady={isKernelReady}
-            isAIReady={isAIReady}
-            onToggleSidebar={onToggleSidebar}
-            isSidebarOpen={isSidebarOpen}
-            onPublish={onPublish}
-            isOpen={isDropdownOpen}
-            onClose={() => setIsDropdownOpen(false)}
-          />
-        </div>
-      </div>
+    <div className="flex items-center justify-end flex-grow px-2">
+      {isMobile ? renderDropdownToolbar() : renderStandardToolbar()}
     </div>
   );
 };

@@ -36,6 +36,9 @@ interface MonacoEditor {
   updateOptions: (options: any) => void;
   addCommand: (keybinding: number, handler: () => void) => void;
   setValue: (value: string) => void;
+  layout: () => void;
+  onDidChangeModelContent: (callback: () => void) => { dispose: () => void };
+  deltaDecorations: (oldDecorations: string[], newDecorations: any[]) => string[];
 }
 
 type CellRole = 'user' | 'assistant' | 'system';
@@ -246,43 +249,115 @@ export const CodeCell: React.FC<CodeCellProps> = ({
 
   // Function to handle editor mounting
   const handleEditorDidMount: OnMount = (editor, monaco) => {
-    internalEditorRef.current = editor as unknown as MonacoEditor;
-    if (blockRef) {
-      (blockRef as any).current = {
-        getCurrentCode: () => editor.getValue(),
-        focus: () => {
-          if (typeof editor.focus === 'function') {
-            editor.focus();
-          } else if (editor.getContainerDomNode) {
-            editor.getContainerDomNode()?.focus();
-          }
-        },
-        getContainerDomNode: () => editor.getContainerDomNode()
-      };
-    }
-    editor.setValue(code);
-    updateEditorHeight();
+    internalEditorRef.current = editor;
+    monacoRef.current = monaco;
+    
+    // Force editor to update its layout
+    editor.layout();
+    
+    // Update editor height on content change
     editor.onDidContentSizeChange(() => {
       updateEditorHeight();
     });
-    editor.updateOptions({
-      padding: { top: 8, bottom: 8 }
-    });
 
-    // Add keyboard shortcut handler for Shift+Enter
-    if (monacoRef.current) {
-      editor.addCommand(monacoRef.current.KeyMod.Shift | monacoRef.current.KeyCode.Enter, () => {
-        onExecute?.();
+    // Configure Python indentation
+    const model = editor.getModel();
+    if (model && language === 'python') {
+      // Make sure Python indentation works properly
+      editor.updateOptions({
+        tabSize: 4,
+        insertSpaces: true,
+        detectIndentation: true,
+        autoIndent: 'full',
+        formatOnPaste: true,
+        formatOnType: true
       });
     }
+    
+    // Add keyboard shortcuts
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      if (onExecute) onExecute();
+    });
 
-    // Remove automatic focus when cell becomes active
-    // The editor will only be focused when clicked directly
-  };
+    // Configure specific languages
+    if (language === 'python') {
+      monaco.languages.setLanguageConfiguration('python', {
+        onEnterRules: [
+          {
+            // Indent after lines ending with :
+            beforeText: /^\s*[\w\.\(\)\[\]]+.*:(?:.*)?$/,
+            action: { indentAction: monaco.languages.IndentAction.Indent }
+          },
+          {
+            // Keep indentation on empty lines
+            beforeText: /^\s+$/,
+            action: { indentAction: monaco.languages.IndentAction.None }
+          }
+        ],
+        // Ensure proper indentation detection for Python
+        autoClosingPairs: [
+          { open: '{', close: '}' },
+          { open: '[', close: ']' },
+          { open: '(', close: ')' },
+          { open: '"', close: '"', notIn: ['string'] },
+          { open: "'", close: "'", notIn: ['string', 'comment'] },
+          { open: '"""', close: '"""', notIn: ['string', 'comment'] },
+          { open: "'''", close: "'''", notIn: ['string', 'comment'] }
+        ],
+        indentationRules: {
+          increaseIndentPattern: /^\s*[\w\.]+.*:\s*$/,
+          decreaseIndentPattern: /^\s+$/
+        }
+      });
+    }
+    
+    // Update the initial height
+    updateEditorHeight();
+    
+    // Add syntax validation for Python code
+    if (language === 'python') {
+      // Check for syntax errors when content changes
+      const checkSyntax = () => {
+        const code = editor.getValue();
+        // Look for potential indentation errors
+        const indentationIssues = code.split('\n').filter((line, index) => {
+          if (line.trim() === '') return false;
+          
+          const leadingSpaces = line.length - line.trimLeft().length;
+          // Check if indentation is a multiple of 4 spaces
+          return leadingSpaces % 4 !== 0;
+        });
 
-  // Handle Monaco instance before mounting the editor
-  const handleBeforeMount = (monaco: any) => {
-    monacoRef.current = monaco;
+        // If we found potential issues, mark them with decorations
+        if (indentationIssues.length > 0) {
+          // Add visual indicators for incorrect indentation
+          const decorations = indentationIssues.map((_line, index) => ({
+            range: new monaco.Range(index + 1, 1, index + 1, 1000),
+            options: {
+              isWholeLine: true,
+              className: 'indentation-error',
+              hoverMessage: { value: 'Possible indentation error. Python requires consistent indentation (usually 4 spaces).' }
+            }
+          }));
+          
+          editor.deltaDecorations([], decorations);
+        }
+      };
+      
+      // Check syntax on change
+      const disposable = editor.onDidChangeModelContent(() => {
+        // Debounce the syntax check to avoid performance issues
+        setTimeout(checkSyntax, 500);
+      });
+      
+      // Initial check
+      checkSyntax();
+      
+      // Cleanup on unmount
+      return () => {
+        disposable.dispose();
+      };
+    }
   };
 
   // Handle click on the editor container
@@ -337,6 +412,26 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     // Truncate if too long
     return firstLine.length > 50 ? firstLine.slice(0, 47) + '...' : firstLine;
   };
+
+  // Add these styles for indentation error highlighting at the bottom of the file
+  // These can be added to your CSS file or as a style tag
+  const codeEditorStyles = `
+    .indentation-error {
+      background-color: rgba(255, 0, 0, 0.1);
+      border-left: 2px solid red;
+    }
+  `;
+
+  useEffect(() => {
+    // Add the styles to the document
+    const styleTag = document.createElement('style');
+    styleTag.textContent = codeEditorStyles;
+    document.head.appendChild(styleTag);
+    
+    return () => {
+      styleTag.remove();
+    };
+  }, []);
 
   return (
     <div 
@@ -517,7 +612,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                     setTimeout(updateEditorHeight, 10);
                   }}
                   onMount={handleEditorDidMount}
-                  beforeMount={handleBeforeMount}
                   options={{
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,

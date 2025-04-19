@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
-import { NotebookCell, OutputItem } from '../../types/notebook';
+import { NotebookCell, OutputItem, NotebookMetadata } from '../../types/notebook';
+import ModelConfigForm from '../shared/ModelConfigForm';
+import { AgentSettings, DefaultAgentConfig } from '../../utils/chatCompletion';
 
 interface PublishAgentDialogProps {
   isOpen: boolean;
@@ -12,6 +14,7 @@ interface PublishAgentDialogProps {
   existingId?: string;
   existingVersion?: string;
   welcomeMessage?: string;
+  notebookMetadata?: NotebookMetadata;
 }
 
 export interface PublishAgentData {
@@ -21,6 +24,7 @@ export interface PublishAgentData {
   version: string;
   license: string;
   welcomeMessage: string;
+  modelConfig?: AgentSettings;
 }
 
 const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
@@ -32,7 +36,8 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
   notebookTitle,
   existingId,
   existingVersion,
-  welcomeMessage: defaultWelcomeMessage
+  welcomeMessage: defaultWelcomeMessage,
+  notebookMetadata
 }) => {
   const [id, setId] = useState(existingId || '');
   const [name, setName] = useState(notebookTitle || 'Untitled Agent');
@@ -41,6 +46,9 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
   const [license, setLicense] = useState('CC-BY-4.0');
   const [welcomeMessage, setWelcomeMessage] = useState(defaultWelcomeMessage || 'Hi, how can I help you today?');
   const [isUpdatingExisting, setIsUpdatingExisting] = useState(!!existingId);
+  const [modelConfig, setModelConfig] = useState<AgentSettings>(
+    (notebookMetadata?.modelSettings as AgentSettings) || DefaultAgentConfig
+  );
   
   // Reset the form when the dialog is opened with new values
   useEffect(() => {
@@ -50,8 +58,12 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
       setVersion(existingVersion || '1.0.0');
       setWelcomeMessage(defaultWelcomeMessage || 'Hi, how can I help you today?');
       setIsUpdatingExisting(!!existingId);
+      // Use model settings from notebook metadata if available, otherwise use default
+      setModelConfig(
+        (notebookMetadata?.modelSettings as AgentSettings) || DefaultAgentConfig
+      );
     }
-  }, [isOpen, existingId, notebookTitle, existingVersion, defaultWelcomeMessage]);
+  }, [isOpen, existingId, notebookTitle, existingVersion, defaultWelcomeMessage, notebookMetadata]);
   
   const handleSubmit = () => {
     onConfirm({
@@ -60,7 +72,8 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
       description,
       version,
       license,
-      welcomeMessage
+      welcomeMessage,
+      modelConfig
     });
   };
 
@@ -223,6 +236,14 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
                 rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Welcome message when agent starts"
+              />
+            </div>
+            
+            {/* Model Configuration */}
+            <div className="border-t pt-4">
+              <ModelConfigForm
+                settings={modelConfig}
+                onSettingsChange={setModelConfig}
               />
             </div>
             

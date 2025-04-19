@@ -32,8 +32,35 @@ export interface ResourceManifest {
 
 export interface Resource {
   id: string;
-  manifest: ResourceManifest;
+  manifest: {
+    name: string;
+    description: string;
+    id_emoji?: string;
+    version?: string;
+    license?: string;
+    documentation?: string;
+    git_repo?: string;
+    covers?: string[];
+    tags?: string[];
+    cite?: Array<{
+      text: string;
+      doi?: string;
+    }>;
+    authors?: Array<{
+      name: string;
+      orcid?: string;
+      affiliation?: string;
+    }>;
+    type?: string[];
+    welcomeMessage?: string;
+    startup_script?: string;
+    modelConfig?: {
+      baseURL: string;
+      apiKey: string;
+      model: string;
+      temperature: number;
+    };
+  };
   download_count: number;
   view_count: number;
-  last_modified?: number;
 } 

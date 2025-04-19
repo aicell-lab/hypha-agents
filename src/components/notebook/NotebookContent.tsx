@@ -195,19 +195,6 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
 
                     {cell.type === 'code' && (
                       <>
-                        {/* Add Copy Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyToClipboard(cell.content);
-                          }}
-                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
-                          title="Copy code"
-                        >
-                          <FaCopy className="w-3.5 h-3.5" />
-                          <span className="hidden md:inline text-xs">Copy</span>
-                        </button>
-
                         {/* Hide/Show Code Button - Moved before Run button */}
                         <button
                           onClick={(e: React.MouseEvent) => {
@@ -236,6 +223,19 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                           <span className="hidden md:inline text-xs">
                             {cell.metadata?.isCodeVisible === false ? 'Show' : 'Hide'}
                           </span>
+                        </button>
+
+                        {/* Add Copy Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyToClipboard(cell.content);
+                          }}
+                          className="p-1 hover:bg-gray-100 rounded flex items-center gap-1"
+                          title="Copy code"
+                        >
+                          <FaCopy className="w-3.5 h-3.5" />
+                          <span className="hidden md:inline text-xs">Copy</span>
                         </button>
 
                         <button

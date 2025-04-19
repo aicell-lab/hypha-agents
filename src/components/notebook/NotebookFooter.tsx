@@ -1,17 +1,20 @@
 import React from 'react';
 import { ChatInput } from '../chat/ChatInput';
 import { FaSpinner } from 'react-icons/fa';
-import { AgentSettings } from '../../utils/chatCompletion';
+// import { AgentSettings } from '../../utils/chatCompletion'; // Removed
+// import { ThebeStatus } from '../chat/ThebeProvider'; // Removed incorrect import
 
 interface NotebookFooterProps {
   onSendMessage: (message: string) => void;
   onStopChatCompletion: () => void;
   isProcessing: boolean;
   isThebeReady: boolean;
+  thebeStatus?: any; // Use 'any' for now, or find correct type later
   isAIReady: boolean;
   initializationError: string | null;
-  agentSettings: AgentSettings;
-  onSettingsChange: (settings: AgentSettings) => void;
+  onShowEditAgent?: () => void;
+  canEditAgent?: boolean;
+  onShowThebeTerminal?: () => void;
 }
 
 const NotebookFooter: React.FC<NotebookFooterProps> = ({
@@ -19,10 +22,12 @@ const NotebookFooter: React.FC<NotebookFooterProps> = ({
   onStopChatCompletion,
   isProcessing,
   isThebeReady,
+  thebeStatus,
   isAIReady,
   initializationError,
-  agentSettings,
-  onSettingsChange
+  onShowEditAgent,
+  canEditAgent,
+  onShowThebeTerminal
 }) => {
   const getPlaceholder = () => {
     if (!isAIReady) return "Initializing AI assistant...";
@@ -52,9 +57,11 @@ const NotebookFooter: React.FC<NotebookFooterProps> = ({
           isProcessing={isProcessing}
           disabled={!isAIReady}
           isThebeReady={isThebeReady}
+          thebeStatus={thebeStatus}
           placeholder={getPlaceholder()}
-          agentSettings={agentSettings}
-          onSettingsChange={onSettingsChange}
+          onShowEditAgent={onShowEditAgent}
+          canEditAgent={canEditAgent}
+          onShowThebeTerminal={onShowThebeTerminal}
         />
       </div>
     </div>

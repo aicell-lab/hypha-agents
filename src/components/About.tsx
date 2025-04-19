@@ -44,10 +44,6 @@ const About: React.FC = () => {
         <section className="mb-12 bg-white rounded-lg shadow-sm p-8">
           <h2 className="text-2xl font-semibold mb-6 text-gray-800">Get Started</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <a href="/create-agent" 
-               className="flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition duration-150 ease-in-out">
-              Create an Agent
-            </a>
             <a href="/documentation" 
                className="flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition duration-150 ease-in-out">
               View Documentation

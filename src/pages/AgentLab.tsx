@@ -8,10 +8,10 @@ import { useHyphaStore } from '../store/hyphaStore';
 import { CellManager, SavedState } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
-import { loadSavedAgentSettings } from '../components/chat/AgentSettingsPanel';
-import { CanvasPanel } from '../components/notebook/CanvasPanel';
-import { HyphaCoreWindow } from '../components/services/hyphaCoreServices';
-import { ChatMessage } from '../utils/chatCompletion';
+import { loadModelSettings } from '../components/chat/ModelSettingsPanel';
+import { CanvasPanel, HyphaCoreWindow } from '../components/notebook/CanvasPanel';
+import { ChatMessage, AgentSettings } from '../utils/chatCompletion';
+import { v4 as uuidv4 } from 'uuid';
 
 
 // Import components
@@ -19,8 +19,8 @@ import NotebookHeader from '../components/notebook/NotebookHeader';
 import NotebookContent from '../components/notebook/NotebookContent';
 import NotebookFooter from '../components/notebook/NotebookFooter';
 import KeyboardShortcutsDialog from '../components/notebook/KeyboardShortcutsDialog';
-import PublishAgentDialog, { PublishAgentData } from '../components/notebook/PublishAgentDialog';
 import WelcomeScreen from '../components/notebook/WelcomeScreen';
+import { AgentConfigData } from '../components/notebook/AgentConfigDialog';
 
 // Import utilities and types
 import { NotebookCell, NotebookData, NotebookMetadata, CellType, CellRole } from '../types/notebook';
@@ -46,6 +46,11 @@ import { SITE_ID } from '../utils/env';
 
 // Import the hook's return type
 import { InitialUrlParams } from '../hooks/useNotebookInitialization';
+
+// Import AgentConfigForm and ModelConfigForm as default exports
+import AgentConfigForm, { AgentFormData, DefaultAgentFormData } from '../components/shared/AgentConfigForm';
+import ModelConfigForm from '../components/shared/ModelConfigForm';
+import ThebeTerminalPanel from '../components/chat/ThebeStatus'; // Import the refactored component
 
 // Add CellRole enum values
 const CELL_ROLES = {
@@ -86,11 +91,169 @@ interface Project extends BaseProject {
   manifest: ProjectManifest;
 }
 
+// Data structure for combined agent form data
+interface EditAgentFormData extends AgentFormData {
+  agentId?: string;
+}
+
+// Define a simple wrapper component for the canvas panel content
+interface EditAgentCanvasContentProps {
+  initialAgentData: Partial<EditAgentFormData>; // Use combined type
+  initialModelConfig: AgentSettings;
+  onSaveSettingsToNotebook: (data: EditAgentFormData, config: AgentSettings) => void;
+  onPublishAgent: (data: EditAgentFormData, config: AgentSettings, isUpdating: boolean) => Promise<string | null>;
+}
+
+const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({ 
+  initialAgentData,
+  initialModelConfig,
+  onSaveSettingsToNotebook,
+  onPublishAgent
+}) => {
+  // State for all form fields including ID and model config
+  const [agentId, setAgentId] = useState(initialAgentData.agentId || '');
+  const [isUpdatingExisting, setIsUpdatingExisting] = useState(!!initialAgentData.agentId);
+  const [agentData, setAgentData] = useState<AgentFormData>(() => ({ 
+    ...DefaultAgentFormData, 
+    name: initialAgentData.name || '',
+    description: initialAgentData.description || '',
+    version: initialAgentData.version || '1.0.0',
+    license: initialAgentData.license || 'CC-BY-4.0',
+    welcomeMessage: initialAgentData.welcomeMessage || 'Hi, how can I help you today?',
+    initialPrompt: initialAgentData.initialPrompt || ''
+  }));
+  const [modelConfig, setModelConfig] = useState<AgentSettings>(initialModelConfig);
+
+  // Update local state when initial props change (e.g., notebook metadata updates)
+  useEffect(() => {
+    setAgentId(initialAgentData.agentId || '');
+    setIsUpdatingExisting(!!initialAgentData.agentId);
+    setAgentData({
+      ...DefaultAgentFormData,
+      name: initialAgentData.name || '',
+      description: initialAgentData.description || '',
+      version: initialAgentData.version || '1.0.0',
+      license: initialAgentData.license || 'CC-BY-4.0',
+      welcomeMessage: initialAgentData.welcomeMessage || 'Hi, how can I help you today?',
+      initialPrompt: initialAgentData.initialPrompt || ''
+    });
+    setModelConfig(initialModelConfig);
+  }, [initialAgentData, initialModelConfig]);
+
+  const handleAgentFormChange = (updatedData: AgentFormData) => {
+    setAgentData(updatedData);
+  };
+
+  const handleModelFormChange = (updatedConfig: AgentSettings) => {
+    setModelConfig(updatedConfig);
+  };
+
+  const handleCreateNew = () => {
+    setAgentId('');
+    setIsUpdatingExisting(false);
+  };
+
+  const handleSave = () => {
+    const combinedData: EditAgentFormData = {
+      ...agentData,
+      agentId: agentId.trim() || undefined // Only include ID if it has value
+    };
+    onSaveSettingsToNotebook(combinedData, modelConfig);
+  };
+
+  const handlePublish = async () => {
+    const combinedData: EditAgentFormData = {
+      ...agentData,
+      agentId: agentId.trim() || undefined // Only include ID if it has value
+    };
+    const newAgentId = await onPublishAgent(combinedData, modelConfig, isUpdatingExisting);
+    
+    if (newAgentId) {
+      setAgentId(newAgentId);
+      setIsUpdatingExisting(true);
+    }
+  };
+
+  return (
+    // Use flex layout to make buttons stick to bottom
+    <div className="flex flex-col h-full">
+      {/* Scrollable form content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <h2 className="text-xl font-semibold mb-4">Edit Agent Configuration</h2>
+        
+        {/* Agent ID Field (similar to PublishAgentDialog) */}
+        <div>
+          <label htmlFor="agent-id" className="block text-sm font-medium text-gray-700 mb-1">
+            Agent ID <span className="text-gray-400 font-normal">(Optional - Leave empty to publish as new agent)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              id="agent-id"
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter existing agent ID to update"
+              disabled={isUpdatingExisting} // Disable if updating
+            />
+            {isUpdatingExisting && (
+              <button
+                onClick={handleCreateNew}
+                className="px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex-shrink-0"
+              >
+                Publish New
+              </button>
+            )}
+          </div>
+          {isUpdatingExisting && (
+            <p className="mt-1 text-xs text-green-600">
+              Publishing will update Agent ID: {agentId}
+            </p>
+          )}
+        </div>
+
+        {/* Existing AgentConfigForm */}
+        <AgentConfigForm 
+          formData={agentData}
+          onFormChange={handleAgentFormChange}
+          showModelConfig={false} 
+        />
+        {/* Existing ModelConfigForm */}
+        <ModelConfigForm 
+          settings={modelConfig}
+          onSettingsChange={handleModelFormChange}
+        />
+      </div>
+
+      {/* Fixed bottom button area */}
+      <div className="flex-shrink-0 border-t border-gray-200 bg-white p-4 flex justify-end gap-3 sticky bottom-0">
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          Save Settings to Notebook
+        </button>
+        <button
+          onClick={handlePublish}
+          disabled={!agentData.name.trim()} // Example disable condition
+          className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+            agentData.name.trim() 
+              ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' 
+              : 'bg-gray-400 cursor-not-allowed'
+          }`}
+        >
+          {isUpdatingExisting ? 'Update & Publish Agent' : 'Publish New Agent'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
   const [cells, setCells] = useState<NotebookCell[]>([]);
   const [executionCounter, setExecutionCounter] = useState(1);
-  const { isReady, executeCode, restartKernel } = useThebe();
+  const { isReady, executeCode, restartKernel, status: kernelStatus, interruptKernel, kernelInfo, kernel } = useThebe();
   const [isShortcutsDialogOpen, setIsShortcutsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const hasInitialized = useRef(false); // Tracks if the initial load effect has completed
@@ -103,7 +266,7 @@ const NotebookPage: React.FC = () => {
   const { server, isLoggedIn, artifactManager } = useHyphaStore();
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [isAIReady, setIsAIReady] = useState(false);
-  const [agentSettings, setAgentSettings] = useState(() => loadSavedAgentSettings());
+  const [agentSettings, setAgentSettings] = useState(() => loadModelSettings());
   const [hyphaCoreApi, setHyphaCoreApi] = useState<any>(null);
   const {
     selectedProject,
@@ -142,10 +305,6 @@ const NotebookPage: React.FC = () => {
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
 
-  // Add state for publish dialog
-  const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
-
   // Ref to track if service setup has completed
   const setupCompletedRef = useRef(false);
 
@@ -157,14 +316,18 @@ const NotebookPage: React.FC = () => {
 
   // --- Define handleAddWindow callback ---
   const handleAddWindow = useCallback((config: any) => {
-    // Add the new window to our state
-    const newWindow: HyphaCoreWindow = {
-      id: config.window_id,
-      src: config.src,
-      name: config.name || `${config.src || 'Untitled Window'}`
-    };
-    
-    setHyphaCoreWindows(prev => [...prev, newWindow]);
+    // Prevent adding duplicate window IDs
+    setHyphaCoreWindows(prev => {
+      if (prev.some(win => win.id === config.window_id)) {
+        return prev; // Already exists, do nothing
+      }
+      const newWindow: HyphaCoreWindow = {
+        id: config.window_id,
+        src: config.src,
+        name: config.name || `${config.src || 'Untitled Window'}`
+      };
+      return [...prev, newWindow];
+    });
     // Optionally, activate the new window/tab and show the panel
     setActiveCanvasTab(config.window_id);
     setShowCanvasPanel(true);
@@ -429,10 +592,8 @@ const NotebookPage: React.FC = () => {
       }
 
       // Get template from manifest
-      const template = agent.manifest.chat_template;
-      if (!template) {
-        throw new Error('Agent does not have a chat template');
-      }
+      const template = agent.manifest.chat_template || {};
+
 
       // Generate a new filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -451,6 +612,8 @@ const NotebookPage: React.FC = () => {
           created: new Date().toISOString(),
           filePath: filePath,
           projectId: resolvedProjectId,
+          // Use the model configuration from the agent manifest if available
+          modelSettings: agent.manifest.modelConfig || undefined,
           agentArtifact: {
             id: agent.id,
             version: agent.version,
@@ -722,24 +885,18 @@ const NotebookPage: React.FC = () => {
     return editorRefs.current[cellId];
   }, []);
 
-  // --- Canvas Panel Handlers (Placeholders) ---
+  // --- Canvas Panel Handlers ---
   const handleCanvasPanelResize = useCallback((newWidth: number) => {
-    setCanvasPanelWidth(newWidth);
-    lastCanvasPanelWidthRef.current = newWidth; // Store the last width when resizing
+    // Only used for external components that might need to know the width
+    console.log('Canvas panel resized to:', newWidth);
   }, []);
 
   const toggleCanvasPanel = useCallback(() => {
-    setShowCanvasPanel(prev => {
-      if (!prev) {
-        // When opening, restore the last known width
-        setCanvasPanelWidth(lastCanvasPanelWidthRef.current);
-      }
-      return !prev;
-    });
+    setShowCanvasPanel(prev => !prev);
   }, []);
 
   const handleTabClose = useCallback((tabId: string) => {
-    setHyphaCoreWindows(prev => prev.filter(win => win.id !== tabId)); // Assuming this state exists
+    setHyphaCoreWindows(prev => prev.filter(win => win.id !== tabId));
   }, []);
 
   // Callback passed to Sidebar to handle loading a selected notebook
@@ -762,16 +919,12 @@ const NotebookPage: React.FC = () => {
       setIsSmallScreen(isSmall);
       if (isSmall && showCanvasPanel) {
         setShowCanvasPanel(false);
-        lastCanvasPanelWidthRef.current = canvasPanelWidth; // Store width before closing
-        setCanvasPanelWidth(0);
-      } else if (!isSmall && showCanvasPanel) {
-        setCanvasPanelWidth(lastCanvasPanelWidthRef.current); // Restore last width
       }
     };
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
-  }, [showCanvasPanel, canvasPanelWidth]);
+  }, [showCanvasPanel]);
 
   // URL Sync Hook
   useUrlSync({
@@ -823,6 +976,14 @@ const NotebookPage: React.FC = () => {
       setIsAIReady(false);
     }
   }, [isReady, setIsAIReady]); // Dependency array ensures this runs when isReady changes
+
+  // Update agentSettings when notebookMetadata.modelSettings changes
+  useEffect(() => {
+    if (notebookMetadata?.modelSettings) {
+      console.log('[AgentLab] Updating agent settings from notebook metadata.', notebookMetadata.modelSettings);
+      setAgentSettings(notebookMetadata.modelSettings as AgentSettings);
+    }
+  }, [notebookMetadata]);
 
   // Calculate the filename from the filePath in metadata
   const notebookFileName = useMemo(() => {
@@ -937,139 +1098,10 @@ const NotebookPage: React.FC = () => {
       agentSettings, executeCode, handleAddWindow
   ]);
 
-  // Get system cell for publish dialog
+  // Get system cell for publish dialog (Now used for canvas edit/publish)
   const systemCell = useMemo(() => {
     return cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code') || null;
   }, [cells]);
-
-  // Handle publish agent
-  const handlePublishAgent = useCallback((agentData: PublishAgentData) => {
-    if (!artifactManager || !isLoggedIn) {
-      showToast('You need to be logged in to publish an agent', 'error');
-      return;
-    }
-
-    setIsPublishing(true);
-    const toastId = 'publishing-agent';
-    showToast('Publishing agent...', 'loading', { id: toastId });
-
-    // Save current notebook first
-    saveNotebook()
-      .then(async () => {
-        try {
-          // Get system cell content
-          const systemCellContent = systemCell ? systemCell.content : '';
-          
-          // Create a minimal chat template from current cells
-          const templateCells = cells.filter(cell => 
-            (cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code')
-          ).slice(0, 1); // Just take the first cell for the template
-          
-          // Create agent manifest
-          const manifest = {
-            name: agentData.name,
-            description: agentData.description,
-            version: agentData.version,
-            license: agentData.license,
-            type: 'agent',
-            created_at: new Date().toISOString(),
-            startup_script: systemCellContent,
-            welcomeMessage: agentData.welcomeMessage,
-            // Structure chat_template as an object with metadata and cells
-            chat_template: templateCells.length > 0 ? {
-              metadata: notebookMetadata,
-              cells: templateCells
-            } : null
-          };
-
-          let artifact;
-          
-          // Check if we're updating an existing agent or creating a new one
-          if (agentData.id) {
-            // Update existing agent
-            artifact = await artifactManager.edit({
-              artifact_id: agentData.id,
-              type: "agent",
-              manifest,
-              version: "new", // Create a new version
-              _rkwargs: true
-            });
-            dismissToast(toastId);
-            showToast('Agent updated successfully!', 'success');
-          } else {
-            // Create a new agent
-            artifact = await artifactManager.create({
-              parent_id: `${SITE_ID}/agents`,
-              type: "agent",
-              manifest,
-              _rkwargs: true
-            });
-            dismissToast(toastId);
-            showToast('Agent published successfully!', 'success');
-          }
-          
-          // Save the artifact info to the notebook metadata and save the notebook
-          const updatedMetadata = {
-            ...notebookMetadata,
-            agentArtifact: {
-              id: artifact.id,
-              version: artifact.version,
-              name: agentData.name,
-              description: agentData.description,
-              manifest: manifest
-            }
-          };
-          
-          // First update the cell manager's reference to ensure it's saved
-          if (cellManager.current) {
-            cellManager.current.notebookMetadata = updatedMetadata;
-          }
-          
-          // Then update the state
-          setNotebookMetadata(updatedMetadata);
-          
-          // Then save the notebook with the updated metadata
-          const notebookData: NotebookData = {
-            nbformat: 4,
-            nbformat_minor: 5,
-            metadata: updatedMetadata,
-            cells: cellManager.current ? cellManager.current.getCurrentCellsContent() : cells
-          };
-          
-          // Save directly to avoid race conditions with state updates
-          try {
-            if (updatedMetadata.projectId === IN_BROWSER_PROJECT.id) {
-              await saveInBrowserFile(updatedMetadata.filePath!, notebookData);
-            } else {
-              const blob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
-              const file = new File([blob], updatedMetadata.filePath!.split('/').pop() || 'notebook.ipynb', { type: 'application/json' });
-              await uploadFile(updatedMetadata.projectId!, file);
-            }
-            console.log('[AgentLab] Notebook with agent artifact info saved successfully');
-          } catch (saveError) {
-            console.error('Error saving notebook with agent artifact:', saveError);
-          }
-          
-          // Navigate to edit page for the agent
-          navigate(`/edit/${encodeURIComponent(artifact.id)}`);
-          
-        } catch (error) {
-          console.error('Error publishing agent:', error);
-          showToast(`Failed to publish agent: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error', { id: toastId });
-        } finally {
-          setIsPublishing(false);
-          setIsPublishDialogOpen(false);
-        }
-      })
-      .catch((error) => {
-        console.error('Error saving notebook before publishing:', error);
-        showToast(`Failed to save notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error', { id: toastId });
-        setIsPublishing(false);
-      });
-  }, [
-      artifactManager, isLoggedIn, systemCell, cells, notebookMetadata, saveNotebook, 
-      navigate, setNotebookMetadata, cellManager
-  ]);
 
   // Add handlers for moving cells up and down
   const handleMoveCellUp = useCallback(() => {
@@ -1149,6 +1181,299 @@ const NotebookPage: React.FC = () => {
     }
   }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent]);
 
+  // Add onCreateAgentTemplate function after handleCreateNewNotebook
+  const handleCreateAgentTemplate = useCallback(async (agentData: AgentConfigData) => {
+    try {
+      // Generate a new filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const safeAgentName = agentData.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filePath = `${safeAgentName}_${timestamp}.ipynb`;
+
+      // Create notebook content with system cell containing the template
+      const systemCellContent = `# Agent System Cell\n# This cell contains the startup code and system prompt for your agent\n# It will be executed when the agent is initialized\n\nimport os\nimport sys\n\n# Define system prompt\nSYSTEM_PROMPT = """${agentData.initialPrompt}"""\n\n# print the system prompt\nprint(SYSTEM_PROMPT)\n`;
+
+      // Create a welcome message cell from user
+      const welcomeMessageCellContent = `I'm ready to help! ${agentData.welcomeMessage}`;
+
+      // Create new notebook with system cell and welcome message
+      const notebookData: NotebookData = {
+        nbformat: 4,
+        nbformat_minor: 5,
+        metadata: {
+          ...defaultNotebookMetadata,
+          title: agentData.name,
+          modified: new Date().toISOString(),
+          created: new Date().toISOString(),
+          filePath: filePath,
+          projectId: IN_BROWSER_PROJECT.id,
+          // Save the model configuration to the notebook metadata
+          modelSettings: agentData.modelConfig,
+          agentArtifact: {
+            id: '', // Will be filled when published
+            version: agentData.version,
+            name: agentData.name,
+            description: agentData.description
+          }
+        },
+        cells: [
+          {
+            id: uuidv4(),
+            type: 'code',
+            content: systemCellContent,
+            executionState: 'idle',
+            metadata: {
+              trusted: true,
+              role: 'system'
+            },
+            executionCount: undefined,
+            output: []
+          },
+          {
+            id: uuidv4(),
+            type: 'markdown',
+            content: welcomeMessageCellContent,
+            executionState: 'idle',
+            metadata: {
+              role: 'assistant'
+            }
+          }
+        ]
+      };
+
+      // Save to in-browser storage
+      await saveInBrowserFile(filePath, notebookData);
+      setSelectedProject(getInBrowserProject());
+      
+      // Load the newly created notebook
+      await loadNotebookContent(IN_BROWSER_PROJECT.id, filePath);
+      setShowWelcomeScreen(false);
+      showToast('Created new agent template', 'success');
+    } catch (error) {
+      console.error('Error creating agent template:', error);
+      showToast(`Failed to create agent template: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      throw error; // Re-throw to allow the caller to handle it
+    }
+  }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent]);
+
+  // --- Callback to save agent settings from canvas to notebook metadata ---
+  const handleSaveAgentSettingsToNotebook = useCallback((data: EditAgentFormData, config: AgentSettings) => {
+    const agentArtifactMeta = notebookMetadata.agentArtifact ? {
+      ...notebookMetadata.agentArtifact,
+      id: data.agentId || notebookMetadata.agentArtifact.id || '', // Preserve existing ID if not provided/cleared
+      name: data.name,
+      description: data.description,
+      version: data.version,
+      manifest: {
+        ...(notebookMetadata.agentArtifact.manifest || {}),
+        name: data.name,
+        description: data.description,
+        version: data.version,
+        license: data.license,
+        welcomeMessage: data.welcomeMessage,
+        startup_script: data.initialPrompt, 
+        modelConfig: config, // Save model config here
+      }
+    } : {
+      // Create a minimal structure if no artifact existed before
+      id: data.agentId || '',
+      name: data.name,
+      description: data.description,
+      version: data.version,
+      manifest: {
+        name: data.name,
+        description: data.description,
+        version: data.version,
+        license: data.license,
+        welcomeMessage: data.welcomeMessage,
+        startup_script: data.initialPrompt,
+        modelConfig: config,
+      }
+    };
+
+    setNotebookMetadata(prev => ({
+      ...prev,
+      title: data.name, // Update notebook title too
+      modelSettings: config, // Save model settings
+      agentArtifact: agentArtifactMeta,
+      modified: new Date().toISOString()
+    }));
+
+    // Trigger a save of the notebook itself
+    saveNotebook(); // saveNotebook already shows toasts
+    showToast('Agent settings saved to notebook', 'success');
+
+  }, [notebookMetadata, setNotebookMetadata, saveNotebook]);
+
+  // --- Callback to publish agent from canvas ---
+  const handlePublishAgentFromCanvas = useCallback(async (data: EditAgentFormData, config: AgentSettings, isUpdating: boolean): Promise<string | null> => {
+    if (!artifactManager || !isLoggedIn) {
+      showToast('You need to be logged in to publish an agent', 'error');
+      return null; // Indicate failure
+    }
+    
+    const toastId = 'publishing-agent-canvas';
+    showToast('Publishing agent...', 'loading', { id: toastId });
+
+    await saveNotebook(); // Ensure notebook is saved first
+
+    try {
+      // Get system cell content (if needed for manifest)
+      const systemCellContent = systemCell ? systemCell.content : data.initialPrompt || '';
+
+      // Create agent manifest (ensure modelConfig is included)
+      const manifest = {
+        name: data.name,
+        description: data.description,
+        version: data.version,
+        license: data.license,
+        type: 'agent',
+        created_at: new Date().toISOString(),
+        startup_script: systemCellContent,
+        welcomeMessage: data.welcomeMessage,
+        modelConfig: config,
+        // Add chat template to preserve notebook state
+        chat_template: {
+          metadata: notebookMetadata,
+          cells: cellManager.current?.getCurrentCellsContent() || []
+        }
+      };
+
+      console.log('[AgentLab] Publishing agent with data:', {
+        isUpdating,
+        agentId: data.agentId,
+        manifest: { ...manifest, startup_script: '<<SCRIPT>>' } // Log without script for brevity
+      });
+
+      let artifact;
+      
+      // Use agentId from the form data to determine update vs create
+      if (isUpdating && data.agentId) {
+        // Update existing agent
+        console.log('[AgentLab] Updating existing agent:', data.agentId);
+        artifact = await artifactManager.edit({
+          artifact_id: data.agentId,
+          type: "agent",
+          manifest: manifest,
+          version: manifest.version, // Use the version from the form
+          _rkwargs: true
+        });
+        console.log('[AgentLab] Agent updated successfully:', artifact);
+        dismissToast(toastId);
+        showToast('Agent updated successfully!', 'success');
+      } else {
+        // Create a new agent
+        console.log('[AgentLab] Creating new agent');
+        artifact = await artifactManager.create({
+          parent_id: `${SITE_ID}/agents`,
+          type: "agent",
+          manifest: manifest,
+          _rkwargs: true
+        });
+        console.log('[AgentLab] Agent created successfully:', artifact);
+        dismissToast(toastId);
+        showToast('Agent published successfully!', 'success');
+      }
+      
+      // Update notebook metadata with the definitive published artifact info
+      const finalAgentArtifactMeta = {
+        id: artifact.id,
+        version: artifact.version,
+        name: manifest.name,
+        description: manifest.description,
+        manifest: manifest
+      };
+
+      setNotebookMetadata(prev => ({
+        ...prev,
+        title: manifest.name, // Ensure title is updated
+        agentArtifact: finalAgentArtifactMeta,
+        modified: new Date().toISOString()
+      }));
+
+      // Save the notebook again to store the final artifact ID/version
+      await saveNotebook();
+
+      return artifact.id; // Return the new/updated ID on success
+      
+    } catch (error) {
+      console.error('Error publishing agent from canvas:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      showToast(`Failed to publish agent: ${errorMessage}`, 'error', { id: toastId });
+      return null; // Indicate failure
+    }
+  }, [
+    artifactManager, isLoggedIn, systemCell, notebookMetadata, saveNotebook, 
+    setNotebookMetadata, cellManager, showToast, dismissToast, SITE_ID
+  ]);
+
+  // --- Function to show Edit Agent in Canvas Panel ---
+  const handleShowEditAgentInCanvas = useCallback(() => {
+    const agentArtifact = notebookMetadata.agentArtifact;
+    const currentModelSettings = notebookMetadata.modelSettings || agentSettings; // Use metadata first, then page state
+
+    // Prepare initial agent data, including the existing ID if available
+    const initialAgentData: Partial<EditAgentFormData> = {
+      agentId: agentArtifact?.id || '', // Pass existing ID
+      name: agentArtifact?.name || notebookMetadata.title || '',
+      description: agentArtifact?.description || '',
+      version: agentArtifact?.version || '1.0.0',
+      license: agentArtifact?.manifest?.license || 'CC-BY-4.0',
+      welcomeMessage: agentArtifact?.manifest?.welcomeMessage || 'Hi, how can I help you today?',
+      initialPrompt: agentArtifact?.manifest?.startup_script || '' 
+    };
+
+    const agentIdForWindow = agentArtifact?.id || 'new-agent'; // Use a consistent ID for the window
+    const windowId = `edit-agent-${agentIdForWindow}`;
+
+    // Check if window already exists
+    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+
+    if (!windowExists) {
+      const newWindow: HyphaCoreWindow = {
+        id: windowId,
+        name: `Edit: ${initialAgentData.name || 'Agent'}`, 
+        component: (
+          <EditAgentCanvasContent 
+            initialAgentData={initialAgentData}
+            initialModelConfig={currentModelSettings}
+            // Pass the correct handlers now
+            onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
+            onPublishAgent={handlePublishAgentFromCanvas}
+          />
+        )
+      };
+
+      setHyphaCoreWindows(prev => [...prev, newWindow]);
+    }
+
+    // Activate the tab and show the panel regardless of whether it was just added
+    setActiveCanvasTab(windowId);
+    setShowCanvasPanel(true);
+
+  }, [notebookMetadata, agentSettings, hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel, handleSaveAgentSettingsToNotebook, handlePublishAgentFromCanvas]); // Add new handlers to dependency array
+
+  // --- Callback to show Thebe Terminal in Canvas Panel ---
+  const handleShowThebeTerminalInCanvas = useCallback(() => {
+    const windowId = 'thebe-terminal';
+    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+
+    if (!windowExists) {
+      const newWindow: HyphaCoreWindow = {
+        id: windowId,
+        name: 'Kernel Terminal',
+        component: (
+          <ThebeTerminalPanel /> // Use the refactored component
+        )
+      };
+      setHyphaCoreWindows(prev => [...prev, newWindow]);
+    }
+
+    setActiveCanvasTab(windowId);
+    setShowCanvasPanel(true);
+
+  }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]); // Dependencies
+
+
   // --- Render Logic --- 
   if (!initRefObject.current) { 
     return <div className="flex justify-center items-center h-screen">Initializing...</div>;
@@ -1174,11 +1499,12 @@ const NotebookPage: React.FC = () => {
         isAIReady={isAIReady}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         isSidebarOpen={isSidebarOpen}
-        onPublish={() => setIsPublishDialogOpen(true)}
         onMoveCellUp={handleMoveCellUp}
         onMoveCellDown={handleMoveCellDown}
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}
+        onShowEditAgent={handleShowEditAgentInCanvas}
+        canEditAgent={!showWelcomeScreen}
       />
       {showWelcomeScreen ? (
         <WelcomeScreen 
@@ -1186,6 +1512,7 @@ const NotebookPage: React.FC = () => {
           isLoggedIn={isLoggedIn}
           onStartNewChat={handleCreateNewNotebook}
           onStartFromAgent={createNotebookFromAgentTemplate}
+          onCreateAgentTemplate={handleCreateAgentTemplate}
         />
       ) : (
         <div className="flex flex-1 overflow-hidden">
@@ -1231,43 +1558,31 @@ const NotebookPage: React.FC = () => {
                     onStopChatCompletion={handleAbortExecution}
                     isProcessing={isProcessingAgentResponse}
                     isThebeReady={isReady}
+                    thebeStatus={kernelStatus}
                     isAIReady={isAIReady}
                     initializationError={initializationError}
-                    agentSettings={agentSettings}
-                    onSettingsChange={setAgentSettings}
+                    onShowThebeTerminal={handleShowThebeTerminalInCanvas}
+                    onShowEditAgent={handleShowEditAgentInCanvas}
+                    canEditAgent={!showWelcomeScreen}
                   />
                 </div>
               </div>
 
-              <div className="h-full relative" style={{ width: isSmallScreen ? 0 : (showCanvasPanel ? canvasPanelWidth : 36) }}>
-                <CanvasPanel
-                  windows={hyphaCoreWindows}
-                  isVisible={showCanvasPanel}
-                  width={isSmallScreen ? 0 : canvasPanelWidth}
-                  activeTab={activeCanvasTab}
-                  onResize={handleCanvasPanelResize}
-                  onClose={toggleCanvasPanel}
-                  onTabChange={setActiveCanvasTab}
-                  onTabClose={handleTabClose}
-                />
-              </div>
+              <CanvasPanel
+                windows={hyphaCoreWindows}
+                isVisible={showCanvasPanel}
+                activeTab={activeCanvasTab}
+                onResize={handleCanvasPanelResize}
+                onClose={toggleCanvasPanel}
+                onTabChange={setActiveCanvasTab}
+                onTabClose={handleTabClose}
+                defaultWidth={600}
+              />
             </div>
 
             <KeyboardShortcutsDialog
               isOpen={isShortcutsDialogOpen}
               onClose={() => setIsShortcutsDialogOpen(false)}
-            />
-
-            <PublishAgentDialog
-              isOpen={isPublishDialogOpen}
-              onClose={() => setIsPublishDialogOpen(false)}
-              onConfirm={handlePublishAgent}
-              title="Publish Agent"
-              systemCell={systemCell}
-              notebookTitle={notebookMetadata.title || notebookFileName || 'Untitled Agent'}
-              existingId={notebookMetadata.agentArtifact?.id}
-              existingVersion={notebookMetadata.agentArtifact?.version}
-              welcomeMessage={notebookMetadata.agentArtifact?.manifest?.welcomeMessage}
             />
           </div>
         </div>

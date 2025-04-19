@@ -37,6 +37,7 @@ export interface HyphaState {
   setTotalItems: (total: number) => void;
   artifactManager: any;
   isConnected: boolean;
+  isConnecting: boolean;
   connect: (config: ConnectionConfig) => Promise<any>;
   isLoggingIn: boolean;
   isAuthenticated: boolean;
@@ -64,6 +65,7 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
   artifactManager: null,
   schemaAgents: null,
   isConnected: false,
+  isConnecting: false,
   isLoggingIn: false,
   isAuthenticated: false,
   isLoggedIn: false,
@@ -89,6 +91,13 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
   setLoggedIn: (status: boolean) => set({ isLoggedIn: status }),
   setSelectedResource: (resource) => set({ selectedResource: resource }),
   connect: async (config: ConnectionConfig) => {
+    if (get().isConnecting || get().isConnected) {
+      console.log('Connection attempt skipped: already connecting or connected.');
+      return get().server;
+    }
+
+    set({ isConnecting: true });
+
     try {
       const client = hyphaWebsocketClient;
       const server = await client.connectToServer(config);
@@ -111,10 +120,11 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
         isInitialized: true
       });
 
+      set({ isConnecting: false });
       return server;
     } catch (error) {
       console.error('Failed to connect to Hypha:', error);
-      set({ 
+      set({
         client: null,
         server: null,
         artifactManager: null,
@@ -122,7 +132,8 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
         isAuthenticated: false,
         isLoggedIn: false,
         user: null,
-        isInitialized: false
+        isInitialized: false,
+        isConnecting: false
       });
       throw error;
     }

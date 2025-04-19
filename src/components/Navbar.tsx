@@ -46,7 +46,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
               <BiCube className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900 hidden md:block">
+              <span className="ml-2 text-xl font-bold text-gray-900">
                 {SITE_NAME}
               </span>
             </Link>
@@ -60,23 +60,14 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
           <div className="flex items-center space-x-4">
             {/* Move Upload and Login buttons to desktop-only view */}
             <div className="hidden md:flex items-center space-x-4">
+              
               <Link
-                to="/about"
+                to="/lab"
                 className="hover:bg-gray-50 px-4 py-2 rounded-md flex items-center"
               >
-                <AiOutlineInfoCircle className="mr-2" size={18} />
-                About
+                <IoFlaskOutline className="mr-2" size={18} />
+                Agent Lab
               </Link>
-              
-              {location.pathname !== '/create' && (
-                <Link
-                  to="/create"
-                  className="hover:bg-gray-50 px-4 py-2 rounded-md flex items-center"
-                >
-                  <IoCloudUploadOutline className="mr-2" size={18} />
-                  Create
-                </Link>
-              )}
               {user?.email && location.pathname !== '/my-agents' && (
                 <Link
                   to="/my-agents"
@@ -87,11 +78,11 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
                 </Link>
               )}
               <Link
-                to="/lab"
+                to="/about"
                 className="hover:bg-gray-50 px-4 py-2 rounded-md flex items-center"
               >
-                <IoFlaskOutline className="mr-2" size={18} />
-                Agent Lab
+                <AiOutlineInfoCircle className="mr-2" size={18} />
+                About
               </Link>
               <LoginButton />
             </div>
@@ -112,6 +103,14 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
         {/* Mobile menu */}
         <div className={`md:hidden ${isMobileMenuOpen ? 'block' : 'hidden'}`}>
           <div className="px-2 pt-2 pb-3 space-y-1">
+            <Link 
+              to="/lab" 
+              className={mobileNavLinkClasses("/lab")}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <IoFlaskOutline className="mr-2" size={18} />
+              Agent Lab
+            </Link>
             {user?.email && (
               <Link 
                 to="/my-agents" 
@@ -122,22 +121,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
                 My Agents
               </Link>
             )}
-            <Link 
-              to="/create" 
-              className={mobileNavLinkClasses("/create")}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <IoCloudUploadOutline className="mr-2" size={18} />
-              Create
-            </Link>
-            <Link 
-              to="/lab" 
-              className={mobileNavLinkClasses("/lab")}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <IoFlaskOutline className="mr-2" size={18} />
-              Agent Lab
-            </Link>
+            
             <Link 
               to="/about" 
               className={mobileNavLinkClasses("/about")}
@@ -148,18 +132,6 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
 
             {/* Add divider */}
             <div className="border-t border-gray-200 my-2"></div>
-
-            {/* Add Upload and Login buttons to mobile menu */}
-            {location.pathname !== '/create' && (
-              <Link 
-                to="/create" 
-                className={mobileNavLinkClasses("/create")}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <IoCloudUploadOutline className="mr-2" size={18} />
-                Create
-              </Link>
-            )}
             <div className="px-3 py-2">
               <LoginButton />
             </div>

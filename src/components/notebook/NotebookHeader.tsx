@@ -22,11 +22,12 @@ export interface NotebookHeaderProps {
   isAIReady: boolean;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
-  onPublish: () => void;
   onMoveCellUp: () => void;
   onMoveCellDown: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  onShowEditAgent: () => void;
+  canEditAgent: boolean;
 }
 
 const NotebookHeader: React.FC<NotebookHeaderProps> = ({
@@ -47,11 +48,12 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   isAIReady,
   onToggleSidebar,
   isSidebarOpen,
-  onPublish,
   onMoveCellUp,
   onMoveCellDown,
   canMoveUp,
   canMoveDown,
+  onShowEditAgent,
+  canEditAgent,
 }) => {
   return (
     <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
@@ -114,7 +116,6 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           isAIReady={isAIReady}
           onToggleSidebar={onToggleSidebar}
           isSidebarOpen={isSidebarOpen}
-          onPublish={onPublish}
           onMoveCellUp={onMoveCellUp}
           onMoveCellDown={onMoveCellDown}
           canMoveUp={canMoveUp}

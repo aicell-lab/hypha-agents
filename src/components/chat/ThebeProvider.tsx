@@ -1,4 +1,4 @@
-import React, { useEffect, useState, createContext, useContext, useRef } from 'react';
+import React, { useEffect, useState, createContext, useContext, useRef, useCallback } from 'react';
 import getSetupCode from './StartupCode';
 import { executeScripts } from '../../utils/script-utils';
 import { processTextOutput, processAnsiInOutputElement } from '../../utils/ansi-utils';
@@ -53,6 +53,14 @@ interface KernelError {
   message?: string;
 }
 
+// Define type for log entries
+interface KernelExecutionLogEntry {
+  timestamp: number;
+  type: 'input' | 'output' | 'error' | 'status';
+  content: string;
+  cellId?: string; // Optional: Track which cell initiated the execution
+}
+
 interface ThebeContextType {
   serviceManager: ServiceManager | null;
   session: SessionConnection | null;
@@ -63,10 +71,12 @@ interface ThebeContextType {
   executeCode: (code: string, callbacks?: {
     onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
+    cellId?: string; // Accept cellId
   }, timeout?: number) => Promise<void>;
   executeCodeWithDOMOutput: (code: string, outputElement: HTMLElement, callbacks?: {
     onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
+    cellId?: string; // Accept cellId
   }) => Promise<void>;
   interruptKernel: () => Promise<void>;
   restartKernel: () => Promise<void>;
@@ -78,6 +88,8 @@ interface ThebeContextType {
   outputStore: OutputStore;
   storeOutput: (content: string, type: string) => string; // returns the key
   getOutput: (key: string) => { content: string; type: string } | null;
+  kernelExecutionLog: KernelExecutionLogEntry[];
+  addKernelLogEntry: (entry: Omit<KernelExecutionLogEntry, 'timestamp'>) => void;
 }
 
 const ThebeContext = createContext<ThebeContextType>({
@@ -96,6 +108,8 @@ const ThebeContext = createContext<ThebeContextType>({
   outputStore: {},
   storeOutput: () => '',
   getOutput: () => null,
+  kernelExecutionLog: [],
+  addKernelLogEntry: () => {},
 });
 
 export const useThebe = () => useContext(ThebeContext);
@@ -121,6 +135,7 @@ interface GlobalThebeState {
   outputStore: OutputStore;
   referenceCount: number;
   initPromise: Promise<KernelConnection> | null;
+  kernelExecutionLog: KernelExecutionLogEntry[];
 }
 
 // Create a global singleton to manage the kernel instance
@@ -135,7 +150,8 @@ const globalThebeState: GlobalThebeState = {
   kernelInfo: {},
   outputStore: {},
   referenceCount: 0,
-  initPromise: null
+  initPromise: null,
+  kernelExecutionLog: [],
 };
 
 declare global {
@@ -225,6 +241,7 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
   const [error, setError] = useState<Error | null>(null);
   const [kernelInfo, setKernelInfo] = useState<{ pythonVersion?: string; pyodideVersion?: string }>(globalThebeState.kernelInfo);
   const [outputStore, setOutputStore] = useState<OutputStore>(globalThebeState.outputStore);
+  const [kernelExecutionLog, setKernelExecutionLog] = useState<KernelExecutionLogEntry[]>(globalThebeState.kernelExecutionLog);
   const hasInitialized = useRef(false);
   const cleanupTimeoutRef = useRef<NodeJS.Timeout>();
   const { server: hyphaServer } = useHyphaStore();
@@ -407,6 +424,7 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
       setStatus(globalThebeState.status);
       setIsReady(globalThebeState.isReady);
       setKernelInfo(globalThebeState.kernelInfo);
+      setKernelExecutionLog(globalThebeState.kernelExecutionLog);
     }
   }, [
     globalThebeState.isInitialized,
@@ -414,8 +432,34 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
     globalThebeState.session,
     globalThebeState.kernel,
     globalThebeState.status,
-    globalThebeState.isReady
+    globalThebeState.isReady,
+    globalThebeState.kernelExecutionLog
   ]);
+
+  // Add function to update log state and global state
+  const addKernelLogEntry = useCallback((entryData: Omit<KernelExecutionLogEntry, 'timestamp'>) => {
+    const newEntry: KernelExecutionLogEntry = {
+      ...entryData,
+      timestamp: Date.now(),
+    };
+    setKernelExecutionLog(prevLog => {
+      // Avoid adding duplicate status messages immediately after each other
+      if (entryData.type === 'status') {
+        const lastEntry = prevLog[prevLog.length - 1];
+        if (lastEntry && lastEntry.type === 'status' && lastEntry.content === entryData.content) {
+          return prevLog; // Skip duplicate status
+        }
+      }
+      const newLog = [...prevLog, newEntry];
+      globalThebeState.kernelExecutionLog = newLog; // Keep global state in sync
+      // Optional: Limit log size if needed
+      // const MAX_LOG_SIZE = 1000;
+      // if (newLog.length > MAX_LOG_SIZE) {
+      //   newLog.splice(0, newLog.length - MAX_LOG_SIZE);
+      // }
+      return newLog;
+    });
+  }, []);
 
   const getKernelInfo = async (kernel: KernelConnection) => {
     if (!kernel) {
@@ -715,32 +759,37 @@ print(f"{sys.version.split()[0]}")
   };
 
 
-  // Update executeCode function to include short_content
+  // Update executeCode function to remove status logging
   const executeCode = async (
     code: string,
     callbacks?: {
       onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
       onStatus?: (status: string) => void;
+      cellId?: string; // Accept cellId
     },
     timeout: number | undefined = 600000
   ): Promise<void> => {
-    const { onOutput, onStatus } = callbacks || {};
+    const { onOutput, onStatus, cellId } = callbacks || {};
     timeout = timeout || 600000;
     // Get a ready kernel
     const currentKernel = kernel && isReady ? kernel : await connect();
 
+    // Log input
+    addKernelLogEntry({ type: 'input', content: code, cellId });
     onStatus?.('Executing code...');
 
     try {
       const future = currentKernel.requestExecute({ code });
       // Handle kernel messages
       future.onIOPub = (msg: KernelMessage) => {
-        console.log('Kernel message:', msg);
+        // console.log('Kernel message:', msg); // Keep for debugging if needed
         const msgType = msg.msg_type || msg.header.msg_type;
+        let logEntryData: Omit<KernelExecutionLogEntry, 'timestamp'> | null = null;
 
         switch (msgType) {
           case 'stream':
             const streamContent = msg.content.text;
+            logEntryData = { type: 'output', content: streamContent, cellId };
             onOutput?.({
               type: msg.content.name || 'stdout',
               content: streamContent,
@@ -748,6 +797,7 @@ print(f"{sys.version.split()[0]}")
             });
             break;
           case "execute_input":
+            // Input is already logged above
             onOutput?.({
               type: 'execute_input',
               content: msg.content.code,
@@ -758,45 +808,36 @@ print(f"{sys.version.split()[0]}")
           case 'execute_result':
             // Handle rich display data
             const data = msg.content.data;
+            let outputContent = '';
+            let outputType = 'stdout';
             if (data['text/html']) {
-              const htmlContent = data['text/html'];
-              onOutput?.({
-                type: 'html',
-                content: htmlContent,
-                short_content: createShortContent(htmlContent, 'html')
-              });
+              outputContent = data['text/html'];
+              outputType = 'html';
             } else if (data['image/png']) {
-              const imgContent = `data:image/png;base64,${data['image/png']}`;
-              onOutput?.({
-                type: 'img',
-                content: imgContent,
-                short_content: createShortContent(imgContent, 'img')
-              });
+              outputContent = `data:image/png;base64,${data['image/png']}`;
+              outputType = 'img';
             } else if (data['image/jpeg']) {
-              const jpegContent = `data:image/jpeg;base64,${data['image/jpeg']}`;
-              onOutput?.({
-                type: 'img',
-                content: jpegContent,
-                short_content: createShortContent(jpegContent, 'img')
-              });
+              outputContent = `data:image/jpeg;base64,${data['image/jpeg']}`;
+              outputType = 'img';
             } else if (data['image/svg+xml']) {
-              const svgContent = data['image/svg+xml'];
-              onOutput?.({
-                type: 'svg',
-                content: svgContent,
-                short_content: createShortContent(svgContent, 'svg')
-              });
+              outputContent = data['image/svg+xml'];
+              outputType = 'svg';
             } else if (data['text/plain']) {
-              const plainContent = data['text/plain'];
+              outputContent = data['text/plain'];
+              outputType = 'stdout';
+            }
+            if (outputContent) {
+              logEntryData = { type: 'output', content: outputContent, cellId };
               onOutput?.({
-                type: 'stdout',
-                content: plainContent,
-                short_content: createShortContent(plainContent, 'stdout')
+                type: outputType,
+                content: outputContent,
+                short_content: createShortContent(outputContent, outputType)
               });
             }
             break;
           case 'error':
             const errorText = msg.content.traceback.join('\n');
+            logEntryData = { type: 'error', content: errorText, cellId };
             onOutput?.({
               type: 'stderr',
               content: errorText,
@@ -806,12 +847,19 @@ print(f"{sys.version.split()[0]}")
             break;
           case 'status':
             const state = msg.content.execution_state;
+            let statusText = '';
             if (state === 'busy') {
-              onStatus?.('Running...');
+              statusText = 'Running...';
             } else if (state === 'idle') {
-              onStatus?.('Completed');
+              statusText = 'Completed';
+            }
+            if (statusText) {
+              onStatus?.(statusText);
             }
             break;
+        }
+        if (logEntryData) {
+          addKernelLogEntry(logEntryData); // Add the log entry
         }
       };
       // Wait for execution to complete with a timeout (use Promise.race)
@@ -820,6 +868,8 @@ print(f"{sys.version.split()[0]}")
 
     } catch (error) {
       console.error('Error executing code:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addKernelLogEntry({ type: 'error', content: `Execution failed: ${errorMsg}`, cellId });
       onStatus?.('Error');
       throw error;
     }
@@ -828,12 +878,15 @@ print(f"{sys.version.split()[0]}")
   const executeCodeWithDOMOutput = async (code: string, outputElement: HTMLElement, callbacks?: {
     onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
     onStatus?: (status: string) => void;
+    cellId?: string; // Accept cellId
   }) => {
-    const { onOutput, onStatus } = callbacks || {};
+    const { onOutput, onStatus, cellId } = callbacks || {};
 
     // Get a ready kernel
     const currentKernel = kernel && isReady ? kernel : await connect();
 
+    // Log input
+    addKernelLogEntry({ type: 'input', content: code, cellId });
     onStatus?.('Executing code...');
 
     try {
@@ -854,12 +907,14 @@ print(f"{sys.version.split()[0]}")
       
       // Handle kernel messages
       future.onIOPub = (msg: KernelMessage) => {
-        console.log('Kernel message:', msg);
+        // console.log('Kernel message:', msg); // Keep for debugging if needed
         const msgType = msg.msg_type || msg.header.msg_type;
+        let logEntryData: Omit<KernelExecutionLogEntry, 'timestamp'> | null = null;
 
         switch (msgType) {
           case 'stream':
             const streamContent = msg.content.text;
+            logEntryData = { type: 'output', content: streamContent, cellId };
             const streamDiv = document.createElement('pre');
             streamDiv.className = 'stream-output';
             streamDiv.textContent = streamContent;
@@ -884,6 +939,7 @@ print(f"{sys.version.split()[0]}")
               const div = document.createElement('div');
               div.innerHTML = data['text/html'];
               
+              logEntryData = { type: 'output', content: data['text/html'], cellId };
               onOutput?.({
                 type: 'html',
                 content: data['text/html'],
@@ -902,6 +958,7 @@ print(f"{sys.version.split()[0]}")
               img.src = imgContent;
               outputContainer.appendChild(img);
               
+              logEntryData = { type: 'output', content: imgContent, cellId };
               onOutput?.({
                 type: 'img',
                 content: imgContent,
@@ -916,6 +973,7 @@ print(f"{sys.version.split()[0]}")
               pre.textContent = plainContent;
               outputContainer.appendChild(pre);
               
+              logEntryData = { type: 'output', content: plainContent, cellId };
               onOutput?.({
                 type: 'stdout',
                 content: plainContent,
@@ -939,6 +997,7 @@ print(f"{sys.version.split()[0]}")
             errorDiv.innerHTML = htmlWithAnsi;
             outputElement.appendChild(errorDiv);
             
+            logEntryData = { type: 'error', content: errorText, cellId };
             onOutput?.({
               type: 'stderr',
               content: errorText,
@@ -948,12 +1007,19 @@ print(f"{sys.version.split()[0]}")
             break;
           case 'status':
             const state = msg.content.execution_state;
+            let statusText = '';
             if (state === 'busy') {
-              onStatus?.('Running...');
+              statusText = 'Running...';
             } else if (state === 'idle') {
-              onStatus?.('Completed');
+              statusText = 'Completed';
+            }
+            if (statusText) {
+              onStatus?.(statusText);
             }
             break;
+        }
+        if (logEntryData) {
+          addKernelLogEntry(logEntryData);
         }
       };
       
@@ -966,12 +1032,8 @@ print(f"{sys.version.split()[0]}")
       }
     } catch (error) {
       console.error('Error executing code:', error);
-      const errorText = error instanceof Error ? error.message : String(error);
-      // parse the errorText to html
-      const processedError = processTextOutput(errorText);
-      
-      // Add the processed error to the output element
-      outputElement.innerHTML += processedError;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addKernelLogEntry({ type: 'error', content: `Execution failed: ${errorMsg}`, cellId });
       onStatus?.('Error');
       throw error;
     }
@@ -1187,7 +1249,9 @@ except Exception as e:
         kernelInfo,
         outputStore,
         storeOutput,
-        getOutput
+        getOutput,
+        kernelExecutionLog,
+        addKernelLogEntry,
       }}
     >
       {children}

@@ -11,7 +11,6 @@ import { useDropzone } from 'react-dropzone';
 import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import ModelValidator from './ModelValidator';
-import Chat from './chat/Chat';
 import { LazyThebeProvider } from './chat/ThebeProvider';
 import { SITE_NAME } from '../utils/env';
 
@@ -156,6 +155,32 @@ const TEXT_MODEL_OPTIONS = [
   'gpt-4o-mini',
   'gpt-4o',
 ] as const;
+
+// Create a ChatDeprecated component instead of renderChat function
+const ChatDeprecated: React.FC = () => (
+  <div className="p-6">
+    <div className="max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">Chat Preview</h2>
+      
+      <div className="border rounded-lg overflow-hidden h-[600px] flex items-center justify-center bg-gray-50">
+        <div className="text-center p-8">
+          <div className="mb-4 text-amber-600">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Chat Preview Deprecated</h3>
+          <p className="text-gray-600 mb-4">
+            The chat preview feature has been deprecated and is no longer available.
+          </p>
+          <p className="text-sm text-gray-500">
+            Please use the Agent Lab interface for testing your agent.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 const Edit: React.FC = () => {
   const { artifactId } = useParams<{ artifactId: string }>();
@@ -1022,7 +1047,7 @@ const Edit: React.FC = () => {
               </div>
             </div>
           ) : selectedTab === 'chat' ? (
-            renderChat()
+            <ChatDeprecated />
           ) : (
             renderFileContent()
           )}
@@ -2028,43 +2053,6 @@ const Edit: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
-    </div>
-  );
-
-  // Update renderChat function
-  const renderChat = () => (
-    <div className="p-6">
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Chat Preview</h2>
-        
-        {!artifactId ? (
-          <div className="text-center py-10 text-gray-500">
-            Save the agent configuration first to enable chat preview
-          </div>
-        ) : (
-          <div className="border rounded-lg overflow-hidden h-[600px]">
-            <LazyThebeProvider>
-              <Chat 
-                agentConfig={{
-                  name: agentConfig.name,
-                  profile: artifactInfo?.manifest.profile || '',
-                  goal: artifactInfo?.manifest.goal || '',
-                  model: agentConfig.model,
-                  temperature: agentConfig.temperature,
-                  instructions: artifactInfo?.manifest.instructions || '',
-                  startup_script: agentConfig.startup_script,
-                  welcomeMessage: agentConfig.welcomeMessage,
-                  voice: artifactInfo?.manifest.voice || 'alloy',
-                  enabled_tools: artifactInfo?.manifest.enabled_tools || ['code_interpreter'],
-                  mode: artifactInfo?.manifest.mode || 'text'
-                }}
-                artifactId={artifactId}
-                showActions={false}
-              />
-            </LazyThebeProvider>
-          </div>
-        )}
       </div>
     </div>
   );

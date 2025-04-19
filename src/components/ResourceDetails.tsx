@@ -17,18 +17,22 @@ import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import Link from '@mui/material/Link';
 import ChatIcon from '@mui/icons-material/Chat';
 import { SITE_ID, SERVER_URL } from '../utils/env';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import SettingsIcon from '@mui/icons-material/Settings';
+import MessageIcon from '@mui/icons-material/Message';
+import CodeIcon from '@mui/icons-material/Code';
 
 const ResourceDetails = () => {
   const { id } = useParams();
-  const { selectedResource, fetchResource, isLoading, error } = useHyphaStore();
+  const { selectedResource: rawResource, fetchResource, isLoading, error } = useHyphaStore();
   const [documentation, setDocumentation] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Store covers in a local variable
-  const covers = selectedResource?.manifest.covers || [];
+  const covers = rawResource?.manifest.covers || [];
 
   // Add this variable to control button state
-  const shouldDisableChat = !selectedResource?.manifest?.type?.includes('agent');
+  const shouldDisableChat = !rawResource?.manifest?.type?.includes('agent');
 
   useEffect(() => {
     if (id) {
@@ -38,9 +42,9 @@ const ResourceDetails = () => {
 
   useEffect(() => {
     const fetchDocumentation = async () => {
-      if (selectedResource?.manifest.documentation) {
+      if (rawResource?.manifest.documentation) {
         try {
-          const docUrl = resolveHyphaUrl(selectedResource.manifest.documentation, selectedResource.id);
+          const docUrl = resolveHyphaUrl(rawResource.manifest.documentation, rawResource.id);
           
           const response = await fetch(docUrl);
           const text = await response.text();
@@ -52,7 +56,7 @@ const ResourceDetails = () => {
     };
 
     fetchDocumentation();
-  }, [selectedResource?.id, selectedResource?.manifest.documentation]);
+  }, [rawResource?.id, rawResource?.manifest.documentation]);
 
   const handleDownload = () => {
     if (id) {
@@ -84,18 +88,89 @@ const ResourceDetails = () => {
     return <div className="error">Error: {error}</div>;
   }
 
-  if (!selectedResource) {
+  if (!rawResource) {
     return <div>Resource not found</div>;
   }
 
-  const { manifest } = selectedResource as Resource;
+  const selectedResource = rawResource as unknown as Resource;
+  const { manifest } = selectedResource;
+  const isAgent = manifest.type?.includes('agent');
+
+  const renderAgentConfig = () => {
+    if (!isAgent) return null;
+
+    return (
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            <SmartToyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+            Agent Configuration
+          </Typography>
+          
+          <Stack spacing={3}>
+            {/* Welcome Message */}
+            <Box>
+              <Typography variant="subtitle1" color="primary" gutterBottom>
+                <MessageIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1rem' }} />
+                Welcome Message
+              </Typography>
+              <Typography variant="body1">
+                {manifest.welcomeMessage || 'No welcome message set'}
+              </Typography>
+            </Box>
+
+            {/* System Instructions */}
+            <Box>
+              <Typography variant="subtitle1" color="primary" gutterBottom>
+                <CodeIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1rem' }} />
+                System Instructions
+              </Typography>
+              <Typography 
+                variant="body1" 
+                sx={{ 
+                  whiteSpace: 'pre-wrap',
+                  bgcolor: 'grey.100',
+                  p: 2,
+                  borderRadius: 1,
+                  fontFamily: 'monospace'
+                }}
+              >
+                {manifest.startup_script || 'No system instructions set'}
+              </Typography>
+            </Box>
+
+            {/* Model Configuration */}
+            {manifest.modelConfig && (
+              <Box>
+                <Typography variant="subtitle1" color="primary" gutterBottom>
+                  <SettingsIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: '1rem' }} />
+                  Model Configuration
+                </Typography>
+                <Stack spacing={1}>
+                  <Typography variant="body2">
+                    <strong>Model:</strong> {manifest.modelConfig.model}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Temperature:</strong> {manifest.modelConfig.temperature}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Base URL:</strong> {manifest.modelConfig.baseURL}
+                  </Typography>
+                </Stack>
+              </Box>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <Box sx={{ p: 3, maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header Section */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>
-        {manifest.id_emoji} {manifest.name} 
+          {manifest.id_emoji} {manifest.name} 
         </Typography>
         <Typography variant="subtitle1" color="text.secondary" gutterBottom>
           ID: {selectedResource.id}
@@ -109,7 +184,7 @@ const ResourceDetails = () => {
             variant="contained"
             size="medium"
             startIcon={<ChatIcon />}
-            disabled={shouldDisableChat}
+            disabled={!isAgent}
             sx={{
               backgroundColor: '#3b82f6',
               '&:hover': {
@@ -207,8 +282,11 @@ const ResourceDetails = () => {
       )}
 
       <Grid container spacing={3}>
-        {/* Left Column - Documentation */}
+        {/* Left Column - Documentation and Agent Config */}
         <Grid item xs={12} md={8}>
+          {/* Agent Configuration for agent type */}
+          {renderAgentConfig()}
+          
           {/* Documentation Card */}
           {documentation && (
             <Card sx={{ mb: 3, height: '100%' }}>

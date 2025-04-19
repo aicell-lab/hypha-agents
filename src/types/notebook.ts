@@ -67,6 +67,7 @@ export interface NotebookMetadata {
   modified: string;
   projectId?: string;
   filePath?: string;
+  modelSettings?: any;
   agentArtifact?: {
     id: string;
     version: string;

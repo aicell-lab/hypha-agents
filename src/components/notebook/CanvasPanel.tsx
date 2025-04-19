@@ -5,21 +5,22 @@ import { HiOutlineLightBulb } from 'react-icons/hi';
 import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { TbLayoutBoard } from 'react-icons/tb';
 
-interface HyphaCoreWindow {
+export interface HyphaCoreWindow {
   id: string;
-  src: string;
+  src?: string;
+  component?: React.ReactNode;
   name?: string;
 }
 
 interface CanvasPanelProps {
   windows: HyphaCoreWindow[];
   isVisible: boolean;
-  width: number;
   activeTab: string | null;
-  onResize: (newWidth: number) => void;
+  onResize?: (newWidth: number) => void;
   onClose: () => void;
   onTabChange: (tabId: string) => void;
   onTabClose?: (tabId: string) => void;
+  defaultWidth?: number;
 }
 
 // Memoize the iframe to prevent re-renders
@@ -37,61 +38,136 @@ MemoizedIframe.displayName = 'MemoizedIframe';
 export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   windows,
   isVisible,
-  width,
   activeTab,
   onResize,
   onClose,
   onTabChange,
-  onTabClose
-}) => {
+  onTabClose,
+  defaultWidth = 600
+}): React.ReactElement | null => {
   const [isResizing, setIsResizing] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(false);
   const [isHidden, setIsHidden] = React.useState(false);
+  const [width, setWidth] = React.useState(defaultWidth);
+  const lastWidthRef = React.useRef(defaultWidth);
   
-  // Use ref to store windows to prevent unnecessary re-renders
-  const windowsRef = React.useRef<HyphaCoreWindow[]>([]);
-  React.useEffect(() => {
-    windowsRef.current = windows;
-  }, [windows]);
-
   // Check for mobile and very small screen size
   React.useEffect(() => {
     const checkScreenSize = () => {
-      setIsMobile(window.innerWidth <= 768);
-      setIsHidden(window.innerWidth <= 480);
+      const isMobileSize = window.innerWidth <= 768;
+      const isHiddenSize = window.innerWidth <= 480;
+      setIsMobile(isMobileSize);
+      setIsHidden(isHiddenSize);
+      
+      // Adjust width for mobile
+      if (isMobileSize) {
+        setWidth(window.innerWidth);
+      } else if (isVisible) {
+        setWidth(lastWidthRef.current);
+      }
     };
     
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
+  }, [isVisible]);
+
+  // Handle width changes
+  const handleWidthChange = React.useCallback((newWidth: number) => {
+    const adjustedWidth = Math.max(newWidth, 300);
+    setWidth(adjustedWidth);
+    lastWidthRef.current = adjustedWidth;
+    onResize?.(adjustedWidth);
+  }, [onResize]);
+
+  // Style for container visibility
+  const containerStyle = React.useMemo(() => {
+    if (windows.length === 0) {
+      return {
+        width: '0px',
+        maxWidth: '0px',
+        opacity: 0,
+        visibility: 'hidden' as const,
+        transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+      };
+    }
+    
+    if (!isVisible) {
+      return {
+        width: '36px',
+        maxWidth: '36px',
+        opacity: 1,
+        visibility: 'visible' as const,
+        transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+      };
+    }
+    
+    return {
+      width: isMobile ? '100%' : `${width}px`,
+      maxWidth: '100vw',
+      opacity: 1,
+      visibility: 'visible' as const,
+      transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+    };
+  }, [isVisible, width, isMobile, windows.length]);
+
+  // Handle panel visibility toggle
+  const handleVisibilityToggle = React.useCallback(() => {
+    if (!isVisible) {
+      handleWidthChange(lastWidthRef.current);
+    }
+    onClose();
+  }, [isVisible, handleWidthChange, onClose]);
 
   const handleTabClose = React.useCallback((e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
+    
+    // Find the next tab to focus before closing
+    const currentIndex = windows.findIndex(w => w.id === tabId);
+    let nextTabId: string | null = null;
+    
+    if (windows.length > 1) {
+      // If there are other windows, find the next one to focus
+      if (currentIndex === windows.length - 1) {
+        // If it's the last tab, focus the previous one
+        nextTabId = windows[currentIndex - 1].id;
+      } else {
+        // Otherwise focus the next one
+        nextTabId = windows[currentIndex + 1].id;
+      }
+    }
+    
+    // Call onTabClose with the current tab
     onTabClose?.(tabId);
-  }, [onTabClose]);
+    
+    // If we found a next tab, focus it
+    if (nextTabId) {
+      onTabChange(nextTabId);
+    }
+
+    // Check if this was the last window
+    if (windows.length === 1 && windows[0].id === tabId) {
+      onClose(); // Call the main close handler if the last tab is closed
+    }
+  }, [windows, onTabClose, onClose, onTabChange]);
 
   // Get first letter of window name for icon
   const getWindowIcon = React.useCallback((name: string) => {
     return (name || 'Untitled').charAt(0).toUpperCase();
   }, []);
 
-  // Style for container visibility
-  const containerStyle = React.useMemo(() => ({
-    width: isVisible ? (isMobile ? '100%' : `${width}px`) : '36px',
-    maxWidth: '100vw',
-    opacity: 1,
-    visibility: 'visible' as const,
-    transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
-  }), [isVisible, width, isMobile]);
+  // Return null if there are no windows and we're not showing the collapsed view
+  if (windows.length === 0 && !isVisible) {
+    return null;
+  }
 
   // Render collapsed view with icons
   const renderCollapsedView = () => (
-    <div className="bg-white flex flex-col rounded-l-lg relative overflow-visible">
+    <div className="bg-white flex flex-col rounded-l-lg relative overflow-visible h-full shadow-lg">
       {/* Canvas button at the top */}
       <button
-        onClick={onClose}
-        className="w-9 h-9 mx-auto flex items-center justify-center transition-colors bg-blue-100 text-gray-600 hover:bg-blue-200"
+        onClick={handleVisibilityToggle}
+        className="w-9 h-9 mx-auto flex items-center justify-center transition-colors bg-blue-100 text-gray-600 hover:bg-blue-200 rounded-lg mt-2"
         title="Open Canvas Panel"
       >
         <TbLayoutBoard className="w-5 h-5" />
@@ -116,7 +192,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
             key={window.id}
             onClick={() => {
               onTabChange(window.id);
-              setTimeout(() => onClose(), 0);
+              handleVisibilityToggle();
             }}
             className={`w-9 h-9 mb-1 mx-auto flex items-center justify-center transition-colors rounded-lg ${
               activeTab === window.id
@@ -140,8 +216,8 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
       {/* Only show splitter on md and larger screens */}
       <div className="hidden md:block">
         <Splitter 
-          onResize={onResize} 
-          onResizeStart={() => setIsResizing(true)} 
+          onResize={handleWidthChange} 
+          onResizeStart={() => setIsResizing(true)}
           onResizeEnd={() => setIsResizing(false)} 
         />
       </div>
@@ -164,7 +240,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
                 onClick={() => onTabChange(window.id)}
                 className={`px-3 py-1 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2 group ${
                   activeTab === window.id 
-                    ? 'bg-white text-blue-600 shadow-sm' 
+                    ? 'bg-blue-50 text-blue-600'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
@@ -188,7 +264,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         <div className="flex items-center ml-2">
           {/* Back to notebook button on small screens */}
           <button
-            onClick={onClose}
+            onClick={handleVisibilityToggle}
             className="md:hidden p-1.5 mr-2 hover:bg-gray-200 rounded-md text-gray-600"
             title="Back to notebook"
           >
@@ -196,11 +272,11 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
           </button>
           {/* Collapse button on larger screens */}
           <button
-            onClick={onClose}
-            className="hidden md:block p-1 hover:bg-gray-200 rounded-md flex-shrink-0"
+            onClick={handleVisibilityToggle}
+            className="hidden md:flex items-center justify-center p-1.5 hover:bg-gray-200 rounded-md text-gray-600 transition-colors"
             title="Collapse panel"
           >
-            <FaChevronRight className="w-5 h-5 text-gray-500" />
+            <FaChevronRight className="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -213,16 +289,25 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
               key={window.id}
               className="absolute inset-0"
               style={{ 
-                // Keep iframes mounted but hidden to preserve state
+                // Keep content mounted but hidden to preserve state
                 display: activeTab === window.id ? 'block' : 'none',
                 visibility: activeTab === window.id ? 'visible' : 'hidden'
               }}
             >
-              <MemoizedIframe
-                src={window.src}
-                id={window.id}
-                name={window.name || 'Untitled'}
-              />
+              {/* Conditional Rendering: Component or Iframe */}
+              {window.component ? (
+                <div className="w-full h-full overflow-auto p-4"> {/* Add padding and scroll for component */}
+                  {window.component}
+                </div>
+              ) : window.src ? (
+                <MemoizedIframe
+                  src={window.src}
+                  id={window.id}
+                  name={window.name || 'Untitled'}
+                />
+              ) : (
+                <div className="p-4 text-red-500">Error: Window must have either 'src' or 'component'.</div>
+              )}
             </div>
           ))
         ) : (
@@ -266,39 +351,11 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   );
 
   return (
-    <>
-      {/* Floating button for very small screens */}
-      {isHidden && !isVisible && (
-        <button
-          onClick={onClose}
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-white shadow-lg rounded-l-lg p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50 transition-colors"
-          title="Open canvas panel"
-        >
-          <TbLayoutBoard className="w-4 h-4" />
-        </button>
-      )}
-
-      <div 
-        className={`h-full flex flex-col bg-white border-l border-gray-200 ${
-          isVisible ? 'fixed md:relative inset-0 md:inset-auto' : 'fixed right-0'
-        } z-30 ${isHidden && !isVisible ? 'hidden' : ''}`}
-        style={containerStyle}
-      >
-        {/* Always render both views, use CSS to control visibility */}
-        <div style={{ display: isVisible ? 'none' : 'block' }}>
-          {!isHidden && renderCollapsedView()}
-        </div>
-        <div 
-          className="flex flex-col h-full"
-          style={{ 
-            display: isVisible ? 'flex' : 'none',
-            height: isVisible ? '100%' : '0',
-            overflow: 'hidden'
-          }}
-        >
-          {renderExpandedView()}
-        </div>
-      </div>
-    </>
+    <div 
+      className={`flex flex-col border-l border-gray-200 bg-white relative ${isMobile ? 'fixed inset-0 z-50' : ''}`}
+      style={containerStyle}
+    >
+      {isVisible ? renderExpandedView() : renderCollapsedView()}
+    </div>
   );
 };

@@ -1,50 +1,47 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { DefaultAgentConfig, AgentSettings } from '../../utils/chatCompletion';
+import ModelConfigForm from '../shared/ModelConfigForm';
+import { NotebookMetadata } from '../../types/notebook';
 
-// Add localStorage key constants
-const AGENT_SETTINGS_STORAGE_KEY = 'agent_settings';
-const AGENT_PRESETS_STORAGE_KEY = 'agent_presets';
+// Only for presets now
+const MODEL_PRESETS_STORAGE_KEY = 'model_presets';
 
 // Define preset interface
-interface AgentPreset extends AgentSettings {
+interface ModelPreset extends AgentSettings {
   name: string;
   description?: string;
 }
 
-// Export helper functions for localStorage
-export const loadSavedAgentSettings = (): AgentSettings => {
+// Export helper functions for settings
+export const loadModelSettings = (notebookMetadata?: NotebookMetadata | null): AgentSettings => {
   try {
-    const stored = localStorage.getItem(AGENT_SETTINGS_STORAGE_KEY);
-    if (!stored) return DefaultAgentConfig;
-    return JSON.parse(stored) as AgentSettings;
+    // First try to load from notebook metadata if available
+    if (notebookMetadata?.modelSettings) {
+      return notebookMetadata.modelSettings as AgentSettings;
+    }
+    
+    // If not in notebook metadata, use defaults
+    return DefaultAgentConfig;
   } catch (error) {
-    console.error('Error loading settings from localStorage:', error);
+    console.error('Error loading settings from notebook metadata:', error);
     return DefaultAgentConfig;
   }
 };
 
-export const saveAgentSettings = (settings: AgentSettings): void => {
+// For presets management
+export const loadSavedPresets = (): ModelPreset[] => {
   try {
-    localStorage.setItem(AGENT_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch (error) {
-    console.error('Error saving settings to localStorage:', error);
-  }
-};
-
-// Add preset management functions
-export const loadSavedPresets = (): AgentPreset[] => {
-  try {
-    const stored = localStorage.getItem(AGENT_PRESETS_STORAGE_KEY);
+    const stored = localStorage.getItem(MODEL_PRESETS_STORAGE_KEY);
     if (!stored) return [];
-    return JSON.parse(stored) as AgentPreset[];
+    return JSON.parse(stored) as ModelPreset[];
   } catch (error) {
     console.error('Error loading presets from localStorage:', error);
     return [];
   }
 };
 
-export const savePreset = (preset: AgentPreset): void => {
+export const savePreset = (preset: ModelPreset): void => {
   try {
     const presets = loadSavedPresets();
     const existingIndex = presets.findIndex(p => p.name === preset.name);
@@ -55,7 +52,7 @@ export const savePreset = (preset: AgentPreset): void => {
       presets.push(preset);
     }
     
-    localStorage.setItem(AGENT_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+    localStorage.setItem(MODEL_PRESETS_STORAGE_KEY, JSON.stringify(presets));
   } catch (error) {
     console.error('Error saving preset to localStorage:', error);
   }
@@ -65,27 +62,29 @@ export const deletePreset = (presetName: string): void => {
   try {
     const presets = loadSavedPresets();
     const filteredPresets = presets.filter(p => p.name !== presetName);
-    localStorage.setItem(AGENT_PRESETS_STORAGE_KEY, JSON.stringify(filteredPresets));
+    localStorage.setItem(MODEL_PRESETS_STORAGE_KEY, JSON.stringify(filteredPresets));
   } catch (error) {
     console.error('Error deleting preset from localStorage:', error);
   }
 };
 
 // Define interfaces for our settings
-interface AgentSettingsProps {
+interface ModelSettingsProps {
   settings?: AgentSettings;
   onSettingsChange?: (settings: AgentSettings) => void;
   className?: string;
+  notebookMetadata?: NotebookMetadata | null;
 }
 
-export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({ 
+export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({ 
   settings,
   onSettingsChange = () => {},
-  className 
+  className,
+  notebookMetadata,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [localSettings, setLocalSettings] = useState<AgentSettings>(settings || DefaultAgentConfig);
-  const [presets, setPresets] = useState<AgentPreset[]>([]);
+  const [localSettings, setLocalSettings] = useState<AgentSettings>(settings || loadModelSettings(notebookMetadata));
+  const [presets, setPresets] = useState<ModelPreset[]>([]);
   const [newPresetName, setNewPresetName] = useState('');
   const [newPresetDescription, setNewPresetDescription] = useState('');
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
@@ -105,8 +104,10 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
   useEffect(() => {
     if (settings) {
       setLocalSettings(settings);
+    } else if (notebookMetadata?.modelSettings) {
+      setLocalSettings(notebookMetadata.modelSettings as AgentSettings);
     }
-  }, [settings]);
+  }, [settings, notebookMetadata]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -136,10 +137,9 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Save to localStorage first
-      saveAgentSettings(localSettings);
-      // Then notify parent component
+      // Update parent component with new settings
       onSettingsChange(localSettings);
+      
       // Close the panel
       setIsOpen(false);
       
@@ -181,7 +181,6 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
   const handleReset = () => {
     const newSettings = { ...DefaultAgentConfig };
     setLocalSettings(newSettings);
-    saveAgentSettings(newSettings);
     onSettingsChange(newSettings);
     
     // Show success message
@@ -200,7 +199,7 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
     const name = prompt('Enter preset name:');
     if (!name) return;
     
-    const preset: AgentPreset = {
+    const preset: ModelPreset = {
       ...localSettings,
       name,
     };
@@ -220,10 +219,9 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
   };
 
   // Handle loading preset
-  const handleLoadPreset = (preset: AgentPreset) => {
+  const handleLoadPreset = (preset: ModelPreset) => {
     const { name, description, ...settings } = preset;
     setLocalSettings(settings);
-    saveAgentSettings(settings);
     onSettingsChange(settings);
 
     // Show success message
@@ -259,8 +257,8 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-        title="Agent Settings"
-        aria-label="Configure agent settings"
+        title="Model Settings"
+        aria-label="Configure model settings"
       >
         <svg 
           className="w-5 h-5 text-gray-600" 
@@ -298,7 +296,7 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
           ">
             <form ref={formRef} onSubmit={handleSubmit} className="divide-y divide-gray-200 h-full flex flex-col overflow-y-auto">
               <div className="px-4 py-3 bg-gray-50 sm:rounded-t-lg flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900">Agent Settings</h3>
+                <h3 className="text-lg font-medium text-gray-900">Model Settings</h3>
                 <div className="flex gap-2 items-center">
                   <button
                     type="button"
@@ -364,133 +362,11 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
               </div>
 
               <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-                {/* Model Settings Section */}
-                <div className="space-y-4">
-                  <h4 className="text-sm font-medium text-gray-900">Model Configuration</h4>
-                  
-                  <div className="space-y-2">
-                    <label className="block text-sm text-gray-700">Base URL</label>
-                    <div className="flex gap-2">
-                      <select
-                        name="baseURLPreset"
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === 'custom') {
-                            return;
-                          }
-                          setLocalSettings({
-                            ...localSettings,
-                            baseURL: value.endsWith('/') ? value : value + '/'
-                          });
-                        }}
-                        value={[
-                          'https://api.openai.com/v1/',
-                          'http://localhost:11434/v1/',
-                        ].includes(localSettings.baseURL) ? localSettings.baseURL : 'custom'}
-                        className="w-1/3 px-3 py-2 border rounded-md text-sm"
-                        title="Select API endpoint"
-                        aria-label="Select API endpoint"
-                      >
-                        <option value="https://api.openai.com/v1/">OpenAI</option>
-                        <option value="http://localhost:11434/v1/">Ollama</option>
-                        <option value="custom">Custom</option>
-                      </select>
-                      <input
-                        type="text"
-                        name="baseURL"
-                        value={localSettings.baseURL}
-                        onChange={handleChange}
-                        className="flex-1 px-3 py-2 border rounded-md text-sm"
-                        placeholder="Enter API base URL"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm text-gray-700">API Key</label>
-                    <input
-                      type="password"
-                      name="apiKey"
-                      value={localSettings.apiKey}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                      placeholder="Enter API key"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm text-gray-700">Model</label>
-                    <div className="flex gap-2">
-                      <select
-                        name="model"
-                        value={[
-                          'o3-mini',
-                          'gpt-4o',
-                          'gpt-4o-mini',
-                          'llama3.1',
-                          'qwen2.5-coder',
-                          'codellama',
-                          'mistral',
-                        ].includes(localSettings.model) ? localSettings.model : 'custom'}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === 'custom') {
-                            // Keep current custom model if switching to custom
-                            return;
-                          }
-                          // Update model when selecting a preset
-                          setLocalSettings({
-                            ...localSettings,
-                            model: value
-                          });
-                        }}
-                        className="w-1/3 px-3 py-2 border rounded-md text-sm"
-                        title="Select AI model"
-                        aria-label="Select AI model"
-                      >
-                        <option value="o3-mini">o3-mini</option>
-                        <option value="gpt-4o">gpt-4o</option>
-                        <option value="gpt-4o-mini">gpt-4o-mini</option>
-                        <option value="llama3.1">llama3.1</option>
-                        <option value="qwen2.5-coder">qwen2.5-coder</option>
-                        <option value="codellama">codellama</option>
-                        <option value="mistral">mistral</option>
-                        <option value="custom">Custom</option>
-                      </select>
-                      <input
-                        type="text"
-                        name="model"
-                        value={localSettings.model}
-                        onChange={handleChange}
-                        className="flex-1 px-3 py-2 border rounded-md text-sm"
-                        placeholder="Enter model ID"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm text-gray-700">
-                      Temperature ({localSettings.temperature})
-                    </label>
-                    <input
-                      type="range"
-                      name="temperature"
-                      min="0"
-                      max="2"
-                      step="0.1"
-                      value={localSettings.temperature}
-                      onChange={handleChange}
-                      className="w-full"
-                      title="Adjust temperature"
-                      aria-label="Adjust temperature"
-                    />
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Precise (0)</span>
-                      <span>Balanced (1)</span>
-                      <span>Creative (2)</span>
-                    </div>
-                  </div>
-                </div>
+                {/* Model Settings Section - replaced with ModelConfigForm */}
+                <ModelConfigForm 
+                  settings={localSettings}
+                  onSettingsChange={setLocalSettings}
+                />
               </div>
 
               {/* Footer */}
@@ -510,3 +386,5 @@ export const AgentSettingsPanel: React.FC<AgentSettingsProps> = ({
     </div>
   );
 };
+
+export default ModelSettingsPanel; 

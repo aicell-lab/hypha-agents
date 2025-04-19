@@ -34,7 +34,7 @@ const REDIRECT_PATH_KEY = 'redirectPath'; // Define key for sessionStorage
 export default function LoginButton({ className = '' }: LoginButtonProps) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const { client, user, connect, setUser, server } = useHyphaStore();
+  const { client, user, connect, setUser, server, isConnecting, isConnected } = useHyphaStore();
   const navigate = useNavigate();
   const location = useLocation(); // Get location
 
@@ -142,13 +142,14 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
   useEffect(() => {
     const autoLogin = async () => {
       const token = getSavedToken();
-      // ** Always attempt to connect if a valid token exists **
-      // The `connect` function should handle cases where connection is already established.
-      if (token) { 
-        // Removed the `!user` check to ensure connection attempt happens 
+      // --- Add checks for connection state ---
+      if (token && !isConnected && !isConnecting) {
+      // -------------------------------------
+        // Removed the `!user` check to ensure connection attempt happens
         // even if user state might be present but connection isn't fully ready.
-        setIsLoggingIn(true);
+        setIsLoggingIn(true); // Keep this to show visual feedback
         try {
+          // Connect function now has its own internal guard, but this prevents unnecessary calls
           await connect({
             server_url: serverUrl,
             token: token,
@@ -175,7 +176,7 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
     
     autoLogin();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connect]); // Keep dependencies as is, navigate is stable
+  }, [connect, isConnected, isConnecting]); // Update dependencies
 
   useEffect(() => {
     if (server) {

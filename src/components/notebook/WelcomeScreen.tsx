@@ -6,12 +6,14 @@ import { motion } from 'framer-motion';
 import { FaRobot, FaRegLightbulb } from 'react-icons/fa';
 import { BiCodeAlt } from 'react-icons/bi';
 import { RiTeamLine } from 'react-icons/ri';
+import AgentConfigDialog, { AgentConfigData } from './AgentConfigDialog';
 
 interface WelcomeScreenProps {
     urlParams: InitialUrlParams | null;
     isLoggedIn: boolean;
     onStartNewChat: () => void; 
     onStartFromAgent: (agentId: string, projectId?: string) => void;
+    onCreateAgentTemplate: (agentData: AgentConfigData) => Promise<void>;
     // TODO: Add function and button for opening file from URL
     // onOpenFile: (projectId: string | undefined, filePath: string) => void;
 }
@@ -20,11 +22,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     urlParams, 
     isLoggedIn, 
     onStartNewChat, 
-    onStartFromAgent 
+    onStartFromAgent,
+    onCreateAgentTemplate
     /*, onOpenFile */ 
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isAgentLoading, setIsAgentLoading] = useState(false);
+    const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
+    const [isCreatingAgent, setIsCreatingAgent] = useState(false);
     
     const handleStartNewChat = async () => {
         setIsLoading(true);
@@ -49,6 +54,31 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 setIsAgentLoading(false);
             }
         } 
+    };
+
+    const handleCreateAgent = () => {
+        setIsConfigDialogOpen(true);
+    };
+
+    const handleConfigDialogConfirm = async (agentData: AgentConfigData) => {
+        /* // Temporarily comment out login check for testing
+        if (!isLoggedIn) {
+            showToast("Please log in to create an agent template.", "warning");
+            setIsConfigDialogOpen(false);
+            return;
+        }
+        */
+
+        setIsCreatingAgent(true);
+        try {
+            await onCreateAgentTemplate(agentData);
+            setIsConfigDialogOpen(false);
+        } catch (error) {
+            console.error('Error creating agent template:', error);
+            showToast("Failed to create agent template", "error");
+        } finally {
+            setIsCreatingAgent(false);
+        }
     };
 
     // const handleOpenFileClick = () => {
@@ -95,8 +125,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 <motion.div variants={fadeInUp} className="space-y-2 sm:space-y-4">
                     <div className="flex justify-center items-center space-x-3">
                         <FaRobot className="w-8 h-8 sm:w-12 sm:h-12 text-blue-600" />
-                        <h1 className="text-3xl sm:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-                            AgentLab
+                        <h1 className="text-3xl sm:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 py-1 leading-normal">
+                            Hypha Agent Lab
                         </h1>
                     </div>
                     <p className="text-lg sm:text-xl text-gray-600">
@@ -171,6 +201,49 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                 )}
                             </div>
                         </motion.button>
+
+                        <motion.button
+                            onClick={handleCreateAgent}
+                            disabled={isCreatingAgent}
+                            className={`
+                                relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
+                                border-2 border-indigo-600 text-indigo-600
+                                text-base sm:text-lg font-medium bg-white/80 backdrop-blur-sm
+                                transform hover:-translate-y-1 hover:shadow-xl hover:bg-indigo-50
+                                transition-all duration-300
+                                disabled:opacity-50 disabled:cursor-not-allowed
+                                group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+                                w-full sm:w-auto
+                            `}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                        >
+                            <div className="relative flex items-center justify-center space-x-2">
+                                {isCreatingAgent ? (
+                                    <>
+                                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                            <circle 
+                                                className="opacity-25" 
+                                                cx="12" 
+                                                cy="12" 
+                                                r="10" 
+                                                stroke="currentColor" 
+                                                strokeWidth="4"
+                                            />
+                                            <path 
+                                                className="opacity-75" 
+                                                fill="currentColor" 
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                            />
+                                        </svg>
+                                        <span>Creating...</span>
+                                    </>
+                                ) : (
+                                    'Create Agent'
+                                )}
+                            </div>
+                        </motion.button>
+
                         {urlParams?.agentId && (
                             <motion.button
                                 onClick={handleStartFromAgentClick}
@@ -235,6 +308,13 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                     )}
                 </motion.div>
             </motion.div>
+
+            {/* Agent Config Dialog */}
+            <AgentConfigDialog
+                isOpen={isConfigDialogOpen}
+                onClose={() => setIsConfigDialogOpen(false)}
+                onConfirm={handleConfigDialogConfirm}
+            />
         </div>
     );
 };

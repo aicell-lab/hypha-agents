@@ -227,12 +227,13 @@ export async function* chatCompletion({
   stream = true,
   abortController, // Add abortController parameter
 }: ChatCompletionOptions): AsyncGenerator<{
-  type: 'text' | 'function_call' | 'function_call_output' | 'new_completion';
+  type: 'text' | 'function_call' | 'function_call_output' | 'new_completion' | 'error';
   content?: string;
   name?: string;
   arguments?: any;
   call_id?: string;
   completion_id?: string;
+  error?: Error;
 }, void, unknown> {
   try {
     // Create a new AbortController if one wasn't provided
@@ -270,45 +271,80 @@ export async function* chatCompletion({
       let accumulatedResponse = '';
 
       // Create standard completion stream with abort signal
-      const completionStream: any = await openai.chat.completions.create(
-        {
-          model,
-          messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
-          temperature,
-          stream: stream,
-        },
-        { 
-          signal // Pass the abort signal as part of the request options
-        }
-      );
-
-      // Process the stream and accumulate JSON
       try {
-        for await (const chunk of completionStream) {
-          // Check if abort signal was triggered during streaming
+        const completionStream: any = await openai.chat.completions.create(
+          {
+            model,
+            messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
+            temperature,
+            stream: stream,
+          },
+          { 
+            signal // Pass the abort signal as part of the request options
+          }
+        );
+
+        // Process the stream and accumulate JSON
+        try {
+          for await (const chunk of completionStream) {
+            // Check if abort signal was triggered during streaming
+            if (signal.aborted) {
+              console.log('Chat completion stream aborted by user');
+              return;
+            }
+            
+            const content = chunk.choices[0]?.delta?.content || '';
+            accumulatedResponse += content;
+
+            if(onStreaming){
+              onStreaming(completionId, accumulatedResponse);
+            }
+            yield {
+              type: 'text',
+              content: accumulatedResponse
+            };
+          }
+        } catch (error) {
+          // Check if error is due to abortion
           if (signal.aborted) {
-            console.log('Chat completion stream aborted by user');
+            console.log('Stream processing aborted by user');
             return;
           }
           
-          const content = chunk.choices[0]?.delta?.content || '';
-          accumulatedResponse += content;
-
-          if(onStreaming){
-            onStreaming(completionId, accumulatedResponse);
-          }
+          console.error('Error processing streaming response:', error);
           yield {
-            type: 'text',
-            content: accumulatedResponse
+            type: 'error',
+            content: `Error processing response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            error: error instanceof Error ? error : new Error('Unknown error processing response')
           };
+          return; // Exit generator on stream processing error
         }
       } catch (error) {
-        // Check if error is due to abortion
-        if (signal.aborted) {
-          console.log('Stream processing aborted by user');
-          return;
+        console.error('Error connecting to LLM API:', error);
+        let errorMessage = 'Failed to connect to the language model API';
+        
+        // Check for specific OpenAI API errors
+        if (error instanceof Error) {
+          // Handle common API errors
+          if (error.message.includes('404')) {
+            errorMessage = `Invalid model endpoint: ${baseURL} or model: ${model}`;
+          } else if (error.message.includes('401') || error.message.includes('403')) {
+            errorMessage = `Authentication error: Invalid API key`;
+          } else if (error.message.includes('429')) {
+            errorMessage = `Rate limit exceeded. Please try again later.`;
+          } else if (error.message.includes('timeout') || error.message.includes('ECONNREFUSED')) {
+            errorMessage = `Connection timeout. The model endpoint (${baseURL}) may be unavailable.`;
+          } else {
+            errorMessage = `API error: ${error.message}`;
+          }
         }
-        throw error; // Re-throw for other errors
+        
+        yield {
+          type: 'error',
+          content: errorMessage,
+          error: error instanceof Error ? error : new Error(errorMessage)
+        };
+        return; // Exit generator on API error
       }
 
       // Parse and validate the accumulated JSON
@@ -380,23 +416,40 @@ export async function* chatCompletion({
           }
 
           // Execute the tool call
-          const result = await onExecuteCode(
-            completionId,
-            scriptContent
-          );
+          try {
+            const result = await onExecuteCode(
+              completionId,
+              scriptContent
+            );
 
-          // Yield the tool call output
-          yield {
-            type: 'function_call_output',
-            content: result,
-            call_id: completionId
-          };
+            // Yield the tool call output
+            yield {
+              type: 'function_call_output',
+              content: result,
+              call_id: completionId
+            };
 
-          // Add tool response to messages
-          messages.push({
-            role: 'user',
-            content: `<observation>I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.</observation>`
-          });
+            // Add tool response to messages
+            messages.push({
+              role: 'user',
+              content: `<observation>I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.</observation>`
+            });
+          } catch (error) {
+            console.error('Error executing code:', error);
+            const errorMessage = `Error executing code: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            
+            yield {
+              type: 'error',
+              content: errorMessage,
+              error: error instanceof Error ? error : new Error(errorMessage)
+            };
+            
+            // Add error message to messages so the model can attempt recovery
+            messages.push({
+              role: 'user',
+              content: `<observation>Error executing the code: ${error instanceof Error ? error.message : 'Unknown error'}\nPlease try a different approach.</observation>`
+            });
+          }
         }
         else{
           // if no <thoughts> or <py-script> tag produced
@@ -419,15 +472,34 @@ export async function* chatCompletion({
           break;
         }
       } catch (error: unknown) {
-        console.error('Error parsing JSON response:', error);
+        console.error('Error parsing or processing response:', error);
+        let errorMessage = 'Failed to process the model response';
+        
         if (error instanceof Error) {
-          throw new Error(`Failed to parse LLM response as valid JSON: ${error.message}`);
+          errorMessage = `Error: ${error.message}`;
         }
-        throw new Error('Failed to parse LLM response as valid JSON');
+        
+        yield {
+          type: 'error',
+          content: errorMessage,
+          error: error instanceof Error ? error : new Error(errorMessage)
+        };
+        
+        // Try to add a message to recover if possible
+        messages.push({
+          role: 'user',
+          content: `<observation>Error in processing: ${errorMessage}. Please try again with a simpler approach.</observation>`
+        });
       }
     }
   } catch (err) {
     console.error('Error in structured chat completion:', err);
-    throw err;
+    const errorMessage = `Chat completion error: ${err instanceof Error ? err.message : 'Unknown error'}`;
+    
+    yield {
+      type: 'error',
+      content: errorMessage,
+      error: err instanceof Error ? err : new Error(errorMessage)
+    };
   }
 }

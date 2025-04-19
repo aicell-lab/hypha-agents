@@ -1,11 +1,10 @@
 import React, { useRef, useState, KeyboardEvent, useEffect } from 'react';
 import { SendIcon } from './icons/SendIcon';
 import { StopIcon } from './icons/StopIcon';
-import { ThebeStatus } from './ThebeStatus';
 import { ToolSelector } from './ToolSelector';
 import { Tool } from './ToolProvider';
-import { AgentSettingsPanel } from './AgentSettingsPanel';
-import { AgentSettings } from '../../utils/chatCompletion';
+import { RiRobot2Line } from 'react-icons/ri';
+import { FaCircle, FaSpinner, FaExclamationTriangle, FaCode } from 'react-icons/fa';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -14,10 +13,12 @@ interface ChatInputProps {
   placeholder?: string;
   isTyping?: boolean;
   isThebeReady?: boolean;
+  thebeStatus?: any;
   isProcessing?: boolean;
   onSelectTool?: (tool: Tool) => void;
-  agentSettings?: AgentSettings;
-  onSettingsChange?: (settings: AgentSettings) => void;
+  onShowEditAgent?: () => void;
+  canEditAgent?: boolean;
+  onShowThebeTerminal?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -27,10 +28,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   placeholder = "Type your message...",
   isTyping = false,
   isThebeReady = false,
+  thebeStatus = 'idle',
   isProcessing = false,
   onSelectTool,
-  agentSettings,
-  onSettingsChange,
+  onShowEditAgent,
+  canEditAgent = false,
+  onShowThebeTerminal,
 }) => {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -79,6 +82,39 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const getStatusIndicator = () => {
+    if (!isThebeReady) {
+      return {
+        color: 'text-gray-400',
+        icon: <FaSpinner className="w-4 h-4 animate-spin" />,
+        text: 'Initializing Kernel...'
+      };
+    }
+    switch (thebeStatus) {
+      case 'busy':
+        return {
+          color: 'text-yellow-500',
+          icon: <FaSpinner className="w-4 h-4 animate-spin" />,
+          text: 'Kernel Busy'
+        };
+      case 'error':
+        return {
+          color: 'text-red-500',
+          icon: <FaExclamationTriangle className="w-4 h-4" />,
+          text: 'Kernel Error'
+        };
+      case 'idle':
+      default:
+        return {
+          color: 'text-green-500',
+          icon: <FaCircle className="w-3 h-3" />,
+          text: 'Kernel Ready'
+        };
+    }
+  };
+
+  const { color: statusColor, icon: statusIcon, text: statusText } = getStatusIndicator();
+
   return (
     <div className="flex items-end gap-3 bg-white border rounded-lg p-2">
       <textarea
@@ -94,9 +130,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         style={{ height: '36px' }}
       />
       <div className="flex items-center gap-2">
-        <AgentSettingsPanel settings={agentSettings} onSettingsChange={onSettingsChange} className="mx-1" />
+        {onShowEditAgent && (
+          <button
+            onClick={onShowEditAgent}
+            disabled={!canEditAgent}
+            className="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Edit agent configuration"
+          >
+            <RiRobot2Line className="w-5 h-5" />
+          </button>
+        )}
         {onSelectTool && <ToolSelector onSelectTool={onSelectTool} className="mx-1" />}
-        <ThebeStatus />
+        
+        {onShowThebeTerminal && (
+          <button
+            onClick={onShowThebeTerminal}
+            className={`p-2 rounded-lg transition-colors ${statusColor} hover:bg-gray-100 flex items-center gap-1`}
+            title={statusText}
+            disabled={disabled}
+          >
+            {statusIcon}
+            <FaCode className="w-4 h-4 ml-1 opacity-70" />
+          </button>
+        )}
         
         {isProcessing ? (
           <button

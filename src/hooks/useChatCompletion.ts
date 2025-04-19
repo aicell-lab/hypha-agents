@@ -181,6 +181,32 @@ export function useChatCompletion({
       // Process the completion stream
       for await (const item of completion) {
         console.debug('[DEBUG] New Response Item:', item);
+        
+        // Handle error responses from chatCompletion
+        if (item.type === 'error') {
+          const errorMessage = item.content || 'Unknown error occurred';
+          console.error('[DEBUG] Error from chat completion service:', errorMessage);
+          
+          // Create an error message cell that replaces the thinking cell
+          cellManager.updateCellById(
+            thinkingCellId,
+            `❌ **Error**: ${errorMessage}`,
+            'markdown',
+            'assistant',
+            lastUserCellRef.current || undefined
+          );
+          
+          // Display error to user
+          setInitializationError(errorMessage);
+          showToast(`Error: ${errorMessage}`, 'error');
+          
+          // We don't want to delete the thinking cell in the finally block
+          // since we've just converted it to an error message
+          thinkingCellId = '';
+          
+          // Exit the loop since we've encountered an error
+          break;
+        }
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
