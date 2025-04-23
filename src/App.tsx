@@ -5,9 +5,7 @@ import Navbar from './components/Navbar';
 import ResourceGrid from './components/ResourceGrid';
 import ResourceDetails from './components/ResourceDetails';
 import About from './components/About';
-import Upload from './components/Upload';
 import MyArtifacts from './components/MyArtifacts';
-import Edit from './components/Edit';
 import './index.css'
 import './github-markdown.css'
 import AgentLab from './pages/AgentLab';
@@ -61,9 +59,7 @@ const AppContent: React.FC = () => {
               <Route path="/applications" element={<ResourceGrid type="application" />} />
               <Route path="/notebooks" element={<ResourceGrid type="notebook" />} />
               <Route path="/datasets" element={<ResourceGrid type="dataset" />} />
-              <Route path="/upload" element={<Upload />} />
               <Route path="/my-agents" element={<MyArtifacts />} />
-              <Route path="/edit/:artifactId" element={<Edit />} />
               <Route path="/collab-test" element={<CollabTest />} />
             </Routes>
           </main>

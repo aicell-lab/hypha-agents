@@ -8,10 +8,13 @@ import { useHyphaStore } from '../store/hyphaStore';
 import { CellManager, SavedState } from './CellManager';
 // Add styles for the active cell
 import '../styles/notebook.css';
-import { loadModelSettings } from '../components/chat/ModelSettingsPanel';
+import { loadModelSettings } from '../utils/modelSettings';
 import { CanvasPanel, HyphaCoreWindow } from '../components/notebook/CanvasPanel';
-import { ChatMessage, AgentSettings } from '../utils/chatCompletion';
+import { ChatMessage } from '../utils/chatCompletion';
 import { v4 as uuidv4 } from 'uuid';
+import ModelSettingsCanvasContent from '../components/notebook/ModelSettingsCanvasContent';
+import EditAgentCanvasContent, { EditAgentFormData } from '../components/notebook/EditAgentCanvasContent';
+import { updateUrlParams } from '../utils/urlParamUtils';
 
 
 // Import components
@@ -48,8 +51,6 @@ import { SITE_ID } from '../utils/env';
 import { InitialUrlParams } from '../hooks/useNotebookInitialization';
 
 // Import AgentConfigForm and ModelConfigForm as default exports
-import AgentConfigForm, { AgentFormData, DefaultAgentFormData } from '../components/shared/AgentConfigForm';
-import ModelConfigForm from '../components/shared/ModelConfigForm';
 import ThebeTerminalPanel from '../components/chat/ThebeStatus'; // Import the refactored component
 
 // Add CellRole enum values
@@ -91,163 +92,7 @@ interface Project extends BaseProject {
   manifest: ProjectManifest;
 }
 
-// Data structure for combined agent form data
-interface EditAgentFormData extends AgentFormData {
-  agentId?: string;
-}
-
-// Define a simple wrapper component for the canvas panel content
-interface EditAgentCanvasContentProps {
-  initialAgentData: Partial<EditAgentFormData>; // Use combined type
-  initialModelConfig: AgentSettings;
-  onSaveSettingsToNotebook: (data: EditAgentFormData, config: AgentSettings) => void;
-  onPublishAgent: (data: EditAgentFormData, config: AgentSettings, isUpdating: boolean) => Promise<string | null>;
-}
-
-const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({ 
-  initialAgentData,
-  initialModelConfig,
-  onSaveSettingsToNotebook,
-  onPublishAgent
-}) => {
-  // State for all form fields including ID and model config
-  const [agentId, setAgentId] = useState(initialAgentData.agentId || '');
-  const [isUpdatingExisting, setIsUpdatingExisting] = useState(!!initialAgentData.agentId);
-  const [agentData, setAgentData] = useState<AgentFormData>(() => ({ 
-    ...DefaultAgentFormData, 
-    name: initialAgentData.name || '',
-    description: initialAgentData.description || '',
-    version: initialAgentData.version || '1.0.0',
-    license: initialAgentData.license || 'CC-BY-4.0',
-    welcomeMessage: initialAgentData.welcomeMessage || 'Hi, how can I help you today?',
-    initialPrompt: initialAgentData.initialPrompt || ''
-  }));
-  const [modelConfig, setModelConfig] = useState<AgentSettings>(initialModelConfig);
-
-  // Update local state when initial props change (e.g., notebook metadata updates)
-  useEffect(() => {
-    setAgentId(initialAgentData.agentId || '');
-    setIsUpdatingExisting(!!initialAgentData.agentId);
-    setAgentData({
-      ...DefaultAgentFormData,
-      name: initialAgentData.name || '',
-      description: initialAgentData.description || '',
-      version: initialAgentData.version || '1.0.0',
-      license: initialAgentData.license || 'CC-BY-4.0',
-      welcomeMessage: initialAgentData.welcomeMessage || 'Hi, how can I help you today?',
-      initialPrompt: initialAgentData.initialPrompt || ''
-    });
-    setModelConfig(initialModelConfig);
-  }, [initialAgentData, initialModelConfig]);
-
-  const handleAgentFormChange = (updatedData: AgentFormData) => {
-    setAgentData(updatedData);
-  };
-
-  const handleModelFormChange = (updatedConfig: AgentSettings) => {
-    setModelConfig(updatedConfig);
-  };
-
-  const handleCreateNew = () => {
-    setAgentId('');
-    setIsUpdatingExisting(false);
-  };
-
-  const handleSave = () => {
-    const combinedData: EditAgentFormData = {
-      ...agentData,
-      agentId: agentId.trim() || undefined // Only include ID if it has value
-    };
-    onSaveSettingsToNotebook(combinedData, modelConfig);
-  };
-
-  const handlePublish = async () => {
-    const combinedData: EditAgentFormData = {
-      ...agentData,
-      agentId: agentId.trim() || undefined // Only include ID if it has value
-    };
-    const newAgentId = await onPublishAgent(combinedData, modelConfig, isUpdatingExisting);
-    
-    if (newAgentId) {
-      setAgentId(newAgentId);
-      setIsUpdatingExisting(true);
-    }
-  };
-
-  return (
-    // Use flex layout to make buttons stick to bottom
-    <div className="flex flex-col h-full">
-      {/* Scrollable form content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        <h2 className="text-xl font-semibold mb-4">Edit Agent Configuration</h2>
-        
-        {/* Agent ID Field (similar to PublishAgentDialog) */}
-        <div>
-          <label htmlFor="agent-id" className="block text-sm font-medium text-gray-700 mb-1">
-            Agent ID <span className="text-gray-400 font-normal">(Optional - Leave empty to publish as new agent)</span>
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              id="agent-id"
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter existing agent ID to update"
-              disabled={isUpdatingExisting} // Disable if updating
-            />
-            {isUpdatingExisting && (
-              <button
-                onClick={handleCreateNew}
-                className="px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex-shrink-0"
-              >
-                Publish New
-              </button>
-            )}
-          </div>
-          {isUpdatingExisting && (
-            <p className="mt-1 text-xs text-green-600">
-              Publishing will update Agent ID: {agentId}
-            </p>
-          )}
-        </div>
-
-        {/* Existing AgentConfigForm */}
-        <AgentConfigForm 
-          formData={agentData}
-          onFormChange={handleAgentFormChange}
-          showModelConfig={false} 
-        />
-        {/* Existing ModelConfigForm */}
-        <ModelConfigForm 
-          settings={modelConfig}
-          onSettingsChange={handleModelFormChange}
-        />
-      </div>
-
-      {/* Fixed bottom button area */}
-      <div className="flex-shrink-0 border-t border-gray-200 bg-white p-4 flex justify-end gap-3 sticky bottom-0">
-        <button
-          onClick={handleSave}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          Save Settings to Notebook
-        </button>
-        <button
-          onClick={handlePublish}
-          disabled={!agentData.name.trim()} // Example disable condition
-          className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-            agentData.name.trim() 
-              ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' 
-              : 'bg-gray-400 cursor-not-allowed'
-          }`}
-        >
-          {isUpdatingExisting ? 'Update & Publish Agent' : 'Publish New Agent'}
-        </button>
-      </div>
-    </div>
-  );
-};
+// We've moved EditAgentCanvasContent to its own file
 
 const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
@@ -294,13 +139,11 @@ const NotebookPage: React.FC = () => {
   const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
   const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
-  const lastCanvasPanelWidthRef = useRef<number>(600); // Add ref to store last width
-
   // Initialize the cell manager
   const cellManager = useRef<CellManager | null>(null);
 
-  // Simplified sidebar state
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Simplified sidebar state - open by default on welcome screen
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
@@ -445,6 +288,9 @@ const NotebookPage: React.FC = () => {
       if (notebookData && typeof notebookData === 'object') {
         const loadedCells = notebookData.cells || [];
 
+        // We no longer load model settings from notebook metadata
+        // Model settings are stored in localStorage
+
         setNotebookMetadata(prev => ({
           ...defaultNotebookMetadata,
           ...(notebookData.metadata || {}),
@@ -509,6 +355,7 @@ const NotebookPage: React.FC = () => {
     setCells,
     setExecutionCounter,
     setSelectedProject,
+    setAgentSettings,
   ]);
 
   const handleRestartKernel = useCallback(async () => {
@@ -527,7 +374,7 @@ const NotebookPage: React.FC = () => {
       await restartKernel();
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
-      setupCompletedRef.current = false; 
+      setupCompletedRef.current = false;
       showToast('Kernel restarted successfully', 'success');
     } catch (error) {
       console.error('Failed to restart kernel:', error);
@@ -594,11 +441,53 @@ const NotebookPage: React.FC = () => {
       // Get template from manifest
       const template = agent.manifest.chat_template || {};
 
-
       // Generate a new filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filePath = `${agent.manifest.name}_${timestamp}.ipynb`;
       const resolvedProjectId = projectId || IN_BROWSER_PROJECT.id;
+
+      // Prepare cells array
+      let cells = [];
+
+      // If template has cells, use them
+      if (template.cells && template.cells.length > 0) {
+        console.log('[AgentLab] Using cells from agent chat template');
+        cells = template.cells;
+      }
+      // Otherwise, create a system cell with the agent's startup script
+      else if (agent.manifest.startup_script) {
+        console.log('[AgentLab] Creating system cell with agent startup script');
+        const systemCellContent = agent.manifest.startup_script;
+        cells.push({
+          id: uuidv4(),
+          type: 'code',
+          content: systemCellContent,
+          executionState: 'idle',
+          metadata: {
+            trusted: true,
+            role: 'system'
+          },
+          executionCount: undefined,
+          output: []
+        });
+
+        // Add a welcome message cell if available
+        if (agent.manifest.welcomeMessage) {
+          console.log('[AgentLab] Adding welcome message cell');
+          cells.push({
+            id: uuidv4(),
+            type: 'markdown',
+            content: agent.manifest.welcomeMessage,
+            executionState: 'idle',
+            metadata: {
+              trusted: true,
+              role: 'assistant'
+            },
+            executionCount: undefined,
+            output: []
+          });
+        }
+      }
 
       // Create notebook data from template
       const notebookData: NotebookData = {
@@ -606,23 +495,30 @@ const NotebookPage: React.FC = () => {
         nbformat_minor: 5,
         metadata: {
           ...defaultNotebookMetadata,
-          ...(template.metadata || {}),
+          // Only include non-model settings from template metadata
+          ...(template.metadata ? {
+            title: template.metadata.title,
+            description: template.metadata.description,
+            // Exclude modelSettings
+          } : {}),
           title: agent.manifest.name || 'Agent Chat',
           modified: new Date().toISOString(),
           created: new Date().toISOString(),
           filePath: filePath,
           projectId: resolvedProjectId,
-          // Use the model configuration from the agent manifest if available
-          modelSettings: agent.manifest.modelConfig || undefined,
           agentArtifact: {
             id: agent.id,
             version: agent.version,
             name: agent.manifest.name,
             description: agent.manifest.description,
-            manifest: agent.manifest
+            manifest: {
+              ...agent.manifest,
+              // Don't include modelConfig in the notebook metadata
+              modelConfig: undefined
+            }
           }
         },
-        cells: template.cells || []
+        cells: cells
       };
 
       // Save the notebook
@@ -678,7 +574,20 @@ const NotebookPage: React.FC = () => {
     if (initRefObject.current && initialUrlParams) {
       setParsedUrlParams(initialUrlParams);
       // Only hide welcome screen if we have a filePath parameter
-      setShowWelcomeScreen(!initialUrlParams.filePath);
+      // Note: We don't hide welcome screen for edit parameter - that's handled by the edit function
+      const shouldShowWelcome = !initialUrlParams.filePath;
+      setShowWelcomeScreen(shouldShowWelcome);
+
+      // Open sidebar by default on welcome screen
+      if (shouldShowWelcome) {
+        setIsSidebarOpen(true);
+      }
+
+      // If we have an edit parameter, we'll handle it in the welcome screen
+      // This ensures the edit button is visible and clickable
+      if (initialUrlParams.edit) {
+        console.log('[AgentLab] Edit parameter detected:', initialUrlParams.edit);
+      }
     }
   }, [initRefObject.current, initialUrlParams]); // Depend on the ref's current value change
 
@@ -796,6 +705,9 @@ const NotebookPage: React.FC = () => {
         const content = e.target?.result as string;
         const loadedNotebookData: NotebookData = JSON.parse(content);
         const newFilePath = `${file.name}`;
+        // We no longer load model settings from notebook metadata
+        // Model settings are stored in localStorage
+
         const metadata: NotebookMetadata = {
           ...defaultNotebookMetadata,
           ...(loadedNotebookData.metadata || {}),
@@ -845,7 +757,7 @@ const NotebookPage: React.FC = () => {
       }
     };
     reader.readAsText(file);
-  }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, handleResetKernelState]);
+  }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, handleResetKernelState, setAgentSettings]);
 
   // --- Cell Action Handlers (Passed down to NotebookContent) ---
   const handleActiveCellChange = useCallback((id: string) => cellManager.current?.setActiveCell(id), []);
@@ -930,7 +842,7 @@ const NotebookPage: React.FC = () => {
   useUrlSync({
     notebookMetadata,
     // Use initRefObject.current directly
-    hasInitialized: !showWelcomeScreen && initRefObject.current, 
+    hasInitialized: !showWelcomeScreen && initRefObject.current,
   });
 
   // Run system cells on startup (Adjusted)
@@ -940,7 +852,7 @@ const NotebookPage: React.FC = () => {
       if (showWelcomeScreen || !isReady || !initRefObject.current || systemCellsExecutedRef.current) return;
       const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
       if (!systemCell) {
-        systemCellsExecutedRef.current = true; 
+        systemCellsExecutedRef.current = true;
         return;
       }
       const systemCellId = systemCell.id;
@@ -977,13 +889,12 @@ const NotebookPage: React.FC = () => {
     }
   }, [isReady, setIsAIReady]); // Dependency array ensures this runs when isReady changes
 
-  // Update agentSettings when notebookMetadata.modelSettings changes
+  // Load agent settings from localStorage on component mount
   useEffect(() => {
-    if (notebookMetadata?.modelSettings) {
-      console.log('[AgentLab] Updating agent settings from notebook metadata.', notebookMetadata.modelSettings);
-      setAgentSettings(notebookMetadata.modelSettings as AgentSettings);
-    }
-  }, [notebookMetadata]);
+    const settings = loadModelSettings();
+    console.log('[AgentLab] Loading agent settings from localStorage.', settings);
+    setAgentSettings(settings);
+  }, []);
 
   // Calculate the filename from the filePath in metadata
   const notebookFileName = useMemo(() => {
@@ -1030,7 +941,7 @@ const NotebookPage: React.FC = () => {
   // Add keyboard shortcut for saving notebook
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (showWelcomeScreen) return; 
+      if (showWelcomeScreen) return;
       if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault();
         console.log('Ctrl/Cmd+S detected, attempting to save notebook...');
@@ -1094,7 +1005,7 @@ const NotebookPage: React.FC = () => {
 
     setupService();
   }, [
-      showWelcomeScreen, isReady, initRefObject.current, notebookMetadata.filePath, isLoggedIn, server, 
+      showWelcomeScreen, isReady, initRefObject.current, notebookMetadata.filePath, isLoggedIn, server,
       agentSettings, executeCode, handleAddWindow
   ]);
 
@@ -1170,7 +1081,7 @@ const NotebookPage: React.FC = () => {
       // Save to in-browser storage
       await saveInBrowserFile(filePath, notebookData);
       setSelectedProject(getInBrowserProject());
-      
+
       // Load the newly created notebook
       await loadNotebookContent(IN_BROWSER_PROJECT.id, filePath);
       setShowWelcomeScreen(false);
@@ -1243,7 +1154,7 @@ const NotebookPage: React.FC = () => {
       // Save to in-browser storage
       await saveInBrowserFile(filePath, notebookData);
       setSelectedProject(getInBrowserProject());
-      
+
       // Load the newly created notebook
       await loadNotebookContent(IN_BROWSER_PROJECT.id, filePath);
       setShowWelcomeScreen(false);
@@ -1256,7 +1167,7 @@ const NotebookPage: React.FC = () => {
   }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent]);
 
   // --- Callback to save agent settings from canvas to notebook metadata ---
-  const handleSaveAgentSettingsToNotebook = useCallback((data: EditAgentFormData, config: AgentSettings) => {
+  const handleSaveAgentSettingsToNotebook = useCallback((data: EditAgentFormData) => {
     const agentArtifactMeta = notebookMetadata.agentArtifact ? {
       ...notebookMetadata.agentArtifact,
       id: data.agentId || notebookMetadata.agentArtifact.id || '', // Preserve existing ID if not provided/cleared
@@ -1270,8 +1181,7 @@ const NotebookPage: React.FC = () => {
         version: data.version,
         license: data.license,
         welcomeMessage: data.welcomeMessage,
-        startup_script: data.initialPrompt, 
-        modelConfig: config, // Save model config here
+        startup_script: data.initialPrompt,
       }
     } : {
       // Create a minimal structure if no artifact existed before
@@ -1286,14 +1196,15 @@ const NotebookPage: React.FC = () => {
         license: data.license,
         welcomeMessage: data.welcomeMessage,
         startup_script: data.initialPrompt,
-        modelConfig: config,
       }
     };
 
+    // Save model settings to notebook metadata
+
+    // Update notebook metadata with agent config (but not model settings)
     setNotebookMetadata(prev => ({
       ...prev,
       title: data.name, // Update notebook title too
-      modelSettings: config, // Save model settings
       agentArtifact: agentArtifactMeta,
       modified: new Date().toISOString()
     }));
@@ -1305,12 +1216,12 @@ const NotebookPage: React.FC = () => {
   }, [notebookMetadata, setNotebookMetadata, saveNotebook]);
 
   // --- Callback to publish agent from canvas ---
-  const handlePublishAgentFromCanvas = useCallback(async (data: EditAgentFormData, config: AgentSettings, isUpdating: boolean): Promise<string | null> => {
+  const handlePublishAgentFromCanvas = useCallback(async (data: EditAgentFormData, isUpdating: boolean): Promise<string | null> => {
     if (!artifactManager || !isLoggedIn) {
       showToast('You need to be logged in to publish an agent', 'error');
       return null; // Indicate failure
     }
-    
+
     const toastId = 'publishing-agent-canvas';
     showToast('Publishing agent...', 'loading', { id: toastId });
 
@@ -1330,7 +1241,7 @@ const NotebookPage: React.FC = () => {
         created_at: new Date().toISOString(),
         startup_script: systemCellContent,
         welcomeMessage: data.welcomeMessage,
-        modelConfig: config,
+        modelConfig: agentSettings, // Include model settings in manifest
         // Add chat template to preserve notebook state
         chat_template: {
           metadata: notebookMetadata,
@@ -1345,7 +1256,7 @@ const NotebookPage: React.FC = () => {
       });
 
       let artifact;
-      
+
       // Use agentId from the form data to determine update vs create
       if (isUpdating && data.agentId) {
         // Update existing agent
@@ -1373,7 +1284,7 @@ const NotebookPage: React.FC = () => {
         dismissToast(toastId);
         showToast('Agent published successfully!', 'success');
       }
-      
+
       // Update notebook metadata with the definitive published artifact info
       const finalAgentArtifactMeta = {
         id: artifact.id,
@@ -1394,7 +1305,7 @@ const NotebookPage: React.FC = () => {
       await saveNotebook();
 
       return artifact.id; // Return the new/updated ID on success
-      
+
     } catch (error) {
       console.error('Error publishing agent from canvas:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1402,14 +1313,43 @@ const NotebookPage: React.FC = () => {
       return null; // Indicate failure
     }
   }, [
-    artifactManager, isLoggedIn, systemCell, notebookMetadata, saveNotebook, 
-    setNotebookMetadata, cellManager, showToast, dismissToast, SITE_ID
+    artifactManager, isLoggedIn, systemCell, notebookMetadata, saveNotebook,
+    setNotebookMetadata, cellManager, showToast, dismissToast, SITE_ID, agentSettings
   ]);
+
+  // --- Function to show Model Settings in Canvas Panel ---
+  const handleShowModelSettingsInCanvas = useCallback(() => {
+    const windowId = 'model-settings';
+
+    // Check if window already exists
+    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+
+    if (windowExists) {
+      // Just activate the existing tab
+      setActiveCanvasTab(windowId);
+      setShowCanvasPanel(true);
+      return;
+    }
+
+    // Create a new window
+    const newWindow: HyphaCoreWindow = {
+      id: windowId,
+      name: 'Model Settings',
+      component: (
+        <ModelSettingsCanvasContent
+          onSettingsChange={setAgentSettings}
+        />
+      )
+    };
+
+    setHyphaCoreWindows(prev => [...prev, newWindow]);
+    setActiveCanvasTab(windowId);
+    setShowCanvasPanel(true);
+  }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel, setAgentSettings]);
 
   // --- Function to show Edit Agent in Canvas Panel ---
   const handleShowEditAgentInCanvas = useCallback(() => {
     const agentArtifact = notebookMetadata.agentArtifact;
-    const currentModelSettings = notebookMetadata.modelSettings || agentSettings; // Use metadata first, then page state
 
     // Prepare initial agent data, including the existing ID if available
     const initialAgentData: Partial<EditAgentFormData> = {
@@ -1419,24 +1359,41 @@ const NotebookPage: React.FC = () => {
       version: agentArtifact?.version || '1.0.0',
       license: agentArtifact?.manifest?.license || 'CC-BY-4.0',
       welcomeMessage: agentArtifact?.manifest?.welcomeMessage || 'Hi, how can I help you today?',
-      initialPrompt: agentArtifact?.manifest?.startup_script || '' 
+      initialPrompt: agentArtifact?.manifest?.startup_script || ''
     };
 
-    const agentIdForWindow = agentArtifact?.id || 'new-agent'; // Use a consistent ID for the window
-    const windowId = `edit-agent-${agentIdForWindow}`;
+    // Use a consistent window ID for all agent editing
+    const windowId = 'edit-agent-config';
 
     // Check if window already exists
     const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
 
-    if (!windowExists) {
+    // If window exists, update its component with the latest data
+    if (windowExists) {
+      setHyphaCoreWindows(prev => prev.map(win => {
+        if (win.id === windowId) {
+          return {
+            ...win,
+            name: `Edit: ${initialAgentData.name || 'Agent'}`,
+            component: (
+              <EditAgentCanvasContent
+                initialAgentData={initialAgentData}
+                onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
+                onPublishAgent={handlePublishAgentFromCanvas}
+              />
+            )
+          };
+        }
+        return win;
+      }));
+    } else {
+      // Create a new window if it doesn't exist
       const newWindow: HyphaCoreWindow = {
         id: windowId,
-        name: `Edit: ${initialAgentData.name || 'Agent'}`, 
+        name: `Edit: ${initialAgentData.name || 'Agent'}`,
         component: (
-          <EditAgentCanvasContent 
+          <EditAgentCanvasContent
             initialAgentData={initialAgentData}
-            initialModelConfig={currentModelSettings}
-            // Pass the correct handlers now
             onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
             onPublishAgent={handlePublishAgentFromCanvas}
           />
@@ -1450,7 +1407,120 @@ const NotebookPage: React.FC = () => {
     setActiveCanvasTab(windowId);
     setShowCanvasPanel(true);
 
-  }, [notebookMetadata, agentSettings, hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel, handleSaveAgentSettingsToNotebook, handlePublishAgentFromCanvas]); // Add new handlers to dependency array
+  }, [notebookMetadata, hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel, handleSaveAgentSettingsToNotebook, handlePublishAgentFromCanvas]); // Removed agentSettings from dependencies
+
+  // Function to handle editing an agent from the welcome screen
+  const handleEditAgentFromWelcomeScreen = useCallback(async (workspace: string, agentId: string) => {
+    if (!artifactManager || !isLoggedIn) {
+      showToast('You need to be logged in to edit an agent', 'error');
+      return;
+    }
+
+    const loadingToastId = 'editing-agent';
+    showToast('Loading agent for editing...', 'loading', { id: loadingToastId });
+
+    try {
+      // Get the agent artifact
+      const agent = await artifactManager.read({ artifact_id: agentId, _rkwargs: true });
+      if (!agent || !agent.manifest) {
+        throw new Error('Agent not found or invalid manifest');
+      }
+
+      // Create a fixed filename for the notebook
+      const filePath = `chat-${agentId.split('/').pop()}.ipynb`;
+      const resolvedProjectId = workspace || IN_BROWSER_PROJECT.id;
+
+      // Get template from manifest or create minimal structure
+      const template = agent.manifest.chat_template || {};
+
+      // Create notebook data from template or create a new one
+      const notebookData: NotebookData = {
+        nbformat: 4,
+        nbformat_minor: 5,
+        metadata: {
+          ...defaultNotebookMetadata,
+          // Only include non-model settings from template metadata
+          ...(template.metadata ? {
+            title: template.metadata.title,
+            description: template.metadata.description,
+            // Exclude modelSettings
+          } : {}),
+          title: agent.manifest.name || 'Agent Chat',
+          modified: new Date().toISOString(),
+          created: new Date().toISOString(),
+          filePath: filePath,
+          projectId: resolvedProjectId,
+          agentArtifact: {
+            id: agent.id,
+            version: agent.version,
+            name: agent.manifest.name,
+            description: agent.manifest.description,
+            manifest: {
+              ...agent.manifest,
+              // Don't include modelConfig in the notebook metadata
+              modelConfig: undefined
+            }
+          }
+        },
+        cells: template.cells || []
+      };
+
+      // If no cells in template, create a system cell with the agent's startup script
+      if (notebookData.cells.length === 0 && agent.manifest.startup_script) {
+        const systemCellContent = agent.manifest.startup_script;
+        notebookData.cells.push({
+          id: uuidv4(),
+          type: 'code',
+          content: systemCellContent,
+          executionState: 'idle',
+          metadata: {
+            trusted: true,
+            role: 'system'
+          },
+          executionCount: undefined,
+          output: []
+        });
+      }
+
+      // Save the notebook
+      if (resolvedProjectId === IN_BROWSER_PROJECT.id) {
+        await saveInBrowserFile(filePath, notebookData);
+        setSelectedProject(getInBrowserProject());
+      } else {
+        const blob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
+        const file = new File([blob], filePath.split('/').pop() || 'notebook.ipynb', { type: 'application/json' });
+        await uploadFile(resolvedProjectId, file);
+      }
+
+      // Load the newly created notebook
+      await loadNotebookContent(resolvedProjectId, filePath);
+      showToast('Agent loaded for editing', 'success');
+      dismissToast(loadingToastId);
+
+      // After the notebook is loaded, automatically show the edit agent config window
+      // We need to wait a bit to ensure the notebook is fully loaded
+      setTimeout(() => {
+        handleShowEditAgentInCanvas();
+      }, 500);
+
+    } catch (error) {
+      console.error('Error editing agent:', error);
+      showToast(`Failed to edit agent: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } finally {
+      dismissToast(loadingToastId);
+    }
+  }, [
+    artifactManager,
+    isLoggedIn,
+    saveInBrowserFile,
+    uploadFile,
+    loadNotebookContent,
+    setSelectedProject,
+    getInBrowserProject,
+    handleShowEditAgentInCanvas,
+    showToast,
+    dismissToast
+  ]);
 
   // --- Callback to show Thebe Terminal in Canvas Panel ---
   const handleShowThebeTerminalInCanvas = useCallback(() => {
@@ -1474,8 +1544,8 @@ const NotebookPage: React.FC = () => {
   }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]); // Dependencies
 
 
-  // --- Render Logic --- 
-  if (!initRefObject.current) { 
+  // --- Render Logic ---
+  if (!initRefObject.current) {
     return <div className="flex justify-center items-center h-screen">Initializing...</div>;
   }
 
@@ -1506,27 +1576,29 @@ const NotebookPage: React.FC = () => {
         onShowEditAgent={handleShowEditAgentInCanvas}
         canEditAgent={!showWelcomeScreen}
       />
-      {showWelcomeScreen ? (
-        <WelcomeScreen 
-          urlParams={parsedUrlParams}
-          isLoggedIn={isLoggedIn}
-          onStartNewChat={handleCreateNewNotebook}
-          onStartFromAgent={createNotebookFromAgentTemplate}
-          onCreateAgentTemplate={handleCreateAgentTemplate}
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+          onLoadNotebook={handleLoadNotebook}
         />
-      ) : (
-        <div className="flex flex-1 overflow-hidden">
-          <Sidebar
-            isOpen={isSidebarOpen}
-            onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-            onLoadNotebook={handleLoadNotebook}
-          />
 
-          <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden transition-all duration-300">
-            <div className="flex-1 flex overflow-hidden">
-              <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-y-auto overflow-x-hidden">
-                  <div className="max-w-5xl mx-auto px-0 sm:px-4 py-1 pb-48">
+        <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden transition-all duration-300">
+          {showWelcomeScreen ? (
+            <WelcomeScreen
+              urlParams={parsedUrlParams}
+              isLoggedIn={isLoggedIn}
+              onStartNewChat={handleCreateNewNotebook}
+              onStartFromAgent={createNotebookFromAgentTemplate}
+              onCreateAgentTemplate={handleCreateAgentTemplate}
+              onEditAgent={handleEditAgentFromWelcomeScreen}
+            />
+          ) : (
+            <>
+              <div className="flex-1 flex overflow-hidden">
+                <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+                  <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                    <div className="max-w-5xl mx-auto px-0 sm:px-4 py-1 pb-48">
                     <NotebookContent
                       cells={cells}
                       activeCellId={activeCellId || ''}
@@ -1564,6 +1636,7 @@ const NotebookPage: React.FC = () => {
                     onShowThebeTerminal={handleShowThebeTerminalInCanvas}
                     onShowEditAgent={handleShowEditAgentInCanvas}
                     canEditAgent={!showWelcomeScreen}
+                    onModelSettingsChange={handleShowModelSettingsInCanvas}
                   />
                 </div>
               </div>
@@ -1578,15 +1651,16 @@ const NotebookPage: React.FC = () => {
                 onTabClose={handleTabClose}
                 defaultWidth={600}
               />
-            </div>
+              </div>
 
-            <KeyboardShortcutsDialog
-              isOpen={isShortcutsDialogOpen}
-              onClose={() => setIsShortcutsDialogOpen(false)}
-            />
-          </div>
+              <KeyboardShortcutsDialog
+                isOpen={isShortcutsDialogOpen}
+                onClose={() => setIsShortcutsDialogOpen(false)}
+              />
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };
@@ -1602,4 +1676,4 @@ const AgentLab: React.FC = () => {
   );
 };
 
-export default AgentLab; 
+export default AgentLab;

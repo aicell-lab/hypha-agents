@@ -14,6 +14,13 @@ export interface ChatMessage {
   }[];
 }
 
+export interface AgentSettings {
+  baseURL: string;
+  apiKey: string;
+  model: string;
+  temperature: number;
+}
+
 
 function generateId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -34,12 +41,6 @@ export interface ChatCompletionOptions {
   abortController?: AbortController; // Add abortController to options
 }
 
-export interface AgentSettings {
-  baseURL: string;
-  apiKey: string;
-  model: string;
-  temperature: number;
-}
 const RESPONSE_INSTRUCTIONS = `
 You are an expert assistant capable of solving tasks by writing and executing Python code.
 You will be given a task and must plan and execute Python code snippets to achieve the goal.
@@ -75,8 +76,12 @@ Follow this iterative cycle meticulously:
     \`\`\`
     Now continue with the next step.</observation>
 
-4.  **Final Response:** Once the task is fully completed based on your reasoning and observations, provide the final answer in <finalResponse> tags.
-    - **Stop Condition:** Issue <finalResponse> AS SOON AS the user's request is fulfilled. Do not add extra steps.
+4.  **Final Response:** Use <finalResponse> tags to conclude the current round of conversation and return control to the user. This should be used when:
+    - The task is fully completed based on your reasoning and observations
+    - You need more input from the user to proceed further
+    - You've reached a logical stopping point in the conversation
+    - You want to provide an interim result or update to the user
+
     - **Code and output Preservation:** If specific code cells (<py-script>) are vital context for the final answer, preserve them using the \`commit="id1,id2,..."\` attribute.
     Example:
     <thoughts>Task complete, area calculated</thoughts>
@@ -96,7 +101,7 @@ KEY RULES TO FOLLOW:
 - No Assumptions: Don't assume packages are installed; install them if needed.
 - Clean Code: Write clear, simple Python code.
 - Be Precise: Execute the user's request exactly. Don't add unasked-for functionality.
-- Conclude Promptly: Use <finalResponse> immediately when the task is done.
+- Return to User: Use <finalResponse> when you need to conclude the current round of conversation and return control to the user. This includes when the task is complete, when you need more information, or when you've reached a logical stopping point.
 - Don't Give Up: If you encounter an error, analyze the observation and try a different approach in your next thought/code cycle.
 
 RUNTIME ENVIRONMENT:
@@ -153,7 +158,7 @@ data_url = f"data:image/png;base64,{base64_encoded}"
 # await api.inspectImages(images=[{'url': data_url}], query='find the bounding box of the image', outputSchema={...})
 
 # Print the data URL (or parts of it) if needed for observation
-print(f"Generated data URL (truncated): {data_url[:50]}...") 
+print(f"Generated data URL (truncated): {data_url[:50]}...")
 print("Image encoded successfully.")
 
 </py-script>
@@ -183,7 +188,7 @@ function extractFinalResponse(script: string): FinalResponseResult | null {
   // Extract properties from attributes if they exist
   const properties: Record<string, string> = {};
   const [, attrs, content] = match;
-  
+
   if (attrs) {
     // Match all key="value" or key='value' pairs
     const propRegex = /(\w+)=["']([^"']*)["']/g;
@@ -239,7 +244,7 @@ export async function* chatCompletion({
     // Create a new AbortController if one wasn't provided
     const controller = abortController || new AbortController();
     const { signal } = controller;
-    
+
     systemPrompt = (systemPrompt || '') + RESPONSE_INSTRUCTIONS;
     const openai = new OpenAI({
       baseURL,
@@ -248,16 +253,16 @@ export async function* chatCompletion({
     });
 
     let loopCount = 0;
-    
+
     while (loopCount < maxSteps) {
       // Check if abort signal was triggered
       if (signal.aborted) {
         console.log('Chat completion aborted by user');
         return;
       }
-      
+
       loopCount++;
-      const fullMessages = systemPrompt 
+      const fullMessages = systemPrompt
         ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
         : messages;
       const completionId = generateId();
@@ -279,7 +284,7 @@ export async function* chatCompletion({
             temperature,
             stream: stream,
           },
-          { 
+          {
             signal // Pass the abort signal as part of the request options
           }
         );
@@ -292,7 +297,7 @@ export async function* chatCompletion({
               console.log('Chat completion stream aborted by user');
               return;
             }
-            
+
             const content = chunk.choices[0]?.delta?.content || '';
             accumulatedResponse += content;
 
@@ -310,7 +315,7 @@ export async function* chatCompletion({
             console.log('Stream processing aborted by user');
             return;
           }
-          
+
           console.error('Error processing streaming response:', error);
           yield {
             type: 'error',
@@ -322,7 +327,7 @@ export async function* chatCompletion({
       } catch (error) {
         console.error('Error connecting to LLM API:', error);
         let errorMessage = 'Failed to connect to the language model API';
-        
+
         // Check for specific OpenAI API errors
         if (error instanceof Error) {
           // Handle common API errors
@@ -338,7 +343,7 @@ export async function* chatCompletion({
             errorMessage = `API error: ${error.message}`;
           }
         }
-        
+
         yield {
           type: 'error',
           content: errorMessage,
@@ -354,32 +359,32 @@ export async function* chatCompletion({
           console.log('Chat completion parsing aborted by user');
           return;
         }
-       
+
         // Extract thoughts for logging
         const thoughts = extractThoughts(accumulatedResponse);
         if (thoughts) {
           console.log('Thoughts:', thoughts);
         }
 
-        // Check if this is a final response - if so, we should stop the loop
+        // Check if this is a final response - if so, we should stop the loop and return control to the user
         const finalResponse = extractFinalResponse(accumulatedResponse);
         if (finalResponse) {
           if(onMessage){
               // Extract commit IDs from properties and pass them as an array
-              const commitIds = finalResponse.properties.commit ? 
-                finalResponse.properties.commit.split(',').map(id => id.trim()) : 
+              const commitIds = finalResponse.properties.commit ?
+                finalResponse.properties.commit.split(',').map(id => id.trim()) :
                 [];
-              
+
               onMessage(completionId, finalResponse.content, commitIds);
           }
           yield {
             type: 'text',
             content: finalResponse.content
           };
-          // Exit the loop since we have a final response
+          // Exit the loop since we have a final response that concludes this round of conversation
           return;
         }
-        
+
         // Handle script execution
         if(!onExecuteCode){
           throw new Error('onExecuteCode is not defined');
@@ -394,7 +399,7 @@ export async function* chatCompletion({
             console.log('Chat completion tool execution aborted by user');
             return;
           }
-          
+
           yield {
             type: 'function_call',
             name: 'runCode',
@@ -437,13 +442,13 @@ export async function* chatCompletion({
           } catch (error) {
             console.error('Error executing code:', error);
             const errorMessage = `Error executing code: ${error instanceof Error ? error.message : 'Unknown error'}`;
-            
+
             yield {
               type: 'error',
               content: errorMessage,
               error: error instanceof Error ? error : new Error(errorMessage)
             };
-            
+
             // Add error message to messages so the model can attempt recovery
             messages.push({
               role: 'user',
@@ -463,28 +468,28 @@ export async function* chatCompletion({
         if (loopCount >= maxSteps) {
           console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
           if(onMessage){
-            onMessage(completionId, `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.</finalResponse>`, []);
+            onMessage(completionId, `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. I'm returning control to you now. Please try breaking your request into smaller steps or provide additional guidance.</finalResponse>`, []);
           }
           yield {
             type: 'text',
-            content: `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. Please try breaking your request into smaller steps.</finalResponse>`
+            content: `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. I'm returning control to you now. Please try breaking your request into smaller steps or provide additional guidance.</finalResponse>`
           };
           break;
         }
       } catch (error: unknown) {
         console.error('Error parsing or processing response:', error);
         let errorMessage = 'Failed to process the model response';
-        
+
         if (error instanceof Error) {
           errorMessage = `Error: ${error.message}`;
         }
-        
+
         yield {
           type: 'error',
           content: errorMessage,
           error: error instanceof Error ? error : new Error(errorMessage)
         };
-        
+
         // Try to add a message to recover if possible
         messages.push({
           role: 'user',
@@ -495,7 +500,7 @@ export async function* chatCompletion({
   } catch (err) {
     console.error('Error in structured chat completion:', err);
     const errorMessage = `Chat completion error: ${err instanceof Error ? err.message : 'Unknown error'}`;
-    
+
     yield {
       type: 'error',
       content: errorMessage,

@@ -11,26 +11,29 @@ import AgentConfigDialog, { AgentConfigData } from './AgentConfigDialog';
 interface WelcomeScreenProps {
     urlParams: InitialUrlParams | null;
     isLoggedIn: boolean;
-    onStartNewChat: () => void; 
+    onStartNewChat: () => void;
     onStartFromAgent: (agentId: string, projectId?: string) => void;
     onCreateAgentTemplate: (agentData: AgentConfigData) => Promise<void>;
+    onEditAgent?: (workspace: string, agentId: string) => Promise<void>;
     // TODO: Add function and button for opening file from URL
     // onOpenFile: (projectId: string | undefined, filePath: string) => void;
 }
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ 
-    urlParams, 
-    isLoggedIn, 
-    onStartNewChat, 
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
+    urlParams,
+    isLoggedIn,
+    onStartNewChat,
     onStartFromAgent,
-    onCreateAgentTemplate
-    /*, onOpenFile */ 
+    onCreateAgentTemplate,
+    onEditAgent
+    /*, onOpenFile */
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isAgentLoading, setIsAgentLoading] = useState(false);
     const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
     const [isCreatingAgent, setIsCreatingAgent] = useState(false);
-    
+    const [isEditingAgent, setIsEditingAgent] = useState(false);
+
     const handleStartNewChat = async () => {
         setIsLoading(true);
         try {
@@ -53,7 +56,22 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             } finally {
                 setIsAgentLoading(false);
             }
-        } 
+        }
+    };
+
+    const handleEditAgentClick = async () => {
+        if (urlParams?.edit && onEditAgent) {
+            if (!isLoggedIn) {
+                showToast("Please log in to edit an agent.", "warning");
+                return;
+            }
+            setIsEditingAgent(true);
+            try {
+                await onEditAgent(urlParams.edit.workspace, urlParams.edit.agentId);
+            } finally {
+                setIsEditingAgent(false);
+            }
+        }
     };
 
     const handleCreateAgent = () => {
@@ -98,7 +116,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden">
+        <div className="flex-1 bg-gradient-to-b from-gray-50 to-white flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-auto">
             {/* Background Pattern */}
             <div className="absolute inset-0 z-0 opacity-5">
                 <div className="absolute inset-0" style={{
@@ -107,7 +125,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 }}/>
             </div>
 
-            <motion.div 
+            <motion.div
                 className="max-w-4xl w-full text-center space-y-6 sm:space-y-8 relative z-10"
                 initial="hidden"
                 animate="visible"
@@ -135,7 +153,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 </motion.div>
 
                 {/* Features Grid */}
-                <motion.div 
+                <motion.div
                     variants={fadeInUp}
                     className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 my-6 sm:my-12"
                 >
@@ -180,17 +198,17 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                 {isLoading ? (
                                     <>
                                         <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                            <circle 
-                                                className="opacity-25" 
-                                                cx="12" 
-                                                cy="12" 
-                                                r="10" 
-                                                stroke="currentColor" 
+                                            <circle
+                                                className="opacity-25"
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                stroke="currentColor"
                                                 strokeWidth="4"
                                             />
-                                            <path 
-                                                className="opacity-75" 
-                                                fill="currentColor" 
+                                            <path
+                                                className="opacity-75"
+                                                fill="currentColor"
                                                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                             />
                                         </svg>
@@ -222,17 +240,17 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                 {isCreatingAgent ? (
                                     <>
                                         <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                            <circle 
-                                                className="opacity-25" 
-                                                cx="12" 
-                                                cy="12" 
-                                                r="10" 
-                                                stroke="currentColor" 
+                                            <circle
+                                                className="opacity-25"
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                stroke="currentColor"
                                                 strokeWidth="4"
                                             />
-                                            <path 
-                                                className="opacity-75" 
-                                                fill="currentColor" 
+                                            <path
+                                                className="opacity-75"
+                                                fill="currentColor"
                                                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                             />
                                         </svg>
@@ -265,17 +283,17 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                     {isAgentLoading ? (
                                         <>
                                             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                                <circle 
-                                                    className="opacity-25" 
-                                                    cx="12" 
-                                                    cy="12" 
-                                                    r="10" 
-                                                    stroke="currentColor" 
+                                                <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
                                                     strokeWidth="4"
                                                 />
-                                                <path 
-                                                    className="opacity-75" 
-                                                    fill="currentColor" 
+                                                <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
                                                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                                 />
                                             </svg>
@@ -284,7 +302,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                     ) : (
                                         <>
                                             <span className="truncate">
-                                                Start from: {urlParams.agentId.split('/').pop() || 'Agent'} 
+                                                Start from: {urlParams.agentId.split('/').pop() || 'Agent'}
                                                 {urlParams.projectId && ` (in ${urlParams.projectId})`}
                                             </span>
                                         </>
@@ -292,9 +310,58 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                 </div>
                             </motion.button>
                         )}
+
+                        {urlParams?.edit && onEditAgent && (
+                            <motion.button
+                                onClick={handleEditAgentClick}
+                                disabled={isEditingAgent}
+                                className={`
+                                    relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
+                                    border-2 border-indigo-600 text-indigo-600
+                                    text-base sm:text-lg font-medium bg-white/80 backdrop-blur-sm
+                                    transform hover:-translate-y-1 hover:shadow-xl hover:bg-indigo-50
+                                    transition-all duration-300
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                    group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+                                    w-full sm:w-auto
+                                `}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <div className="relative flex items-center justify-center space-x-2">
+                                    {isEditingAgent ? (
+                                        <>
+                                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                                <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                />
+                                                <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                />
+                                            </svg>
+                                            <span>Loading Agent...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="truncate">
+                                                Edit: {urlParams.edit.agentId.split('/').pop() || 'Agent'}
+                                                {urlParams.edit.workspace && ` (in ${urlParams.edit.workspace})`}
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
+                            </motion.button>
+                        )}
                     </div>
-                    {!isLoggedIn && (urlParams?.agentId || (urlParams?.projectId && urlParams?.projectId !== IN_BROWSER_PROJECT.id)) && (
-                        <motion.div 
+                    {!isLoggedIn && (urlParams?.agentId || urlParams?.edit || (urlParams?.projectId && urlParams?.projectId !== IN_BROWSER_PROJECT.id)) && (
+                        <motion.div
                             variants={fadeInUp}
                             className="mt-4 sm:mt-6 text-xs sm:text-sm bg-amber-50 text-amber-800 px-4 sm:px-6 py-2 sm:py-3 rounded-lg inline-block border border-amber-200"
                         >
@@ -302,7 +369,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                 <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
-                                <span>Login is required to start from agents or open notebooks from remote projects</span>
+                                <span>Login is required to start from agents, edit agents, or open notebooks from remote projects</span>
                             </div>
                         </motion.div>
                     )}
@@ -319,4 +386,4 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     );
 };
 
-export default WelcomeScreen; 
+export default WelcomeScreen;

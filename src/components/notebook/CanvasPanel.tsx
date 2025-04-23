@@ -50,7 +50,21 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   const [isHidden, setIsHidden] = React.useState(false);
   const [width, setWidth] = React.useState(defaultWidth);
   const lastWidthRef = React.useRef(defaultWidth);
-  
+
+  // Filter out duplicate edit windows, keeping only the first one
+  const filteredWindows = React.useMemo(() => {
+    const editWindows = windows.filter(win => win.id.startsWith('edit-agent'));
+    const nonEditWindows = windows.filter(win => !win.id.startsWith('edit-agent'));
+
+    // If there are multiple edit windows, only keep the first one
+    if (editWindows.length > 1) {
+      console.log('[CanvasPanel] Found multiple edit windows, keeping only the first one');
+      return [...nonEditWindows, editWindows[0]];
+    }
+
+    return windows;
+  }, [windows]);
+
   // Check for mobile and very small screen size
   React.useEffect(() => {
     const checkScreenSize = () => {
@@ -58,7 +72,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
       const isHiddenSize = window.innerWidth <= 480;
       setIsMobile(isMobileSize);
       setIsHidden(isHiddenSize);
-      
+
       // Adjust width for mobile
       if (isMobileSize) {
         setWidth(window.innerWidth);
@@ -66,7 +80,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         setWidth(lastWidthRef.current);
       }
     };
-    
+
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
@@ -82,7 +96,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
   // Style for container visibility
   const containerStyle = React.useMemo(() => {
-    if (windows.length === 0) {
+    if (filteredWindows.length === 0) {
       return {
         width: '0px',
         maxWidth: '0px',
@@ -91,7 +105,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
       };
     }
-    
+
     if (!isVisible) {
       return {
         width: '36px',
@@ -101,7 +115,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
       };
     }
-    
+
     return {
       width: isMobile ? '100%' : `${width}px`,
       maxWidth: '100vw',
@@ -109,7 +123,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
       visibility: 'visible' as const,
       transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
     };
-  }, [isVisible, width, isMobile, windows.length]);
+  }, [isVisible, width, isMobile, filteredWindows.length]);
 
   // Handle panel visibility toggle
   const handleVisibilityToggle = React.useCallback(() => {
@@ -121,35 +135,35 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
   const handleTabClose = React.useCallback((e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
-    
+
     // Find the next tab to focus before closing
-    const currentIndex = windows.findIndex(w => w.id === tabId);
+    const currentIndex = filteredWindows.findIndex(w => w.id === tabId);
     let nextTabId: string | null = null;
-    
-    if (windows.length > 1) {
+
+    if (filteredWindows.length > 1) {
       // If there are other windows, find the next one to focus
-      if (currentIndex === windows.length - 1) {
+      if (currentIndex === filteredWindows.length - 1) {
         // If it's the last tab, focus the previous one
-        nextTabId = windows[currentIndex - 1].id;
+        nextTabId = filteredWindows[currentIndex - 1].id;
       } else {
         // Otherwise focus the next one
-        nextTabId = windows[currentIndex + 1].id;
+        nextTabId = filteredWindows[currentIndex + 1].id;
       }
     }
-    
+
     // Call onTabClose with the current tab
     onTabClose?.(tabId);
-    
+
     // If we found a next tab, focus it
     if (nextTabId) {
       onTabChange(nextTabId);
     }
 
     // Check if this was the last window
-    if (windows.length === 1 && windows[0].id === tabId) {
+    if (filteredWindows.length === 1 && filteredWindows[0].id === tabId) {
       onClose(); // Call the main close handler if the last tab is closed
     }
-  }, [windows, onTabClose, onClose, onTabChange]);
+  }, [filteredWindows, onTabClose, onClose, onTabChange]);
 
   // Get first letter of window name for icon
   const getWindowIcon = React.useCallback((name: string) => {
@@ -157,7 +171,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   }, []);
 
   // Return null if there are no windows and we're not showing the collapsed view
-  if (windows.length === 0 && !isVisible) {
+  if (filteredWindows.length === 0 && !isVisible) {
     return null;
   }
 
@@ -174,7 +188,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
       </button>
 
       {/* Rotated text label - only show when no windows */}
-      {windows.length < 4 && (
+      {filteredWindows.length < 4 && (
         <div className="flex justify-center mb-12 mt-10">
           <span className="transform rotate-90 text-gray-500 text-sm font-medium block whitespace-nowrap">
             Canvas Panel
@@ -187,7 +201,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
       {/* Scrollable window icons */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        {windows.map(window => (
+        {filteredWindows.map(window => (
           <button
             key={window.id}
             onClick={() => {
@@ -215,16 +229,16 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
     <>
       {/* Only show splitter on md and larger screens */}
       <div className="hidden md:block">
-        <Splitter 
-          onResize={handleWidthChange} 
+        <Splitter
+          onResize={handleWidthChange}
           onResizeStart={() => setIsResizing(true)}
-          onResizeEnd={() => setIsResizing(false)} 
+          onResizeEnd={() => setIsResizing(false)}
         />
       </div>
 
       {/* Overlay to prevent iframe from capturing events during resize */}
       {isResizing && (
-        <div 
+        <div
           className="absolute inset-0 z-50 bg-transparent"
           style={{ cursor: 'col-resize' }}
         />
@@ -233,13 +247,13 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
       {/* Header with tabs */}
       <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 p-2 sticky top-0 z-10">
         <div className="flex-1 flex space-x-2 overflow-x-auto scrollbar-hide">
-          {windows.length > 0 ? (
-            windows.map(window => (
+          {filteredWindows.length > 0 ? (
+            filteredWindows.map(window => (
               <button
                 key={window.id}
                 onClick={() => onTabChange(window.id)}
                 className={`px-3 py-1 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2 group ${
-                  activeTab === window.id 
+                  activeTab === window.id
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
@@ -283,12 +297,12 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
       {/* Content area */}
       <div className="flex-1 overflow-hidden relative">
-        {windows.length > 0 ? (
-          windows.map(window => (
+        {filteredWindows.length > 0 ? (
+          filteredWindows.map(window => (
             <div
               key={window.id}
               className="absolute inset-0"
-              style={{ 
+              style={{
                 // Keep content mounted but hidden to preserve state
                 display: activeTab === window.id ? 'block' : 'none',
                 visibility: activeTab === window.id ? 'visible' : 'hidden'
@@ -314,17 +328,17 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
           <div className="flex flex-col items-center justify-center h-full text-gray-500 relative p-4">
             {/* Empty state content */}
             <div className="text-center mb-4">
-              <svg 
-                className="w-24 h-24 mx-auto text-gray-300" 
-                fill="none" 
-                stroke="currentColor" 
+              <svg
+                className="w-24 h-24 mx-auto text-gray-300"
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={1.5} 
-                  d="M9 17h6m-3-3v3M3 8V6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" 
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 17h6m-3-3v3M3 8V6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"
                 />
               </svg>
               <h3 className="text-lg font-medium mt-4 text-gray-600">No Windows Open</h3>
@@ -351,7 +365,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   );
 
   return (
-    <div 
+    <div
       className={`flex flex-col border-l border-gray-200 bg-white relative ${isMobile ? 'fixed inset-0 z-50' : ''}`}
       style={containerStyle}
     >

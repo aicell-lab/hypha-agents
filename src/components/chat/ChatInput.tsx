@@ -5,6 +5,8 @@ import { ToolSelector } from './ToolSelector';
 import { Tool } from './ToolProvider';
 import { RiRobot2Line } from 'react-icons/ri';
 import { FaCircle, FaSpinner, FaExclamationTriangle, FaCode } from 'react-icons/fa';
+import ModelSettingsButton from '../notebook/ModelSettingsButton';
+import { AgentSettings } from '../../utils/chatCompletion';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -19,6 +21,7 @@ interface ChatInputProps {
   onShowEditAgent?: () => void;
   canEditAgent?: boolean;
   onShowThebeTerminal?: () => void;
+  onModelSettingsChange?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -34,6 +37,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onShowEditAgent,
   canEditAgent = false,
   onShowThebeTerminal,
+  onModelSettingsChange,
 }) => {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -130,6 +134,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         style={{ height: '36px' }}
       />
       <div className="flex items-center gap-2">
+        {onModelSettingsChange && (
+          <button
+            onClick={onModelSettingsChange}
+            disabled={!canEditAgent}
+            className="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Edit agent configuration"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+            </svg>
+          </button>
+        )}
         {onShowEditAgent && (
           <button
             onClick={onShowEditAgent}
@@ -141,7 +157,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </button>
         )}
         {onSelectTool && <ToolSelector onSelectTool={onSelectTool} className="mx-1" />}
-        
+
         {onShowThebeTerminal && (
           <button
             onClick={onShowThebeTerminal}
@@ -153,7 +169,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <FaCode className="w-4 h-4 ml-1 opacity-70" />
           </button>
         )}
-        
+
         {isProcessing ? (
           <button
             onClick={handleStop}
@@ -186,4 +202,4 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </div>
     </div>
   );
-}; 
+};

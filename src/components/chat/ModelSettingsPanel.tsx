@@ -1,72 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { DefaultAgentConfig, AgentSettings } from '../../utils/chatCompletion';
+import { AgentSettings, DefaultAgentConfig } from '../../utils/chatCompletion';
+import { loadModelSettings, saveModelSettings, loadSavedPresets, savePreset, deletePreset, ModelPreset } from '../../utils/modelSettings';
 import ModelConfigForm from '../shared/ModelConfigForm';
 import { NotebookMetadata } from '../../types/notebook';
-
-// Only for presets now
-const MODEL_PRESETS_STORAGE_KEY = 'model_presets';
-
-// Define preset interface
-interface ModelPreset extends AgentSettings {
-  name: string;
-  description?: string;
-}
-
-// Export helper functions for settings
-export const loadModelSettings = (notebookMetadata?: NotebookMetadata | null): AgentSettings => {
-  try {
-    // First try to load from notebook metadata if available
-    if (notebookMetadata?.modelSettings) {
-      return notebookMetadata.modelSettings as AgentSettings;
-    }
-    
-    // If not in notebook metadata, use defaults
-    return DefaultAgentConfig;
-  } catch (error) {
-    console.error('Error loading settings from notebook metadata:', error);
-    return DefaultAgentConfig;
-  }
-};
-
-// For presets management
-export const loadSavedPresets = (): ModelPreset[] => {
-  try {
-    const stored = localStorage.getItem(MODEL_PRESETS_STORAGE_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as ModelPreset[];
-  } catch (error) {
-    console.error('Error loading presets from localStorage:', error);
-    return [];
-  }
-};
-
-export const savePreset = (preset: ModelPreset): void => {
-  try {
-    const presets = loadSavedPresets();
-    const existingIndex = presets.findIndex(p => p.name === preset.name);
-    
-    if (existingIndex >= 0) {
-      presets[existingIndex] = preset;
-    } else {
-      presets.push(preset);
-    }
-    
-    localStorage.setItem(MODEL_PRESETS_STORAGE_KEY, JSON.stringify(presets));
-  } catch (error) {
-    console.error('Error saving preset to localStorage:', error);
-  }
-};
-
-export const deletePreset = (presetName: string): void => {
-  try {
-    const presets = loadSavedPresets();
-    const filteredPresets = presets.filter(p => p.name !== presetName);
-    localStorage.setItem(MODEL_PRESETS_STORAGE_KEY, JSON.stringify(filteredPresets));
-  } catch (error) {
-    console.error('Error deleting preset from localStorage:', error);
-  }
-};
 
 // Define interfaces for our settings
 interface ModelSettingsProps {
@@ -76,24 +13,23 @@ interface ModelSettingsProps {
   notebookMetadata?: NotebookMetadata | null;
 }
 
-export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({ 
+export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
   settings,
   onSettingsChange = () => {},
   className,
   notebookMetadata,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [localSettings, setLocalSettings] = useState<AgentSettings>(settings || loadModelSettings(notebookMetadata));
+  const [localSettings, setLocalSettings] = useState<AgentSettings>(settings || loadModelSettings());
   const [presets, setPresets] = useState<ModelPreset[]>([]);
-  const [newPresetName, setNewPresetName] = useState('');
-  const [newPresetDescription, setNewPresetDescription] = useState('');
-  const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
+  // Removed unused state variables
   const dropdownRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   // Get button position for desktop dropdown positioning
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [buttonPosition, setButtonPosition] = useState<{ top: number; right: number } | null>(null);
+  // Track button position for dropdown positioning
+  const [, setButtonPosition] = useState<{ top: number; right: number } | null>(null);
 
   // Load presets on mount
   useEffect(() => {
@@ -104,10 +40,8 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
   useEffect(() => {
     if (settings) {
       setLocalSettings(settings);
-    } else if (notebookMetadata?.modelSettings) {
-      setLocalSettings(notebookMetadata.modelSettings as AgentSettings);
     }
-  }, [settings, notebookMetadata]);
+  }, [settings]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -139,10 +73,13 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
     try {
       // Update parent component with new settings
       onSettingsChange(localSettings);
-      
+
+      // Save settings to localStorage
+      saveModelSettings(localSettings);
+
       // Close the panel
       setIsOpen(false);
-      
+
       // Show success message
       const messageDiv = document.createElement('div');
       messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
@@ -154,7 +91,7 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
       }, 2000);
     } catch (error) {
       console.error('Error saving settings:', error);
-      
+
       // Show error message
       const messageDiv = document.createElement('div');
       messageDiv.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
@@ -182,7 +119,7 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
     const newSettings = { ...DefaultAgentConfig };
     setLocalSettings(newSettings);
     onSettingsChange(newSettings);
-    
+
     // Show success message
     const messageDiv = document.createElement('div');
     messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
@@ -198,12 +135,12 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
   const handleSavePreset = () => {
     const name = prompt('Enter preset name:');
     if (!name) return;
-    
+
     const preset: ModelPreset = {
       ...localSettings,
       name,
     };
-    
+
     savePreset(preset);
     setPresets(loadSavedPresets());
 
@@ -254,29 +191,30 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
   return (
     <div className={`relative ${className}`}>
       <button
+        type="button"
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
         title="Model Settings"
         aria-label="Configure model settings"
       >
-        <svg 
-          className="w-5 h-5 text-gray-600" 
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24" 
+        <svg
+          className="w-5 h-5 text-gray-600"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
           xmlns="http://www.w3.org/2000/svg"
         >
-          <path 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            strokeWidth={2} 
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
             d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
           />
-          <path 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            strokeWidth={2} 
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
             d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
           />
         </svg>
@@ -287,11 +225,11 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
         <>
           {/* Mobile overlay backdrop */}
           <div className="fixed inset-0 bg-black/50 z-[999] sm:hidden" onClick={() => setIsOpen(false)} />
-          
+
           {/* Panel */}
           <div className="
-            fixed sm:fixed inset-0 sm:inset-auto sm:top-4 sm:right-4 
-            w-full sm:w-[600px] bg-white sm:rounded-lg shadow-xl z-[1000] 
+            fixed sm:fixed inset-0 sm:inset-auto sm:top-4 sm:right-4
+            w-full sm:w-[600px] bg-white sm:rounded-lg shadow-xl z-[1000]
             border border-gray-200 flex flex-col max-h-[100dvh] sm:max-h-[90vh]
           ">
             <form ref={formRef} onSubmit={handleSubmit} className="divide-y divide-gray-200 h-full flex flex-col overflow-y-auto">
@@ -363,7 +301,7 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
 
               <div className="p-4 space-y-4 flex-1 overflow-y-auto">
                 {/* Model Settings Section - replaced with ModelConfigForm */}
-                <ModelConfigForm 
+                <ModelConfigForm
                   settings={localSettings}
                   onSettingsChange={setLocalSettings}
                 />
@@ -387,4 +325,4 @@ export const ModelSettingsPanel: React.FC<ModelSettingsProps> = ({
   );
 };
 
-export default ModelSettingsPanel; 
+export default ModelSettingsPanel;

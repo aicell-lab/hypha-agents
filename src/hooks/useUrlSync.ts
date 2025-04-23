@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import localforage from 'localforage';
 import { NotebookMetadata } from '../types/notebook';
+import { updateUrlParams } from '../utils/urlParamUtils';
 
 interface UseUrlSyncProps {
   notebookMetadata: NotebookMetadata;
@@ -42,18 +43,22 @@ export function useUrlSync({
     // Get current URL params using new names
     const urlProject = searchParams.get('project');
     const urlFile = searchParams.get('file');
+    const urlEdit = searchParams.get('edit');
 
     // Check if URL parameters need updating
     const needsUpdate = urlProject !== targetProjectForUrl || urlFile !== targetFileForUrl;
 
     if (needsUpdate) {
       if (targetFileForUrl) { // We always need 'file' if there's a valid notebook
-        const paramsToSet: Record<string, string> = { file: targetFileForUrl };
-        if (targetProjectForUrl) {
-          paramsToSet.project = targetProjectForUrl; // Use 'project' key
-        }
-        console.log('[useUrlSync] Updating URL params from state:', paramsToSet);
-        setSearchParams(paramsToSet, { replace: true });
+        // Use utility function to update URL params while preserving others
+        const paramsToUpdate: Record<string, string | null> = {
+          file: targetFileForUrl,
+          project: targetProjectForUrl
+        };
+
+        // Update URL params
+        updateUrlParams(setSearchParams, paramsToUpdate);
+        console.log('[useUrlSync] Updated URL params while preserving others:', paramsToUpdate);
 
         // Persist the *actual* last opened state, including 'in-browser' projectId
         // Local storage still uses the original keys
@@ -62,10 +67,18 @@ export function useUrlSync({
             .catch(err => console.error('Failed to save last notebook state:', err));
         }
       } else {
-        // If state represents an unsaved/invalid notebook, clear URL params
-        if (urlProject || urlFile) { // Check existing new param names
-          console.log('[useUrlSync] Clearing URL params (no valid file/project in metadata).');
-          setSearchParams({}, { replace: true });
+        // If state represents an unsaved/invalid notebook, preserve only non-file/project params
+        if (urlProject || urlFile) { // Check existing file/project params
+          console.log('[useUrlSync] Clearing file/project params but preserving others.');
+
+          // Use utility function to remove file and project params
+          const paramsToUpdate: Record<string, string | null> = {
+            file: null,
+            project: null
+          };
+
+          updateUrlParams(setSearchParams, paramsToUpdate);
+
           // Clear last state as well
           localforage.removeItem('lastNotebookState')
             .catch(err => console.error('Failed to remove last notebook state:', err));
@@ -75,4 +88,4 @@ export function useUrlSync({
 
   // Dependencies: Run when the notebook's context changes or initialization completes
   }, [notebookMetadata.projectId, notebookMetadata.filePath, hasInitialized, searchParams, setSearchParams]);
-} 
+}

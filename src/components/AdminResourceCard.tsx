@@ -12,7 +12,7 @@ interface AdminResourceCardProps {
   tags: string[];
   image?: string;
   artifactId?: string;
-  onEdit?: () => void;
+  onEdit?: (() => void) | string; // Can be a callback or the artifact ID for direct navigation
   onDelete?: () => void;
   isStaged?: boolean;
   status: 'staged' | 'published';
@@ -57,13 +57,13 @@ const AdminResourceCard: React.FC<AdminResourceCardProps> = ({
           </span>
         )}
       </div>
-      
+
       <div className="p-4">
         <div className="flex-none">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
           <p className="text-sm text-gray-600 mb-4 line-clamp-2">{description}</p>
         </div>
-        
+
         <div className="flex-1">
           {authors.length > 0 && (
             <div className="mb-3 text-sm text-gray-600">
@@ -79,7 +79,7 @@ const AdminResourceCard: React.FC<AdminResourceCardProps> = ({
               <div>Modified: {formatDistanceToNow(lastModified * 1000)} ago</div>
             )}
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
             {tags.slice(0, 5).map((tag, index) => (
               <span
@@ -95,7 +95,19 @@ const AdminResourceCard: React.FC<AdminResourceCardProps> = ({
         <div className="flex justify-between items-center mt-4 border-t pt-4 flex-none">
           <div className="flex items-center space-x-2">
             <button
-              onClick={(e) => handleClick(e, onEdit)}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (typeof onEdit === 'function') {
+                  onEdit();
+                } else if (typeof onEdit === 'string' && onEdit) {
+                  // Navigate to the Agent Lab with edit parameter
+                  window.location.href = `#/lab?edit=${onEdit}`;
+                } else if (artifactId) {
+                  // Use artifactId as fallback if onEdit is not provided
+                  window.location.href = `#/lab?edit=${artifactId}`;
+                }
+              }}
               className="flex items-center p-2 text-gray-600 hover:text-blue-600 rounded-lg hover:bg-blue-50"
               title="Edit"
             >
@@ -104,6 +116,7 @@ const AdminResourceCard: React.FC<AdminResourceCardProps> = ({
             </button>
             {isStaged && onDelete && (
               <button
+                type="button"
                 onClick={(e) => handleClick(e, onDelete)}
                 className="flex items-center p-2 text-gray-600 hover:text-red-600 rounded-lg hover:bg-red-50"
                 title="Delete"
@@ -118,9 +131,10 @@ const AdminResourceCard: React.FC<AdminResourceCardProps> = ({
               </span>
             )}
           </div>
-          
+
           {artifactId && (
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 window.open(`#/chat/${artifactId.split('/').pop()}`, '_blank');
@@ -139,4 +153,4 @@ const AdminResourceCard: React.FC<AdminResourceCardProps> = ({
   );
 };
 
-export default AdminResourceCard; 
+export default AdminResourceCard;

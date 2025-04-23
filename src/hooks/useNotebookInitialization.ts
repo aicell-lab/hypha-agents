@@ -1,21 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import localforage from 'localforage';
-import { useProjects, Project, ProjectFile, IN_BROWSER_PROJECT } from '../providers/ProjectsProvider';
+import { Project, IN_BROWSER_PROJECT } from '../providers/ProjectsProvider';
 import { NotebookMetadata, NotebookCell, CellRole, CellType } from '../types/notebook';
-import { CellManager } from '../pages/CellManager'; // Assuming CellManager is exported
-
-// Define roles constant if not imported
-const CELL_ROLES = {
-  SYSTEM: 'system' as CellRole,
-  ASSISTANT: 'assistant' as CellRole
-};
+import { CellManager } from '../pages/CellManager';
+import { parseEditParam } from '../utils/urlParamUtils';
 
 // Define the structure for the returned URL parameters
 export interface InitialUrlParams {
   projectId: string | null;
   filePath: string | null;
   agentId: string | null;
+  edit: {
+    workspace: string;
+    agentId: string;
+  } | null;
 }
 
 interface UseNotebookInitializationProps {
@@ -69,18 +68,23 @@ export function useNotebookInitialization({
       const urlProject = searchParams.get('project');
       const urlFile = searchParams.get('file');
       const urlAgent = searchParams.get('agent');
+      const urlEdit = searchParams.get('edit');
+
+      // Parse edit parameter using utility function
+      const editParams = parseEditParam(urlEdit);
 
       // Store parsed params
       setInitialUrlParams({
         projectId: urlProject,
         filePath: urlFile,
-        agentId: urlAgent
+        agentId: urlAgent,
+        edit: editParams
       });
 
       // Determine if dependencies are ready for potential remote actions later
       const dependenciesReady = initialLoadComplete;
 
-      console.log('[useNotebookInit] Parsing URL params:', { urlProject, urlFile, urlAgent });
+      console.log('[useNotebookInit] Parsing URL params:', { urlProject, urlFile, urlAgent, edit: urlEdit });
       console.log('[useNotebookInit] Dependencies ready:', dependenciesReady);
       console.log('[useNotebookInit] Logged in:', isLoggedIn);
 
@@ -152,4 +156,4 @@ export function useNotebookInitialization({
   ]);
 
   return { hasInitialized, initialUrlParams };
-} 
+}

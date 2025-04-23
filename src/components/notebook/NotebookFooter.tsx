@@ -1,8 +1,7 @@
 import React from 'react';
 import { ChatInput } from '../chat/ChatInput';
 import { FaSpinner } from 'react-icons/fa';
-// import { AgentSettings } from '../../utils/chatCompletion'; // Removed
-// import { ThebeStatus } from '../chat/ThebeProvider'; // Removed incorrect import
+import { AgentSettings } from '../../utils/chatCompletion';
 
 interface NotebookFooterProps {
   onSendMessage: (message: string) => void;
@@ -15,6 +14,7 @@ interface NotebookFooterProps {
   onShowEditAgent?: () => void;
   canEditAgent?: boolean;
   onShowThebeTerminal?: () => void;
+  onModelSettingsChange?: () => void;
 }
 
 const NotebookFooter: React.FC<NotebookFooterProps> = ({
@@ -27,7 +27,8 @@ const NotebookFooter: React.FC<NotebookFooterProps> = ({
   initializationError,
   onShowEditAgent,
   canEditAgent,
-  onShowThebeTerminal
+  onShowThebeTerminal,
+  onModelSettingsChange
 }) => {
   const getPlaceholder = () => {
     if (!isAIReady) return "Initializing AI assistant...";
@@ -62,10 +63,11 @@ const NotebookFooter: React.FC<NotebookFooterProps> = ({
           onShowEditAgent={onShowEditAgent}
           canEditAgent={canEditAgent}
           onShowThebeTerminal={onShowThebeTerminal}
+          onModelSettingsChange={onModelSettingsChange}
         />
       </div>
     </div>
   );
 };
 
-export default NotebookFooter; 
+export default NotebookFooter;

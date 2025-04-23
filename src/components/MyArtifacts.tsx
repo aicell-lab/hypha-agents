@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useHyphaStore } from '../store/hyphaStore';
 import ResourceCard from './ResourceCard';
-import Upload from './Upload';
 import { Link, useNavigate } from 'react-router-dom';
 import { RiLoginBoxLine } from 'react-icons/ri';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
@@ -29,7 +28,6 @@ interface Artifact {
 const MyArtifacts: React.FC = () => {
   const { artifactManager, user, isLoggedIn } = useHyphaStore();
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showStagedOnly, setShowStagedOnly] = useState(false);
@@ -52,7 +50,7 @@ const MyArtifacts: React.FC = () => {
         created_by: user.id,
         version: showStagedOnly ? "stage" : "*",
       };
-      
+
       const response = await artifactManager.list({
         parent_id: "hypha-agents/agents",
         filters: filters,
@@ -86,7 +84,7 @@ const MyArtifacts: React.FC = () => {
         recursive: true,
         _rkwargs: true
       });
-      
+
       // Refresh the artifacts list
       await loadArtifacts();
       setIsDeleteDialogOpen(false);
@@ -98,16 +96,6 @@ const MyArtifacts: React.FC = () => {
       setLoading(false);
     }
   };
-
-  if (selectedArtifact) {
-    return (
-      <Upload 
-        artifactId={selectedArtifact.id} 
-        onBack={() => setSelectedArtifact(null)}
-      />
-    );
-  }
-
   if (!isLoggedIn) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -162,12 +150,13 @@ const MyArtifacts: React.FC = () => {
                 </span>
               </div>
               <button
+                type="button"
                 onClick={loadArtifacts}
                 disabled={loading}
                 className={`inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <ArrowPathIcon 
-                  className={`-ml-0.5 mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} 
+                <ArrowPathIcon
+                  className={`-ml-0.5 mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`}
                 />
                 {loading ? 'Refreshing...' : 'Refresh'}
               </button>
@@ -188,18 +177,18 @@ const MyArtifacts: React.FC = () => {
           </div>
         ) : artifacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <img 
-              src="/img/zoo-background.svg" 
-              alt="Zoo Background" 
+            <img
+              src="/img/zoo-background.svg"
+              alt="Zoo Background"
               className="w-100 h-64 mb-8 opacity-50"
             />
-            <p className="mb-4">You haven't uploaded any models yet</p>
-            <button
-              onClick={() => navigate('/upload')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            <p className="mb-4">You haven't any agent yet</p>
+            <Link
+              to="/lab"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              Upload Your First Model
-            </button>
+              Create Your First Agent
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -214,7 +203,7 @@ const MyArtifacts: React.FC = () => {
                   ]}
                   image={artifact.manifest?.cover || undefined}
                   downloadUrl={`${SERVER_URL}/${SITE_ID}/artifacts/${artifact.id.split('/').pop()}/create-zip-file`}
-                  onEdit={() => navigate(`/edit/${encodeURIComponent(artifact.id)}`)}
+                  onEdit={artifact.id} // Pass the artifact ID directly for the edit URL
                   onDelete={() => {
                     setArtifactToDelete(artifact);
                     setIsDeleteDialogOpen(true);
@@ -300,4 +289,4 @@ const MyArtifacts: React.FC = () => {
   );
 };
 
-export default MyArtifacts; 
+export default MyArtifacts;
