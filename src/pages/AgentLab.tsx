@@ -137,12 +137,15 @@ const NotebookPage: React.FC = () => {
   const [showCanvasPanel, setShowCanvasPanel] = useState(false);
   const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
   const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
+  
+  // Track screen size for responsive behavior
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  
   // Initialize the cell manager
   const cellManager = useRef<CellManager | null>(null);
 
   // Simplified sidebar state - open by default on welcome screen
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
@@ -592,12 +595,6 @@ const NotebookPage: React.FC = () => {
       // Only show welcome screen if we don't have a filePath parameter
       const shouldShowWelcome = !initialUrlParams.filePath;
       setShowWelcomeScreen(shouldShowWelcome);
-
-      // Open sidebar by default on welcome screen
-      if (shouldShowWelcome) {
-        setIsSidebarOpen(true);
-      }
-
       // If we have an edit parameter, we'll handle it in the welcome screen
       // This ensures the edit button is visible and clickable
       if (initialUrlParams.edit) {
@@ -815,8 +812,11 @@ const NotebookPage: React.FC = () => {
   // --- Canvas Panel Handlers ---
   const handleCanvasPanelResize = useCallback((newWidth: number) => {
     // Only used for external components that might need to know the width
-    console.log('Canvas panel resized to:', newWidth);
-  }, []);
+    // Don't update width directly for small screens
+    if (!isSmallScreen) {
+      setCanvasPanelWidth(newWidth);
+    }
+  }, [isSmallScreen]);
 
   const toggleCanvasPanel = useCallback(() => {
     setShowCanvasPanel(prev => !prev);
@@ -824,7 +824,12 @@ const NotebookPage: React.FC = () => {
 
   const handleTabClose = useCallback((tabId: string) => {
     setHyphaCoreWindows(prev => prev.filter(win => win.id !== tabId));
-  }, []);
+    
+    // If no windows are left, close the panel
+    if (hyphaCoreWindows.length <= 1) {
+      setShowCanvasPanel(false);
+    }
+  }, [hyphaCoreWindows.length]);
 
   // Callback passed to Sidebar to handle loading a selected notebook
   const handleLoadNotebook = useCallback(async (project: Project, file: ProjectFile) => {
@@ -842,16 +847,23 @@ const NotebookPage: React.FC = () => {
   // --- Effect to check screen size and adjust canvas panel ---
   useEffect(() => {
     const checkScreenSize = () => {
-      const isSmall = window.innerWidth <= 480;
-      setIsSmallScreen(isSmall);
-      if (isSmall && showCanvasPanel) {
-        setShowCanvasPanel(false);
-      }
+      const small = window.innerWidth <= 480;
+      setIsSmallScreen(small);
     };
+    
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
-  }, [showCanvasPanel]);
+  }, []);
+
+  // --- Effect to handle canvas panel on small screens ---
+  useEffect(() => {
+    // If screen size changes to small while canvas is open
+    if (isSmallScreen && showCanvasPanel && hyphaCoreWindows.length === 0) {
+      // Close canvas panel if no windows
+      setShowCanvasPanel(false);
+    }
+  }, [isSmallScreen, showCanvasPanel, hyphaCoreWindows.length]);
 
   // URL Sync Hook
   useUrlSync({
@@ -1646,7 +1658,7 @@ const NotebookPage: React.FC = () => {
                 onClose={toggleCanvasPanel}
                 onTabChange={setActiveCanvasTab}
                 onTabClose={handleTabClose}
-                defaultWidth={600}
+                defaultWidth={canvasPanelWidth}
               />
               </div>
 

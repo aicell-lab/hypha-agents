@@ -47,7 +47,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 }): React.ReactElement | null => {
   const [isResizing, setIsResizing] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(false);
-  const [isHidden, setIsHidden] = React.useState(false);
+  const [isSmallScreen, setIsSmallScreen] = React.useState(false);
   const [width, setWidth] = React.useState(defaultWidth);
   const lastWidthRef = React.useRef(defaultWidth);
 
@@ -69,12 +69,17 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   React.useEffect(() => {
     const checkScreenSize = () => {
       const isMobileSize = window.innerWidth <= 768;
-      const isHiddenSize = window.innerWidth <= 480;
+      const isVerySmallScreen = window.innerWidth <= 480;
       setIsMobile(isMobileSize);
-      setIsHidden(isHiddenSize);
+      setIsSmallScreen(isVerySmallScreen);
 
-      // Adjust width for mobile
-      if (isMobileSize) {
+      // Adjust width for different screen sizes
+      if (isVerySmallScreen) {
+        // On very small screens, always use 100% width when visible
+        if (isVisible) {
+          setWidth(window.innerWidth);
+        }
+      } else if (isMobileSize) {
         setWidth(window.innerWidth);
       } else if (isVisible) {
         setWidth(lastWidthRef.current);
@@ -88,11 +93,13 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
   // Handle width changes
   const handleWidthChange = React.useCallback((newWidth: number) => {
+    if (isSmallScreen) return; // Don't adjust width on small screens
+    
     const adjustedWidth = Math.max(newWidth, 300);
     setWidth(adjustedWidth);
     lastWidthRef.current = adjustedWidth;
     onResize?.(adjustedWidth);
-  }, [onResize]);
+  }, [onResize, isSmallScreen]);
 
   // Style for container visibility
   const containerStyle = React.useMemo(() => {
@@ -107,9 +114,32 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
     }
 
     if (!isVisible) {
+      // When collapsed and not on small screen, show the thin strip
+      if (!isSmallScreen) {
+        return {
+          width: '36px',
+          maxWidth: '36px',
+          opacity: 1,
+          visibility: 'visible' as const,
+          transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+        };
+      } else {
+        // On small screens and collapsed, don't show the strip
+        return {
+          width: '0px',
+          maxWidth: '0px',
+          opacity: 0,
+          visibility: 'hidden' as const,
+          transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+        };
+      }
+    }
+
+    // When visible
+    if (isSmallScreen || isMobile) {
       return {
-        width: '36px',
-        maxWidth: '36px',
+        width: '100%',
+        maxWidth: '100vw',
         opacity: 1,
         visibility: 'visible' as const,
         transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
@@ -117,21 +147,24 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
     }
 
     return {
-      width: isMobile ? '100%' : `${width}px`,
+      width: `${width}px`,
       maxWidth: '100vw',
       opacity: 1,
       visibility: 'visible' as const,
       transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
     };
-  }, [isVisible, width, isMobile, filteredWindows.length]);
+  }, [isVisible, width, isMobile, isSmallScreen, filteredWindows.length]);
 
   // Handle panel visibility toggle
   const handleVisibilityToggle = React.useCallback(() => {
     if (!isVisible) {
-      handleWidthChange(lastWidthRef.current);
+      // When opening, use appropriate width
+      if (!isSmallScreen && !isMobile) {
+        handleWidthChange(lastWidthRef.current);
+      }
     }
     onClose();
-  }, [isVisible, handleWidthChange, onClose]);
+  }, [isVisible, handleWidthChange, onClose, isSmallScreen, isMobile]);
 
   const handleTabClose = React.useCallback((e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
@@ -228,13 +261,15 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   const renderExpandedView = () => (
     <>
       {/* Only show splitter on md and larger screens */}
-      <div className="hidden md:block">
-        <Splitter
-          onResize={handleWidthChange}
-          onResizeStart={() => setIsResizing(true)}
-          onResizeEnd={() => setIsResizing(false)}
-        />
-      </div>
+      {!isSmallScreen && !isMobile && (
+        <div className="hidden md:block">
+          <Splitter
+            onResize={handleWidthChange}
+            onResizeStart={() => setIsResizing(true)}
+            onResizeEnd={() => setIsResizing(false)}
+          />
+        </div>
+      )}
 
       {/* Overlay to prevent iframe from capturing events during resize */}
       {isResizing && (
@@ -279,16 +314,8 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
           {/* Back to notebook button on small screens */}
           <button
             onClick={handleVisibilityToggle}
-            className="md:hidden p-1.5 mr-2 hover:bg-gray-200 rounded-md text-gray-600"
+            className="p-1.5 mr-2 hover:bg-gray-200 rounded-md text-gray-600"
             title="Back to notebook"
-          >
-            <FaChevronRight className="w-5 h-5" />
-          </button>
-          {/* Collapse button on larger screens */}
-          <button
-            onClick={handleVisibilityToggle}
-            className="hidden md:flex items-center justify-center p-1.5 hover:bg-gray-200 rounded-md text-gray-600 transition-colors"
-            title="Collapse panel"
           >
             <FaChevronRight className="w-5 h-5" />
           </button>
@@ -364,12 +391,30 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
     </>
   );
 
+  // Render floating button for small screens
+  const renderFloatingButton = () => {
+    if (!isSmallScreen || isVisible || filteredWindows.length === 0) return null;
+    
+    return (
+      <button
+        onClick={handleVisibilityToggle}
+        className="fixed bottom-20 right-4 z-50 w-12 h-12 rounded-full bg-blue-600 text-white shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors"
+        title="Open Canvas Panel"
+      >
+        <TbLayoutBoard className="w-6 h-6" />
+      </button>
+    );
+  };
+
   return (
-    <div
-      className={`flex flex-col border-l border-gray-200 bg-white relative ${isMobile ? 'fixed inset-0 z-50' : ''}`}
-      style={containerStyle}
-    >
-      {isVisible ? renderExpandedView() : renderCollapsedView()}
-    </div>
+    <>
+      {renderFloatingButton()}
+      <div
+        className={`flex flex-col border-l border-gray-200 bg-white ${isSmallScreen && isVisible ? 'fixed inset-0 z-50' : isMobile ? 'fixed inset-0 z-50' : ''}`}
+        style={containerStyle}
+      >
+        {isVisible ? renderExpandedView() : !isSmallScreen && renderCollapsedView()}
+      </div>
+    </>
   );
 };
