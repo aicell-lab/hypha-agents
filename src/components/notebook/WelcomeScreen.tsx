@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { InitialUrlParams } from '../../hooks/useNotebookInitialization';
 import { showToast } from '../../utils/notebookUtils';
 import { IN_BROWSER_PROJECT } from '../../providers/ProjectsProvider';
@@ -15,8 +15,7 @@ interface WelcomeScreenProps {
     onStartFromAgent: (agentId: string, projectId?: string) => void;
     onCreateAgentTemplate: (agentData: AgentConfigData) => Promise<void>;
     onEditAgent?: (workspace: string, agentId: string) => Promise<void>;
-    // TODO: Add function and button for opening file from URL
-    // onOpenFile: (projectId: string | undefined, filePath: string) => void;
+    onOpenFile: (projectId: string | undefined, filePath: string) => void;
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
@@ -25,8 +24,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     onStartNewChat,
     onStartFromAgent,
     onCreateAgentTemplate,
-    onEditAgent
-    /*, onOpenFile */
+    onEditAgent,
+    onOpenFile
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isAgentLoading, setIsAgentLoading] = useState(false);
@@ -99,16 +98,29 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         }
     };
 
-    // const handleOpenFileClick = () => {
-    //     if (urlParams?.filePath) {
-    //         // Check login for remote projects
-    //         if (urlParams.projectId && urlParams.projectId !== IN_BROWSER_PROJECT.id && !isLoggedIn) {
-    //             showToast("Please log in to open remote notebooks.", "warning");
-    //             return;
-    //         }
-    //         onOpenFile(urlParams.projectId || undefined, urlParams.filePath);
-    //     }
-    // };
+    const handleOpenFileClick = () => {
+        if (urlParams?.filePath) {
+            // Check login for remote projects
+            if (urlParams.projectId && urlParams.projectId !== IN_BROWSER_PROJECT.id && !isLoggedIn) {
+                showToast("Please log in to open remote notebooks.", "warning");
+                return;
+            }
+            onOpenFile(urlParams.projectId || undefined, urlParams.filePath);
+        }
+    };
+
+    // Auto-open file from URL params when component mounts
+    useEffect(() => {
+        if (urlParams?.filePath) {
+            // Check login for remote projects
+            if (urlParams.projectId && urlParams.projectId !== IN_BROWSER_PROJECT.id && !isLoggedIn) {
+                showToast("Please log in to open remote notebooks.", "warning");
+                return;
+            }
+            // Automatically open the file
+            onOpenFile(urlParams.projectId || undefined, urlParams.filePath);
+        }
+    }, [urlParams, isLoggedIn, onOpenFile]);
 
     const fadeInUp = {
         hidden: { opacity: 0, y: 20 },
@@ -356,6 +368,28 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                             </span>
                                         </>
                                     )}
+                                </div>
+                            </motion.button>
+                        )}
+
+                        {/* File Open Button - Only show if URL has a file parameter */}
+                        {urlParams?.filePath && (
+                            <motion.button
+                                onClick={handleOpenFileClick}
+                                className={`
+                                    relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
+                                    border-2 border-green-600 text-green-600
+                                    text-base sm:text-lg font-medium bg-white/80 backdrop-blur-sm
+                                    transform hover:-translate-y-1 hover:shadow-xl hover:bg-green-50
+                                    transition-all duration-300
+                                    group focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2
+                                    w-full sm:w-auto
+                                `}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <div className="relative flex items-center justify-center space-x-2">
+                                    Open File: {urlParams.filePath.split('/').pop()}
                                 </div>
                             </motion.button>
                         )}

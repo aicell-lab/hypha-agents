@@ -573,8 +573,26 @@ const NotebookPage: React.FC = () => {
   useEffect(() => {
     if (initRefObject.current && initialUrlParams) {
       setParsedUrlParams(initialUrlParams);
-      // Only hide welcome screen if we have a filePath parameter
-      // Note: We don't hide welcome screen for edit parameter - that's handled by the edit function
+      
+      // Handle file URL parameter
+      if (initialUrlParams.filePath) {
+        // Automatically load the file without showing the welcome screen
+        console.log(`[AgentLab] File URL parameter detected, loading: ${initialUrlParams.filePath}`);
+        const projectId = initialUrlParams.projectId || IN_BROWSER_PROJECT.id;
+        loadNotebookContent(projectId, initialUrlParams.filePath)
+          .then(() => {
+            console.log(`[AgentLab] Successfully loaded file from URL parameter: ${initialUrlParams.filePath}`);
+            setShowWelcomeScreen(false);
+          })
+          .catch(error => {
+            console.error(`[AgentLab] Error loading file from URL parameter:`, error);
+            // Fall back to showing welcome screen with the file parameter
+            setShowWelcomeScreen(true);
+          });
+        return; // Early return to avoid other welcome screen logic
+      }
+      
+      // Only show welcome screen if we don't have a filePath parameter
       const shouldShowWelcome = !initialUrlParams.filePath;
       setShowWelcomeScreen(shouldShowWelcome);
 
@@ -589,7 +607,7 @@ const NotebookPage: React.FC = () => {
         console.log('[AgentLab] Edit parameter detected:', initialUrlParams.edit);
       }
     }
-  }, [initRefObject.current, initialUrlParams]); // Depend on the ref's current value change
+  }, [initRefObject.current, initialUrlParams, loadNotebookContent]); // Added loadNotebookContent to dependencies
 
   // Notebook Commands Hook
   const { handleCommand } = useNotebookCommands({
@@ -1592,6 +1610,7 @@ const NotebookPage: React.FC = () => {
               onStartFromAgent={createNotebookFromAgentTemplate}
               onCreateAgentTemplate={handleCreateAgentTemplate}
               onEditAgent={handleEditAgentFromWelcomeScreen}
+              onOpenFile={loadNotebookContent}
             />
           ) : (
             <>
