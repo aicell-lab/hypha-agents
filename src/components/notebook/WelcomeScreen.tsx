@@ -189,108 +189,75 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 {/* Action Buttons */}
                 <motion.div variants={fadeInUp} className="space-y-3 sm:space-y-4">
                     <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
-                        <motion.button
-                            onClick={handleStartNewChat}
-                            disabled={isLoading}
-                            className={`
-                                relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
-                                bg-gradient-to-r from-blue-600 to-indigo-600
-                                text-white text-base sm:text-lg font-medium
-                                transform hover:-translate-y-1 hover:shadow-xl
-                                transition-all duration-300
-                                disabled:opacity-50 disabled:cursor-not-allowed
-                                group focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-                                w-full sm:w-auto
-                            `}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                        >
-                            <div className="absolute inset-0 bg-white/20 group-hover:bg-white/30 transition-colors duration-300" />
-                            <div className="relative flex items-center justify-center space-x-2">
-                                {isLoading ? (
-                                    <>
-                                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                            <circle
-                                                className="opacity-25"
-                                                cx="12"
-                                                cy="12"
-                                                r="10"
-                                                stroke="currentColor"
-                                                strokeWidth="4"
-                                            />
-                                            <path
-                                                className="opacity-75"
-                                                fill="currentColor"
-                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                            />
-                                        </svg>
-                                        <span>Starting...</span>
-                                    </>
-                                ) : (
-                                    'Start New Chat'
-                                )}
-                            </div>
-                        </motion.button>
-
-                        <motion.button
-                            onClick={handleCreateAgent}
-                            disabled={isCreatingAgent}
-                            className={`
-                                relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
-                                border-2 border-indigo-600 text-indigo-600
-                                text-base sm:text-lg font-medium bg-white/80 backdrop-blur-sm
-                                transform hover:-translate-y-1 hover:shadow-xl hover:bg-indigo-50
-                                transition-all duration-300
-                                disabled:opacity-50 disabled:cursor-not-allowed
-                                group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
-                                w-full sm:w-auto
-                            `}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                        >
-                            <div className="relative flex items-center justify-center space-x-2">
-                                {isCreatingAgent ? (
-                                    <>
-                                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                            <circle
-                                                className="opacity-25"
-                                                cx="12"
-                                                cy="12"
-                                                r="10"
-                                                stroke="currentColor"
-                                                strokeWidth="4"
-                                            />
-                                            <path
-                                                className="opacity-75"
-                                                fill="currentColor"
-                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                            />
-                                        </svg>
-                                        <span>Creating...</span>
-                                    </>
-                                ) : (
-                                    'Create Agent'
-                                )}
-                            </div>
-                        </motion.button>
-
-                        {urlParams?.agentId && (
+                        {/* Conditional Primary Button */}
+                        {urlParams?.edit && onEditAgent ? (
+                            // If edit param is present, make Edit Agent button primary
+                            <motion.button
+                                onClick={handleEditAgentClick}
+                                disabled={isEditingAgent}
+                                className={`
+                                    relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
+                                    bg-gradient-to-r from-blue-600 to-indigo-600
+                                    text-white text-base sm:text-lg font-medium
+                                    transform hover:-translate-y-1 hover:shadow-xl
+                                    transition-all duration-300
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                    group focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                                    w-full sm:w-auto order-first
+                                `}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <div className="absolute inset-0 bg-white/20 group-hover:bg-white/30 transition-colors duration-300" />
+                                <div className="relative flex items-center justify-center space-x-2">
+                                    {isEditingAgent ? (
+                                        <>
+                                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                                <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                />
+                                                <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                />
+                                            </svg>
+                                            <span>Loading Agent...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="truncate">
+                                                Edit: {urlParams.edit.agentId.split('/').pop() || 'Agent'}
+                                                {urlParams.edit.workspace && ` (in ${urlParams.edit.workspace})`}
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
+                            </motion.button>
+                        ) : urlParams?.agentId ? (
+                            // If agentId param is present, make Start from Agent button primary
                             <motion.button
                                 onClick={handleStartFromAgentClick}
                                 disabled={isAgentLoading}
                                 className={`
                                     relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
-                                    border-2 border-indigo-600 text-indigo-600
-                                    text-base sm:text-lg font-medium bg-white/80 backdrop-blur-sm
-                                    transform hover:-translate-y-1 hover:shadow-xl hover:bg-indigo-50
+                                    bg-gradient-to-r from-blue-600 to-indigo-600
+                                    text-white text-base sm:text-lg font-medium
+                                    transform hover:-translate-y-1 hover:shadow-xl
                                     transition-all duration-300
                                     disabled:opacity-50 disabled:cursor-not-allowed
-                                    group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
-                                    w-full sm:w-auto
+                                    group focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                                    w-full sm:w-auto order-first
                                 `}
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                             >
+                                <div className="absolute inset-0 bg-white/20 group-hover:bg-white/30 transition-colors duration-300" />
                                 <div className="relative flex items-center justify-center space-x-2">
                                     {isAgentLoading ? (
                                         <>
@@ -321,27 +288,27 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                     )}
                                 </div>
                             </motion.button>
-                        )}
-
-                        {urlParams?.edit && onEditAgent && (
+                        ) : (
+                            // Default primary button - Start New Chat
                             <motion.button
-                                onClick={handleEditAgentClick}
-                                disabled={isEditingAgent}
+                                onClick={handleStartNewChat}
+                                disabled={isLoading}
                                 className={`
                                     relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
-                                    border-2 border-indigo-600 text-indigo-600
-                                    text-base sm:text-lg font-medium bg-white/80 backdrop-blur-sm
-                                    transform hover:-translate-y-1 hover:shadow-xl hover:bg-indigo-50
+                                    bg-gradient-to-r from-blue-600 to-indigo-600
+                                    text-white text-base sm:text-lg font-medium
+                                    transform hover:-translate-y-1 hover:shadow-xl
                                     transition-all duration-300
                                     disabled:opacity-50 disabled:cursor-not-allowed
-                                    group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+                                    group focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
                                     w-full sm:w-auto
                                 `}
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                             >
+                                <div className="absolute inset-0 bg-white/20 group-hover:bg-white/30 transition-colors duration-300" />
                                 <div className="relative flex items-center justify-center space-x-2">
-                                    {isEditingAgent ? (
+                                    {isLoading ? (
                                         <>
                                             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                                                 <circle
@@ -358,15 +325,101 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                                                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                                 />
                                             </svg>
-                                            <span>Loading Agent...</span>
+                                            <span>Starting...</span>
                                         </>
                                     ) : (
+                                        'Start New Chat'
+                                    )}
+                                </div>
+                            </motion.button>
+                        )}
+
+                        {/* Secondary Buttons */}
+                        {/* Create Agent - Always shown unless we're editing an agent */}
+                        {!(urlParams?.edit && onEditAgent) && (
+                            <motion.button
+                                onClick={handleCreateAgent}
+                                disabled={isCreatingAgent}
+                                className={`
+                                    relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
+                                    border-2 border-indigo-600 text-indigo-600
+                                    text-base sm:text-lg font-medium bg-white/80 backdrop-blur-sm
+                                    transform hover:-translate-y-1 hover:shadow-xl hover:bg-indigo-50
+                                    transition-all duration-300
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                    group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+                                    w-full sm:w-auto
+                                `}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <div className="relative flex items-center justify-center space-x-2">
+                                    {isCreatingAgent ? (
                                         <>
-                                            <span className="truncate">
-                                                Edit: {urlParams.edit.agentId.split('/').pop() || 'Agent'}
-                                                {urlParams.edit.workspace && ` (in ${urlParams.edit.workspace})`}
-                                            </span>
+                                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                                <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                />
+                                                <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                />
+                                            </svg>
+                                            <span>Creating...</span>
                                         </>
+                                    ) : (
+                                        'Create Agent'
+                                    )}
+                                </div>
+                            </motion.button>
+                        )}
+
+                        {/* Start New Chat - Only shown as secondary when we have edit or agentId params */}
+                        {(urlParams?.edit || urlParams?.agentId) && (
+                            <motion.button
+                                onClick={handleStartNewChat}
+                                disabled={isLoading}
+                                className={`
+                                    relative overflow-hidden px-6 sm:px-8 py-3 sm:py-4 rounded-xl
+                                    border-2 border-indigo-600 text-indigo-600
+                                    text-base sm:text-lg font-medium bg-white/80 backdrop-blur-sm
+                                    transform hover:-translate-y-1 hover:shadow-xl hover:bg-indigo-50
+                                    transition-all duration-300
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                    group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+                                    w-full sm:w-auto
+                                `}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                            >
+                                <div className="relative flex items-center justify-center space-x-2">
+                                    {isLoading ? (
+                                        <>
+                                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                                <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                />
+                                                <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                />
+                                            </svg>
+                                            <span>Starting...</span>
+                                        </>
+                                    ) : (
+                                        'Start New Chat'
                                     )}
                                 </div>
                             </motion.button>

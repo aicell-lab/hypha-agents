@@ -1434,6 +1434,10 @@ const NotebookPage: React.FC = () => {
       return;
     }
 
+    if(!agentId.includes('/')) {
+      agentId = `${SITE_ID}/${agentId}`;
+    }
+
     const loadingToastId = 'editing-agent';
     showToast('Loading agent for editing...', 'loading', { id: loadingToastId });
 
@@ -1446,7 +1450,7 @@ const NotebookPage: React.FC = () => {
 
       // Create a fixed filename for the notebook
       const filePath = `chat-${agentId.split('/').pop()}.ipynb`;
-      const resolvedProjectId = workspace || IN_BROWSER_PROJECT.id;
+      const resolvedProjectId = IN_BROWSER_PROJECT.id;
 
       // Get template from manifest or create minimal structure
       const template = agent.manifest.chat_template || {};
