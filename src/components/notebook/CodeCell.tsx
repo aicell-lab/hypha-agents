@@ -1,22 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useThebe } from '../chat/ThebeProvider';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
 import Editor, { OnMount } from '@monaco-editor/react';
-import { executeScripts } from '../../utils/script-utils';
-import { processTextOutput, processAnsiInOutputElement, outputAreaStyles } from '../../utils/ansi-utils';
-import Convert from 'ansi-to-html';
 import { RoleSelector } from './RoleSelector';
 import { VscCode } from 'react-icons/vsc';
-import { MdOutlineTextFields } from 'react-icons/md';
 import { FaSpinner } from 'react-icons/fa';
 import { JupyterOutput } from '../JupyterOutput';
 import { OutputItem } from '../../types/notebook';
 import { RiRobot2Line } from 'react-icons/ri';
+import { outputAreaStyles } from '../../utils/ansi-utils';
 
 
 // Register languages
@@ -268,9 +264,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
         tabSize: 4,
         insertSpaces: true,
         detectIndentation: true,
-        autoIndent: 'full',
-        formatOnPaste: true,
-        formatOnType: true
+        autoIndent: 'full'
       });
     }
     
@@ -313,51 +307,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     
     // Update the initial height
     updateEditorHeight();
-    
-    // Add syntax validation for Python code
-    if (language === 'python') {
-      // Check for syntax errors when content changes
-      const checkSyntax = () => {
-        const code = editor.getValue();
-        // Look for potential indentation errors
-        const indentationIssues = code.split('\n').filter((line, index) => {
-          if (line.trim() === '') return false;
-          
-          const leadingSpaces = line.length - line.trimLeft().length;
-          // Check if indentation is a multiple of 4 spaces
-          return leadingSpaces % 4 !== 0;
-        });
-
-        // If we found potential issues, mark them with decorations
-        if (indentationIssues.length > 0) {
-          // Add visual indicators for incorrect indentation
-          const decorations = indentationIssues.map((_line, index) => ({
-            range: new monaco.Range(index + 1, 1, index + 1, 1000),
-            options: {
-              isWholeLine: true,
-              className: 'indentation-error',
-              hoverMessage: { value: 'Possible indentation error. Python requires consistent indentation (usually 4 spaces).' }
-            }
-          }));
-          
-          editor.deltaDecorations([], decorations);
-        }
-      };
-      
-      // Check syntax on change
-      const disposable = editor.onDidChangeModelContent(() => {
-        // Debounce the syntax check to avoid performance issues
-        setTimeout(checkSyntax, 500);
-      });
-      
-      // Initial check
-      checkSyntax();
-      
-      // Cleanup on unmount
-      return () => {
-        disposable.dispose();
-      };
-    }
   };
 
   // Handle click on the editor container
@@ -534,7 +483,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
         <div className="jupyter-cell-flex-container items-start w-full max-w-full">
           {/* Execution count with role icon */}
           <div className="execution-count flex-shrink-0 flex flex-col items-end gap-0.5">
-            {!isExecuting && role !== undefined && onRoleChange && (
+            {!isExecuting && onRoleChange && (
               <div className="pr-2">
                 <RoleSelector role={role} onChange={onRoleChange} />
               </div>
@@ -642,7 +591,16 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                     hideCursorInOverviewRuler: true,
                     contextmenu: false,
                     fixedOverflowWidgets: true,
-                    automaticLayout: true
+                    automaticLayout: true,
+                    // Disable error highlighting and suggestions
+                    formatOnType: false,
+                    formatOnPaste: false,
+                    quickSuggestions: true,
+                    suggestOnTriggerCharacters: false,
+                    acceptSuggestionOnEnter: "off",
+                    parameterHints: { enabled: false },
+                    hover: { enabled: true },
+                    renderValidationDecorations: "off"
                   }}
                   className="jupyter-editor w-full max-w-full overflow-x-hidden"
                 />

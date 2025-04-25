@@ -66,23 +66,6 @@ export function useUrlSync({
           localforage.setItem('lastNotebookState', { projectId: currentProjectId, filePath: currentFilePath })
             .catch(err => console.error('Failed to save last notebook state:', err));
         }
-      } else {
-        // If state represents an unsaved/invalid notebook, preserve only non-file/project params
-        if (urlProject || urlFile) { // Check existing file/project params
-          console.log('[useUrlSync] Clearing file/project params but preserving others.');
-
-          // Use utility function to remove file and project params
-          const paramsToUpdate: Record<string, string | null> = {
-            file: null,
-            project: null
-          };
-
-          updateUrlParams(setSearchParams, paramsToUpdate);
-
-          // Clear last state as well
-          localforage.removeItem('lastNotebookState')
-            .catch(err => console.error('Failed to remove last notebook state:', err));
-        }
       }
     }
 

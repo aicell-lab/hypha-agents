@@ -1005,8 +1005,8 @@ const NotebookPage: React.FC = () => {
 
     setupService();
   }, [
-      showWelcomeScreen, isReady, initRefObject.current, notebookMetadata.filePath, isLoggedIn, server,
-      agentSettings, executeCode, handleAddWindow
+      isReady, notebookMetadata.filePath, isLoggedIn, server,
+     
   ]);
 
   // Get system cell for publish dialog (Now used for canvas edit/publish)

@@ -344,7 +344,7 @@ const handleRegenerateResponse = useCallback(() => {
           <div className="execution-count flex-shrink-0 flex flex-col items-end gap-1">
             {/* Empty placeholder for consistent alignment */}
             <div></div>
-            {role !== undefined && onRoleChange && (
+            {onRoleChange && (
               <div className="pr-2">
                 <RoleSelector role={role} onChange={onRoleChange} />
               </div>
