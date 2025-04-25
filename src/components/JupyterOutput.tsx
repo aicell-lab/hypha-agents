@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { OutputItem } from '../types/notebook';
 import { executeScripts } from '../utils/script-utils';
 import { processAnsiInOutputElement } from '../utils/ansi-utils';
@@ -12,6 +12,7 @@ interface JupyterOutputProps {
 
 export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className = '', wrapLongLines = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [expandedOutputs, setExpandedOutputs] = useState<Record<string, boolean>>({});
   const wrapClass = wrapLongLines ? 'whitespace-pre-wrap break-words' : 'whitespace-pre';
   
   // Process outputs after rendering - handle scripts and ANSI codes
@@ -54,6 +55,13 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
   const specialDomOutput = outputs.find(o => 
     o.type === 'html' && o.attrs?.isRenderedDOM
   );
+
+  const toggleOutputExpansion = (outputId: string) => {
+    setExpandedOutputs(prev => ({
+      ...prev,
+      [outputId]: !prev[outputId]
+    }));
+  };
   
   return (
     <div 
@@ -67,16 +75,17 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
             // Check if this is ANSI pre-processed content
             const hasAnsi = output.content.includes('<span style="color:') || 
                           output.attrs?.isProcessedAnsi === true;
+            const outputId = `text-${index}`;
             return (
               <div 
-                key={`text-${index}`} 
+                key={outputId} 
                 className={`output-item ${hasAnsi ? 'ansi-processed' : ''}`}
               >
                 {hasAnsi ? (
                   <div dangerouslySetInnerHTML={{ __html: output.content }} 
                        className={`text-${output.type === 'stderr' || output.type === 'error' ? 'red-600' : 'gray-700'} ${wrapClass} text-sm py-1 font-mono ${output.type === 'stderr' || output.type === 'error' ? 'error-output' : ''} output-area`} />
                 ) : (
-                  renderOutput(output, wrapLongLines)
+                  renderOutput(output, wrapLongLines, outputId, expandedOutputs[outputId], toggleOutputExpansion)
                 )}
               </div>
             );
@@ -87,22 +96,28 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
       {/* Render HTML outputs next */}
       {htmlOutputs.length > 0 && (
         <div className="output-html-group">
-          {htmlOutputs.map((output, index) => (
-            <div key={`html-${index}`} className="output-item">
-              {renderOutput(output, wrapLongLines)}
-            </div>
-          ))}
+          {htmlOutputs.map((output, index) => {
+            const outputId = `html-${index}`;
+            return (
+              <div key={outputId} className="output-item">
+                {renderOutput(output, wrapLongLines, outputId, expandedOutputs[outputId], toggleOutputExpansion)}
+              </div>
+            );
+          })}
         </div>
       )}
       
       {/* Render image outputs */}
       {imageOutputs.length > 0 && (
         <div className="output-image-group">
-          {imageOutputs.map((output, index) => (
-            <div key={`img-${index}`} className="output-item">
-              {renderOutput(output, wrapLongLines)}
-            </div>
-          ))}
+          {imageOutputs.map((output, index) => {
+            const outputId = `img-${index}`;
+            return (
+              <div key={outputId} className="output-item">
+                {renderOutput(output, wrapLongLines, outputId, expandedOutputs[outputId], toggleOutputExpansion)}
+              </div>
+            );
+          })}
         </div>
       )}
       
@@ -129,7 +144,13 @@ const processURLs = (content: string): string => {
 };
 
 // Function to render different output types
-const renderOutput = (output: OutputItem, wrapLongLines = false) => {
+const renderOutput = (
+  output: OutputItem, 
+  wrapLongLines = false, 
+  outputId: string, 
+  isExpanded = false, 
+  toggleExpansion?: (id: string) => void
+) => {
   const wrapClass = wrapLongLines ? 'whitespace-pre-wrap break-words' : 'whitespace-pre';
   
   // Skip rendering if output is just a newline character
@@ -139,59 +160,109 @@ const renderOutput = (output: OutputItem, wrapLongLines = false) => {
   
   // Check if this output has already been processed for ANSI codes
   const isPreProcessed = output.attrs?.isProcessedAnsi === true;
+
+  // Function to handle text content that might need collapsing
+  const renderCollapsibleText = (
+    content: string, 
+    className: string, 
+    isHtml = false
+  ) => {
+    const lineCount = content.split('\n').length;
+    const MAX_LINES = 16;
+    
+    if (lineCount <= MAX_LINES) {
+      // If content is short enough, render it normally
+      return isHtml ? (
+        <pre className={className} dangerouslySetInnerHTML={{ __html: content }} />
+      ) : (
+        <pre className={className}>{content}</pre>
+      );
+    }
+    
+    // Content is too long, decide whether to collapse it
+    if (!isExpanded) {
+      // Show only the first MAX_LINES lines
+      const truncatedContent = content.split('\n').slice(0, MAX_LINES).join('\n');
+      return (
+        <>
+          {isHtml ? (
+            <pre className={className} dangerouslySetInnerHTML={{ __html: truncatedContent }} />
+          ) : (
+            <pre className={className}>{truncatedContent}</pre>
+          )}
+          <div className="text-center mt-2 mb-1">
+            <button 
+              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
+              onClick={() => toggleExpansion && toggleExpansion(outputId)}
+            >
+              Show all outputs ({lineCount} lines)
+            </button>
+          </div>
+        </>
+      );
+    } else {
+      // Show all content when expanded
+      return (
+        <>
+          {isHtml ? (
+            <pre className={className} dangerouslySetInnerHTML={{ __html: content }} />
+          ) : (
+            <pre className={className}>{content}</pre>
+          )}
+          <div className="text-center mt-2 mb-1">
+            <button 
+              className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+              onClick={() => toggleExpansion && toggleExpansion(outputId)}
+            >
+              Collapse ({lineCount} lines)
+            </button>
+          </div>
+        </>
+      );
+    }
+  };
   
   switch (output.type) {
     case 'stdout':
       // Process URLs in stdout content
       const processedStdout = processURLs(output.content);
-      return processedStdout !== output.content ? (
-        <pre 
-          className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}
-          dangerouslySetInnerHTML={{ __html: processedStdout }}
-        />
-      ) : (
-        <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
+      return renderCollapsibleText(
+        processedStdout, 
+        `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
+        processedStdout !== output.content
       );
     
     case 'stderr':
       if (isPreProcessed) {
-        return (
-          <pre 
-            className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`}
-            dangerouslySetInnerHTML={{ __html: output.content }}
-          />
+        return renderCollapsibleText(
+          output.content, 
+          `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`,
+          true
         );
       } else {
         // Process URLs in stderr content
         const processedStderr = processURLs(output.content);
-        return processedStderr !== output.content ? (
-          <pre 
-            className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}
-            dangerouslySetInnerHTML={{ __html: processedStderr }}
-          />
-        ) : (
-          <pre className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}>{output.content}</pre>
+        return renderCollapsibleText(
+          processedStderr, 
+          `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`,
+          processedStderr !== output.content
         );
       }
     
     case 'error':
       if (isPreProcessed) {
-        return (
-          <pre 
-            className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`}
-            dangerouslySetInnerHTML={{ __html: output.content }}
-          />
+        return renderCollapsibleText(
+          output.content, 
+          `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`,
+          true
         );
       } else {
         // Process URLs in error content
         const processedError = processURLs(output.content);
-        return processedError !== output.content ? (
-          <pre 
-            className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}
-            dangerouslySetInnerHTML={{ __html: processedError }}
-          />
-        ) : (
-          <pre className={`text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`}>{output.content}</pre>
+        return renderCollapsibleText(
+          processedError, 
+          `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`,
+          processedError !== output.content
         );
       }
     
@@ -208,22 +279,18 @@ const renderOutput = (output: OutputItem, wrapLongLines = false) => {
     
     case 'text':
       if (isPreProcessed) {
-        return (
-          <pre 
-            className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`}
-            dangerouslySetInnerHTML={{ __html: output.content }}
-          />
+        return renderCollapsibleText(
+          output.content, 
+          `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`,
+          true
         );
       } else {
         // Process URLs in text content
         const processedText = processURLs(output.content);
-        return processedText !== output.content ? (
-          <pre 
-            className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}
-            dangerouslySetInnerHTML={{ __html: processedText }}
-          />
-        ) : (
-          <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
+        return renderCollapsibleText(
+          processedText, 
+          `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
+          processedText !== output.content
         );
       }
     
@@ -232,22 +299,18 @@ const renderOutput = (output: OutputItem, wrapLongLines = false) => {
     default:
       if (typeof output.content === 'string') {
         if (isPreProcessed) {
-          return (
-            <pre 
-              className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`}
-              dangerouslySetInnerHTML={{ __html: output.content }}
-            />
+          return renderCollapsibleText(
+            output.content, 
+            `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`,
+            true
           );
         } else {
           // Process URLs in default content
           const processedDefault = processURLs(output.content);
-          return processedDefault !== output.content ? (
-            <pre 
-              className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}
-              dangerouslySetInnerHTML={{ __html: processedDefault }}
-            />
-          ) : (
-            <pre className={`text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`}>{output.content}</pre>
+          return renderCollapsibleText(
+            processedDefault, 
+            `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
+            processedDefault !== output.content
           );
         }
       }

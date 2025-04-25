@@ -51,13 +51,13 @@ function extractScript(script: string): ScriptContent | null {
 }
 
 // Helper function to extract final response
-interface FinalResponseResult {
+interface ReturnToUserResult {
   content: string;
   properties: Record<string, string>;
 }
 
-function extractFinalResponse(script: string): FinalResponseResult | null {
-  const match = script.match(/<finalResponse(?:\s+([^>]*))?>([\s\S]*?)<\/finalResponse>/);
+function extractReturnToUser(script: string): ReturnToUserResult | null {
+  const match = script.match(/<returnToUser(?:\s+([^>]*))?>([\s\S]*?)<\/returnToUser>/);
   if (!match) return null;
 
   const properties: Record<string, string> = {};
@@ -94,13 +94,13 @@ function completeIncompleteTag(content: string): string {
     content += '</py-script>';
   }
   
-  // Handle incomplete <finalResponse> tag
-  if (content.includes('<finalResponse') && !content.includes('</finalResponse>')) {
+  // Handle incomplete <returnToUser> tag
+  if (content.includes('<returnToUser') && !content.includes('</returnToUser>')) {
     // Check if we need to close the opening tag first
     if (!content.includes('>')) {
       content += '>';
     }
-    content += '</finalResponse>';
+    content += '</returnToUser>';
   }
   
   return content;
@@ -126,17 +126,17 @@ const ThinkingCell: React.FC<ThinkingCellProps> = ({ content, parent, onStop }) 
     // Extract script if present
     const script = extractScript(completedContent);
     if (script) {
-      processed += '```python\n' + script.content + '\n```\n\n';
+      processed += '```python\n' + (script.content || '') + '\n```\n\n';
     }
     
     // Extract final response if present
-    const finalResponse = extractFinalResponse(completedContent);
-    if (finalResponse) {
-      processed += `✨ ${finalResponse.content}\n`;
+    const returnToUser = extractReturnToUser(completedContent);
+    if (returnToUser) {
+      processed += `✨ ${returnToUser.content}\n`;
     }
     
     // If no tags were found, wrap the entire content in a code block
-    if (!thoughts && !script && !finalResponse) {
+    if (!thoughts && !script && !returnToUser) {
       processed = '```\n' + completedContent + '\n```';
     }
     return processed || '🤔 Thinking...';

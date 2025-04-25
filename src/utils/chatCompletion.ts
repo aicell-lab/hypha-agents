@@ -76,7 +76,7 @@ Follow this iterative cycle meticulously:
     \`\`\`
     Now continue with the next step.</observation>
 
-4.  **Final Response:** Use <finalResponse> tags to conclude the current round of conversation and return control to the user. This should be used when:
+4.  **Final Response:** Use <returnToUser> tags to conclude the current round of conversation and return control to the user. This should be used when:
     - The task is fully completed based on your reasoning and observations
     - You need more input from the user to proceed further
     - You've reached a logical stopping point in the conversation
@@ -85,14 +85,14 @@ Follow this iterative cycle meticulously:
     - **Code and output Preservation:** If specific code cells (<py-script>) are vital context for the final answer, preserve them using the \`commit="id1,id2,..."\` attribute.
     Example:
     <thoughts>Task complete, area calculated</thoughts>
-    <finalResponse commit="area_calc">
+    <returnToUser commit="area_calc">
     The calculated area is 50. Numpy was also installed as requested.
-    </finalResponse>
-    - **Always commit key code and outputs:**: Importantly, all the uncommitted code and output are discarded, and the user and subsequent steps will not be able to see them.
+    </returnToUser>
+    - **Always commit key code and outputs (images, plots etc.):**: Importantly, all the uncommitted code and output are discarded, and the user and subsequent steps will not be able to see them.
 
 KEY RULES TO FOLLOW:
 - Always start your response with <thoughts>.
-- Follow <thoughts> with EITHER <py-script> OR <finalResponse>.
+- Follow <thoughts> with EITHER <py-script> OR <returnToUser>.
 - State Persistence: Variables and imports persist between code executions within this session.
 - Variable Scope: Only use variables defined in previous code steps within the current session or provided in the initial request.
 - Define Before Use: Ensure variables are assigned/defined before you use them.
@@ -101,7 +101,7 @@ KEY RULES TO FOLLOW:
 - No Assumptions: Don't assume packages are installed; install them if needed.
 - Clean Code: Write clear, simple Python code.
 - Be Precise: Execute the user's request exactly. Don't add unasked-for functionality.
-- Return to User: Use <finalResponse> when you need to conclude the current round of conversation and return control to the user. This includes when the task is complete, when you need more information, or when you've reached a logical stopping point.
+- Return to User: Use <returnToUser commit="id1,id2,..."> when you need to conclude the current round of conversation, commit code and outputs, and return control to the user. This includes when the task is complete, when you need more information, or when you've reached a logical stopping point.
 - Don't Give Up: If you encounter an error, analyze the observation and try a different approach in your next thought/code cycle.
 
 RUNTIME ENVIRONMENT:
@@ -175,14 +175,14 @@ export const DefaultAgentConfig: AgentSettings = {
   };
 
 // Helper function to extract final response from script
-interface FinalResponseResult {
+interface ReturnToUserResult {
   content: string;
   properties: Record<string, string>;
 }
 
-function extractFinalResponse(script: string): FinalResponseResult | null {
-  // Match <finalResponse> with optional attributes, followed by content, then closing tag
-  const match = script.match(/<finalResponse(?:\s+([^>]*))?>([\s\S]*?)<\/finalResponse>/);
+function extractReturnToUser(script: string): ReturnToUserResult | null {
+  // Match <returnToUser> with optional attributes, followed by content, then closing tag
+  const match = script.match(/<returnToUser(?:\s+([^>]*))?>([\s\S]*?)<\/returnToUser>/);
   if (!match) return null;
 
   // Extract properties from attributes if they exist
@@ -367,19 +367,19 @@ export async function* chatCompletion({
         }
 
         // Check if this is a final response - if so, we should stop the loop and return control to the user
-        const finalResponse = extractFinalResponse(accumulatedResponse);
-        if (finalResponse) {
+        const returnToUser = extractReturnToUser(accumulatedResponse);
+        if (returnToUser) {
           if(onMessage){
               // Extract commit IDs from properties and pass them as an array
-              const commitIds = finalResponse.properties.commit ?
-                finalResponse.properties.commit.split(',').map(id => id.trim()) :
+              const commitIds = returnToUser.properties.commit ?
+                returnToUser.properties.commit.split(',').map(id => id.trim()) :
                 [];
 
-              onMessage(completionId, finalResponse.content, commitIds);
+              onMessage(completionId, returnToUser.content, commitIds);
           }
           yield {
             type: 'text',
-            content: finalResponse.content
+            content: returnToUser.content
           };
           // Exit the loop since we have a final response that concludes this round of conversation
           return;
@@ -460,7 +460,14 @@ export async function* chatCompletion({
           // if no <thoughts> or <py-script> tag produced
           messages.push({
             role: 'assistant',
-            content: `<thoughts>${accumulatedResponse} (Reminder: I need to use \`py-script\` tag to execute script or \`finalResponse\` tag to conclude the session)</thoughts>`
+            content: `<thoughts>${accumulatedResponse} (Reminder: I need to use \`py-script\` tag to execute script or \`returnToUser\` tag with commit property to conclude the session)</thoughts>`
+          });
+        }
+        // add a reminder message if we are approaching the max steps
+        if(loopCount >= maxSteps - 2){
+          messages.push({
+            role: 'user',
+            content: `You are approaching the maximum number of steps (${maxSteps}). Please conclude the session with \`returnToUser\` tag and commit the current code and outputs, otherwise the session will be aborted.`
           });
         }
 
@@ -468,11 +475,11 @@ export async function* chatCompletion({
         if (loopCount >= maxSteps) {
           console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
           if(onMessage){
-            onMessage(completionId, `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. I'm returning control to you now. Please try breaking your request into smaller steps or provide additional guidance.</finalResponse>`, []);
+            onMessage(completionId, `<thoughts>Maximum steps reached</thoughts>\n<returnToUser>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. I'm returning control to you now. Please try breaking your request into smaller steps or provide additional guidance.</returnToUser>`, []);
           }
           yield {
             type: 'text',
-            content: `<thoughts>Maximum steps reached</thoughts>\n<finalResponse>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. I'm returning control to you now. Please try breaking your request into smaller steps or provide additional guidance.</finalResponse>`
+            content: `<thoughts>Maximum steps reached</thoughts>\n<returnToUser>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. I'm returning control to you now. Please try breaking your request into smaller steps or provide additional guidance.</returnToUser>`
           };
           break;
         }

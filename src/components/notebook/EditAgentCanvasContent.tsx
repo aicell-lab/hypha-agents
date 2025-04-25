@@ -293,15 +293,15 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
 
         <div>
           <label htmlFor="initialPrompt" className="block text-sm font-medium text-gray-700">
-            Initial System Prompt
+          System Prompt (From the first system configuration cell in the current notebook)
           </label>
           <textarea
             name="initialPrompt"
             id="initialPrompt"
-            rows={4}
+            rows={10}
             value={formData.initialPrompt}
-            onChange={handleInputChange}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            readOnly
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-50"
             placeholder="Optional: Provide instructions that define the agent's behavior and capabilities"
           />
         </div>
