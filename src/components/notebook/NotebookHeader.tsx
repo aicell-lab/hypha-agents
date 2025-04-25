@@ -53,7 +53,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
 }) => {
   return (
     <div className="flex-shrink-0 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 shadow-sm">
-      <div className="max-w-full mx-auto flex items-center justify-between h-14">
+      <div className="max-w-full mx-auto flex items-center justify-between h-10">
         {/* Logo and Titles */}
         <div className="flex items-center gap-1 ml-2">
           <button
