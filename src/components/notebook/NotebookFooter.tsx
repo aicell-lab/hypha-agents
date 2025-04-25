@@ -12,7 +12,6 @@ interface NotebookFooterProps {
   isAIReady: boolean;
   initializationError: string | null;
   onShowEditAgent?: () => void;
-  canEditAgent?: boolean;
   onShowThebeTerminal?: () => void;
   onModelSettingsChange?: () => void;
 }
@@ -26,7 +25,6 @@ const NotebookFooter: React.FC<NotebookFooterProps> = ({
   isAIReady,
   initializationError,
   onShowEditAgent,
-  canEditAgent,
   onShowThebeTerminal,
   onModelSettingsChange
 }) => {
@@ -61,7 +59,6 @@ const NotebookFooter: React.FC<NotebookFooterProps> = ({
           thebeStatus={thebeStatus}
           placeholder={getPlaceholder()}
           onShowEditAgent={onShowEditAgent}
-          canEditAgent={canEditAgent}
           onShowThebeTerminal={onShowThebeTerminal}
           onModelSettingsChange={onModelSettingsChange}
         />

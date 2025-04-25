@@ -5,7 +5,6 @@ import { ToolSelector } from './ToolSelector';
 import { Tool } from './ToolProvider';
 import { RiRobot2Line } from 'react-icons/ri';
 import { FaCircle, FaSpinner, FaExclamationTriangle, FaCode } from 'react-icons/fa';
-import ModelSettingsButton from '../notebook/ModelSettingsButton';
 import { AgentSettings } from '../../utils/chatCompletion';
 
 interface ChatInputProps {
@@ -19,7 +18,6 @@ interface ChatInputProps {
   isProcessing?: boolean;
   onSelectTool?: (tool: Tool) => void;
   onShowEditAgent?: () => void;
-  canEditAgent?: boolean;
   onShowThebeTerminal?: () => void;
   onModelSettingsChange?: () => void;
 }
@@ -35,7 +33,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isProcessing = false,
   onSelectTool,
   onShowEditAgent,
-  canEditAgent = false,
   onShowThebeTerminal,
   onModelSettingsChange,
 }) => {
@@ -137,8 +134,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         {onModelSettingsChange && (
           <button
             onClick={onModelSettingsChange}
-            disabled={!canEditAgent}
-            className="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition"
             title="Edit agent configuration"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
@@ -149,7 +145,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         {onShowEditAgent && (
           <button
             onClick={onShowEditAgent}
-            disabled={!canEditAgent}
             className="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             title="Edit agent configuration"
           >
