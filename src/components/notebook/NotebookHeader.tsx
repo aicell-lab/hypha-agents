@@ -26,8 +26,6 @@ export interface NotebookHeaderProps {
   onMoveCellDown: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
-  onShowEditAgent: () => void;
-  canEditAgent: boolean;
 }
 
 const NotebookHeader: React.FC<NotebookHeaderProps> = ({
@@ -52,8 +50,6 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   onMoveCellDown,
   canMoveUp,
   canMoveDown,
-  onShowEditAgent,
-  canEditAgent,
 }) => {
   return (
     <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">

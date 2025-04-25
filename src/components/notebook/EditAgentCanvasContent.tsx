@@ -254,7 +254,7 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
               value={formData.version}
               onChange={handleInputChange}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="e.g., 1.0.0"
+              placeholder="e.g., 0.1.0"
             />
           </div>
 
@@ -293,15 +293,15 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
 
         <div>
           <label htmlFor="initialPrompt" className="block text-sm font-medium text-gray-700">
-          System Prompt (From the first system configuration cell in the current notebook)
+          System Configuration (From the first system cell in the current chat)
           </label>
           <textarea
             name="initialPrompt"
             id="initialPrompt"
             rows={10}
             value={formData.initialPrompt}
-            readOnly
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-50"
+            onChange={handleInputChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             placeholder="Optional: Provide instructions that define the agent's behavior and capabilities"
           />
         </div>
@@ -344,7 +344,7 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
     ...DefaultAgentFormData,
     name: initialAgentData.name || '',
     description: initialAgentData.description || '',
-    version: initialAgentData.version || '1.0.0',
+    version: initialAgentData.version || '0.1.0',
     license: initialAgentData.license || 'CC-BY-4.0',
     welcomeMessage: initialAgentData.welcomeMessage || 'Hi, how can I help you today?',
     initialPrompt: initialAgentData.initialPrompt || ''
@@ -359,7 +359,7 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
       ...DefaultAgentFormData,
       name: initialAgentData.name || '',
       description: initialAgentData.description || '',
-      version: initialAgentData.version || '1.0.0',
+      version: initialAgentData.version || '0.1.0',
       license: initialAgentData.license || 'CC-BY-4.0',
       welcomeMessage: initialAgentData.welcomeMessage || 'Hi, how can I help you today?',
       initialPrompt: initialAgentData.initialPrompt || ''

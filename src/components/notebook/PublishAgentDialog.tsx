@@ -42,7 +42,7 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
   const [id, setId] = useState(existingId || '');
   const [name, setName] = useState(notebookTitle || 'Untitled Agent');
   const [description, setDescription] = useState('');
-  const [version, setVersion] = useState(existingVersion || '1.0.0');
+  const [version, setVersion] = useState(existingVersion || '0.1.0');
   const [license, setLicense] = useState('CC-BY-4.0');
   const [welcomeMessage, setWelcomeMessage] = useState(defaultWelcomeMessage || 'Hi, how can I help you today?');
   const [isUpdatingExisting, setIsUpdatingExisting] = useState(!!existingId);
@@ -55,7 +55,7 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
     if (isOpen) {
       setId(existingId || '');
       setName(notebookTitle || 'Untitled Agent');
-      setVersion(existingVersion || '1.0.0');
+      setVersion(existingVersion || '0.1.0');
       setWelcomeMessage(defaultWelcomeMessage || 'Hi, how can I help you today?');
       setIsUpdatingExisting(!!existingId);
       // Use model settings from notebook metadata if available, otherwise use default
@@ -202,7 +202,7 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
                   value={version}
                   onChange={(e) => setVersion(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="1.0.0"
+                  placeholder="0.1.0"
                 />
               </div>
               <div className="flex-1">

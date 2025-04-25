@@ -14,7 +14,6 @@ import { ChatMessage } from '../utils/chatCompletion';
 import { v4 as uuidv4 } from 'uuid';
 import ModelSettingsCanvasContent from '../components/notebook/ModelSettingsCanvasContent';
 import EditAgentCanvasContent, { EditAgentFormData } from '../components/notebook/EditAgentCanvasContent';
-import { updateUrlParams } from '../utils/urlParamUtils';
 
 
 // Import components
@@ -51,7 +50,7 @@ import { SITE_ID } from '../utils/env';
 import { InitialUrlParams } from '../hooks/useNotebookInitialization';
 
 // Import AgentConfigForm and ModelConfigForm as default exports
-import ThebeTerminalPanel from '../components/chat/ThebeStatus'; // Import the refactored component
+import { ThebeTerminalPanel } from '../components/chat/ThebeStatus'; // Import the refactored component
 
 // Add CellRole enum values
 const CELL_ROLES = {
@@ -148,14 +147,15 @@ const NotebookPage: React.FC = () => {
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
 
-  // Ref to track if service setup has completed
-  const setupCompletedRef = useRef(false);
-
   // Add the keyboard shortcuts hook
   useNotebookKeyboardShortcuts({
     cellManager: cellManager.current,
     isEditing
   });
+
+  // === New State ===
+  const [showEditAgentAfterLoad, setShowEditAgentAfterLoad] = useState(false);
+  // === End New State ===
 
   // --- Define handleAddWindow callback ---
   const handleAddWindow = useCallback((config: any) => {
@@ -175,7 +175,6 @@ const NotebookPage: React.FC = () => {
     setActiveCanvasTab(config.window_id);
     setShowCanvasPanel(true);
   }, [setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]); // Dependencies for the callback
-
 
   if (!cellManager.current) {
     cellManager.current = new CellManager(
@@ -267,8 +266,6 @@ const NotebookPage: React.FC = () => {
       let rawContent: string | NotebookData;
       let resolvedProjectId = projectId || IN_BROWSER_PROJECT.id;
 
-      // Reset setupCompletedRef to allow service reinitialization for the new file
-      setupCompletedRef.current = false;
       setHyphaCoreApi(null);
 
       if (resolvedProjectId === IN_BROWSER_PROJECT.id) {
@@ -326,6 +323,7 @@ const NotebookPage: React.FC = () => {
         lastAgentCellRef.current = assistantCells[assistantCells.length - 1]?.id || null;
         cellManager.current?.clearRunningState();
         setShowWelcomeScreen(false);
+        setupService();
         showToast('Notebook loaded successfully', 'success');
       } else {
         console.warn('Invalid notebook file format found after parsing:', { projectId: resolvedProjectId, filePath });
@@ -374,7 +372,7 @@ const NotebookPage: React.FC = () => {
       await restartKernel();
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
-      setupCompletedRef.current = false;
+      setupService();
       showToast('Kernel restarted successfully', 'success');
     } catch (error) {
       console.error('Failed to restart kernel:', error);
@@ -408,8 +406,7 @@ const NotebookPage: React.FC = () => {
 
       // Reset the hyphaCoreApi state to trigger re-initialization
       setHyphaCoreApi(null); // This will trigger the setup useEffect again
-      setupCompletedRef.current = false; // <<< ADDED: Reset completion flag
-
+      setupService();
       showToast('Kernel state reset successfully', 'success');
       // Keep AI ready state as true, kernel is still technically ready
       // setIsAIReady(true);
@@ -974,58 +971,37 @@ const NotebookPage: React.FC = () => {
     };
   }, [saveNotebook, showWelcomeScreen]); // Depend on showWelcomeScreen
 
-  // --- Effect to setup Hypha Core notebook service (Adjusted) ---
-  useEffect(() => {
-    const setupService = async () => {
-      // Use initRefObject.current directly
-      if (showWelcomeScreen || setupCompletedRef.current || !initRefObject.current || !notebookMetadata.filePath) {
-        return;
+  const setupService = useCallback(async () => {
+    setHyphaCoreApi(null);
+    if(!server || !executeCode) {
+      showToast('Hypha Core Service is not available, please login.', 'warning');
+      return;
+    }
+    console.log('[AgentLab] Setting up Hypha Core service for notebook:', notebookMetadata.filePath);
+    const currentSignal = hyphaServiceAbortControllerRef.current.signal;
+    try {
+      const api = await setupNotebookService({
+        onAddWindow: handleAddWindow,
+        server, executeCode, agentSettings,
+        abortSignal: currentSignal
+      });
+      if (currentSignal.aborted) {
+          console.log('[AgentLab] Hypha Core service setup aborted before completion.');
+          return;
       }
-      // Also skip if prerequisites like login, server, kernel aren't ready
-      if (!isLoggedIn || !server || !isReady || !cellManager.current) {
-        if (!isLoggedIn && isReady && !showWelcomeScreen) { // Only show toast if relevant
-          showToast('You need to be logged in to use Hypha Core Service', 'warning');
-        }
-        console.log('[AgentLab] Setup Service skipped - prerequisites not ready:', { isLoggedIn, server: !!server, isReady, cellManager: !!cellManager.current });
-        return;
+      setHyphaCoreApi(api);
+      console.log('[AgentLab] Hypha Core service successfully set up.');
+      showToast('Hypha Core Service Connected', 'success');
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+          console.log('[AgentLab] Hypha Core service setup explicitly aborted.');
+      } else {
+          console.error('[AgentLab] Failed to set up notebook service:', error);
+          showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
       }
-      // Proceed with setup
-      setupCompletedRef.current = false;
       setHyphaCoreApi(null);
-      console.log('[AgentLab] Setting up Hypha Core service for notebook:', notebookMetadata.filePath);
-      const currentSignal = hyphaServiceAbortControllerRef.current.signal;
-      try {
-        const api = await setupNotebookService({
-          onAddWindow: handleAddWindow,
-          server, executeCode, agentSettings,
-          abortSignal: currentSignal
-        });
-        if (currentSignal.aborted) {
-            console.log('[AgentLab] Hypha Core service setup aborted before completion.');
-            setupCompletedRef.current = false;
-            return;
-        }
-        setHyphaCoreApi(api);
-        setupCompletedRef.current = true;
-        console.log('[AgentLab] Hypha Core service successfully set up.');
-        showToast('Hypha Core Service Connected', 'success');
-      } catch (error: any) {
-        if (error.name === 'AbortError') {
-            console.log('[AgentLab] Hypha Core service setup explicitly aborted.');
-        } else {
-            console.error('[AgentLab] Failed to set up notebook service:', error);
-            showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
-        }
-        setupCompletedRef.current = false;
-        setHyphaCoreApi(null);
-      }
-    };
-
-    setupService();
-  }, [
-      isReady, notebookMetadata.filePath, isLoggedIn, server,
-     
-  ]);
+    }
+  }, [handleAddWindow, server, executeCode, agentSettings, notebookMetadata.filePath]);
 
   // Get system cell for publish dialog (Now used for canvas edit/publish)
   const systemCell = useMemo(() => {
@@ -1247,7 +1223,7 @@ const NotebookPage: React.FC = () => {
 
     try {
       // Get system cell content (if needed for manifest)
-      const systemCellContent = systemCell ? systemCell.content : data.initialPrompt || '';
+      const systemCellContent = systemCell ? systemCell.content : '';
 
       // Create agent manifest (ensure modelConfig is included)
       const manifest = {
@@ -1365,6 +1341,38 @@ const NotebookPage: React.FC = () => {
     setShowCanvasPanel(true);
   }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel, setAgentSettings]);
 
+  // --- Generic function to show/update window in Canvas Panel ---
+  const showWindowInCanvas = useCallback((windowId: string, windowName: string, component: React.ReactNode) => {
+    // Check if window already exists
+    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+
+    if (windowExists) {
+      // Update existing window
+      setHyphaCoreWindows(prev => prev.map(win => {
+        if (win.id === windowId) {
+          return {
+            ...win,
+            name: windowName,
+            component
+          };
+        }
+        return win;
+      }));
+    } else {
+      // Create a new window
+      const newWindow: HyphaCoreWindow = {
+        id: windowId,
+        name: windowName,
+        component
+      };
+      setHyphaCoreWindows(prev => [...prev, newWindow]);
+    }
+
+    // Activate the tab and show the panel
+    setActiveCanvasTab(windowId);
+    setShowCanvasPanel(true);
+  }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]);
+
   // --- Function to show Edit Agent in Canvas Panel ---
   const handleShowEditAgentInCanvas = useCallback(() => {
     const agentArtifact = notebookMetadata.agentArtifact;
@@ -1374,60 +1382,33 @@ const NotebookPage: React.FC = () => {
       agentId: agentArtifact?.id || '', // Pass existing ID
       name: agentArtifact?.name || notebookMetadata.title || '',
       description: agentArtifact?.description || '',
-      version: agentArtifact?.version || '1.0.0',
+      version: agentArtifact?.version || '0.1.0',
       license: agentArtifact?.manifest?.license || 'CC-BY-4.0',
       welcomeMessage: agentArtifact?.manifest?.welcomeMessage || 'Hi, how can I help you today?',
-      initialPrompt: agentArtifact?.manifest?.startup_script || ''
+      initialPrompt: systemCell ? systemCell.content : ''
     };
 
-    // Use a consistent window ID for all agent editing
-    const windowId = 'edit-agent-config';
+    showWindowInCanvas(
+      'edit-agent-config',
+      `Edit: ${initialAgentData.name || 'Agent'}`,
+      <EditAgentCanvasContent
+        initialAgentData={initialAgentData}
+        onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
+        onPublishAgent={handlePublishAgentFromCanvas}
+      />
+    );
 
-    // Check if window already exists
-    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+  }, [notebookMetadata, showWindowInCanvas, handleSaveAgentSettingsToNotebook, handlePublishAgentFromCanvas, systemCell]);
 
-    // If window exists, update its component with the latest data
-    if (windowExists) {
-      setHyphaCoreWindows(prev => prev.map(win => {
-        if (win.id === windowId) {
-          return {
-            ...win,
-            name: `Edit: ${initialAgentData.name || 'Agent'}`,
-            component: (
-              <EditAgentCanvasContent
-                initialAgentData={initialAgentData}
-                onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
-                onPublishAgent={handlePublishAgentFromCanvas}
-              />
-            )
-          };
-        }
-        return win;
-      }));
-    } else {
-      // Create a new window if it doesn't exist
-      const newWindow: HyphaCoreWindow = {
-        id: windowId,
-        name: `Edit: ${initialAgentData.name || 'Agent'}`,
-        component: (
-          <EditAgentCanvasContent
-            initialAgentData={initialAgentData}
-            onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
-            onPublishAgent={handlePublishAgentFromCanvas}
-          />
-        )
-      };
-
-      setHyphaCoreWindows(prev => [...prev, newWindow]);
+  // Add an effect to handle showing edit window when notebookMetadata changes
+  useEffect(() => {
+    if (showEditAgentAfterLoad && notebookMetadata.agentArtifact) {
+      handleShowEditAgentInCanvas();
+      setShowEditAgentAfterLoad(false);
     }
+  }, [showEditAgentAfterLoad, notebookMetadata, handleShowEditAgentInCanvas]);
 
-    // Activate the tab and show the panel regardless of whether it was just added
-    setActiveCanvasTab(windowId);
-    setShowCanvasPanel(true);
-
-  }, [notebookMetadata, hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel, handleSaveAgentSettingsToNotebook, handlePublishAgentFromCanvas]); // Removed agentSettings from dependencies
-
-  // Function to handle editing an agent from the welcome screen
+  // Update the handleEditAgentFromWelcomeScreen function
   const handleEditAgentFromWelcomeScreen = useCallback(async (workspace: string, agentId: string) => {
     if (!artifactManager || !isLoggedIn) {
       showToast('You need to be logged in to edit an agent', 'error');
@@ -1516,14 +1497,12 @@ const NotebookPage: React.FC = () => {
 
       // Load the newly created notebook
       await loadNotebookContent(resolvedProjectId, filePath);
+      
+      // Set flag to show edit dialog after notebookMetadata is updated
+      setShowEditAgentAfterLoad(true);
+      
       showToast('Agent loaded for editing', 'success');
       dismissToast(loadingToastId);
-
-      // After the notebook is loaded, automatically show the edit agent config window
-      // We need to wait a bit to ensure the notebook is fully loaded
-      setTimeout(() => {
-        handleShowEditAgentInCanvas();
-      }, 500);
 
     } catch (error) {
       console.error('Error editing agent:', error);
@@ -1539,7 +1518,6 @@ const NotebookPage: React.FC = () => {
     loadNotebookContent,
     setSelectedProject,
     getInBrowserProject,
-    handleShowEditAgentInCanvas,
     showToast,
     dismissToast
   ]);
@@ -1595,8 +1573,6 @@ const NotebookPage: React.FC = () => {
         onMoveCellDown={handleMoveCellDown}
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}
-        onShowEditAgent={handleShowEditAgentInCanvas}
-        canEditAgent={!showWelcomeScreen}
       />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
@@ -1657,8 +1633,6 @@ const NotebookPage: React.FC = () => {
                     isAIReady={isAIReady}
                     initializationError={initializationError}
                     onShowThebeTerminal={handleShowThebeTerminalInCanvas}
-                    onShowEditAgent={handleShowEditAgentInCanvas}
-                    canEditAgent={!showWelcomeScreen}
                     onModelSettingsChange={handleShowModelSettingsInCanvas}
                   />
                 </div>

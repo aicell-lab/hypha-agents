@@ -854,7 +854,7 @@ The `Artifact Manager` provides an HTTP API for retrieving artifact manifests, d
       "manifest": {
           "name": "Example Dataset",
           "description": "A dataset for testing.",
-          "version": "1.0.0"
+          "version": "0.1.0"
       },
       "view_count": 150,
       "download_count": 25

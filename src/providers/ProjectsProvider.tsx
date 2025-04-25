@@ -68,7 +68,7 @@ export const IN_BROWSER_PROJECT: Project = {
   manifest: {
     name: 'In-Browser Project',
     description: 'Local files stored in your browser',
-    version: '1.0.0',
+    version: '0.1.0',
     type: 'local',
     created_at: new Date().toISOString()
   },
@@ -256,7 +256,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           manifest: {
             name: "Agent Lab Projects",
             description: "Collection of Agent Lab projects",
-            version: "1.0.0",
+            version: "0.1.0",
             type: "collection"
           },
           config: {
@@ -330,7 +330,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         manifest: {
           name,
           description,
-          version: "1.0.0",
+          version: "0.1.0",
           created_at: new Date().toISOString()
         },
         _rkwargs: true
