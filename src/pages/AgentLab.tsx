@@ -359,6 +359,65 @@ const NotebookPage: React.FC = () => {
     setAgentSettings,
   ]);
 
+  // Add useEffect to hide address bar on mobile devices
+  useEffect(() => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    const hideAddressBar = () => {
+      if (!isMobile) return;
+      
+      // For iOS devices
+      if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        // Scroll after a delay to ensure content is ready
+        setTimeout(() => {
+          // First scroll to 0 to ensure we're at the top
+          window.scrollTo(0, 0);
+          // Then scroll down 1px to hide address bar
+          window.scrollTo(0, 1);
+          
+          // If that didn't work (newer iOS), try window height
+          if (document.documentElement.scrollHeight > window.innerHeight) {
+            window.scrollTo(0, window.innerHeight / 5);
+          }
+        }, 300);
+      } 
+      // For Android devices
+      else if (/Android/i.test(navigator.userAgent)) {
+        setTimeout(() => {
+          window.scrollTo(0, 1);
+        }, 300);
+      }
+    };
+
+    // Hide address bar on page load
+    if (isMobile) {
+      // Set up a timed function to repeatedly attempt to hide the address bar
+      // This helps on some mobile browsers that restore it after initial load
+      hideAddressBar();
+      
+      // Try multiple times as some browsers restore it
+      const timerId = setInterval(hideAddressBar, 1000);
+      setTimeout(() => clearInterval(timerId), 3000); // Stop trying after 3 seconds
+    }
+    
+    // Hide when orientation changes
+    window.addEventListener('orientationchange', hideAddressBar);
+    
+    // Re-hide when window is resized
+    window.addEventListener('resize', hideAddressBar);
+    
+    // Re-hide on interaction - helps on some browsers
+    if (isMobile) {
+      document.addEventListener('touchstart', hideAddressBar, {once: true});
+    }
+    
+    return () => {
+      window.removeEventListener('orientationchange', hideAddressBar);
+      window.removeEventListener('resize', hideAddressBar);
+      document.removeEventListener('touchstart', hideAddressBar);
+    };
+  }, []);
+
   const handleRestartKernel = useCallback(async () => {
     if (!cellManager.current) return;
     showToast('Restarting kernel...', 'loading');
@@ -926,7 +985,7 @@ const NotebookPage: React.FC = () => {
   // Calculate the filename from the filePath in metadata
   const notebookFileName = useMemo(() => {
     if (!notebookMetadata.filePath) {
-      return 'Untitled_Chat'; // Default if no path
+      return ''; // Default if no path
     }
     // Get the part after the last '/'
     const parts = notebookMetadata.filePath.split('/');

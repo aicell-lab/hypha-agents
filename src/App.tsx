@@ -6,6 +6,7 @@ import ResourceGrid from './components/ResourceGrid';
 import ResourceDetails from './components/ResourceDetails';
 import About from './components/About';
 import MyArtifacts from './components/MyArtifacts';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import './index.css'
 import './github-markdown.css'
 import AgentLab from './pages/AgentLab';
@@ -40,6 +41,7 @@ const AppContent: React.FC = () => {
             <Route path="/notebook" element={<Navigate to="/lab" replace />} />
           </Routes>
         </main>
+        <PWAInstallPrompt />
       </div>
     );
   }
@@ -50,7 +52,7 @@ const AppContent: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
 
         <div className="flex-1 flex flex-col min-h-0 overflow-auto">
-          <main className="flex-1 p-4">
+          <main className="flex-1">
             <Routes>
               <Route path="/" element={<ResourceGrid />} />
               <Route path="/resources/:id" element={<ResourceDetails />} />
@@ -65,6 +67,7 @@ const AppContent: React.FC = () => {
           </main>
         </div>
       </div>
+      <PWAInstallPrompt />
     </div>
   );
 };

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import LoginButton from './LoginButton';
-import { BiCube } from 'react-icons/bi';
 import { IoDocumentTextOutline, IoCloudUploadOutline, IoFlaskOutline } from 'react-icons/io5';
 import { AiOutlineInfoCircle } from 'react-icons/ai';
 import { BsCollection } from 'react-icons/bs';
@@ -31,22 +30,26 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
   };
 
   const mobileNavLinkClasses = (path: string): string => {
-    const baseClasses = "flex items-center px-3 py-2 rounded-md hover:bg-gray-50";
-    const activeClasses = "text-blue-600 font-medium bg-blue-50";
-    const inactiveClasses = "text-gray-700 hover:text-gray-900";
+    const baseClasses = "flex items-center px-3 py-1.5 rounded-md hover:bg-white/70";
+    const activeClasses = "text-blue-600 font-medium bg-white/50";
+    const inactiveClasses = "text-gray-700 hover:text-gray-800";
     
     return `${baseClasses} ${isActivePath(path) ? activeClasses : inactiveClasses}`;
   };
 
   return (
-    <nav className={`sticky top-0 z-50 bg-white border-b border-gray-200 ${className}`}>
+    <nav className={`sticky top-0 z-50 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 ${className}`}>
       <div className="max-w-[1400px] mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-14">
           {/* Left section with logo */}
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
-              <BiCube className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900">
+              <img 
+                src="/logo.png" 
+                alt="Hypha Agents" 
+                className="h-7 w-7" 
+              />
+              <span className="ml-2 text-lg font-bold text-gray-800">
                 {SITE_NAME}
               </span>
             </Link>
@@ -63,25 +66,25 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
               
               <Link
                 to="/lab"
-                className="hover:bg-gray-50 px-4 py-2 rounded-md flex items-center"
+                className="hover:bg-white/70 px-3 py-1.5 rounded-md flex items-center transition-colors"
               >
-                <IoFlaskOutline className="mr-2" size={18} />
+                <IoFlaskOutline className="mr-2" size={16} />
                 Agent Lab
               </Link>
               {user?.email && location.pathname !== '/my-agents' && (
                 <Link
                   to="/my-agents"
-                  className="hover:bg-gray-50 px-4 py-2 rounded-md flex items-center"
+                  className="hover:bg-white/70 px-3 py-1.5 rounded-md flex items-center transition-colors"
                 >
-                  <BsCollection className="mr-2" size={18} />
+                  <BsCollection className="mr-2" size={16} />
                   My Agents
                 </Link>
               )}
               <Link
                 to="/about"
-                className="hover:bg-gray-50 px-4 py-2 rounded-md flex items-center"
+                className="hover:bg-white/70 px-3 py-1.5 rounded-md flex items-center transition-colors"
               >
-                <AiOutlineInfoCircle className="mr-2" size={18} />
+                <AiOutlineInfoCircle className="mr-2" size={16} />
                 About
               </Link>
               <LoginButton />
@@ -108,7 +111,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
               className={mobileNavLinkClasses("/lab")}
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              <IoFlaskOutline className="mr-2" size={18} />
+              <IoFlaskOutline className="mr-2" size={16} />
               Agent Lab
             </Link>
             {user?.email && (
@@ -117,7 +120,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
                 className={mobileNavLinkClasses("/my-agents")}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <BsCollection className="mr-2" size={18} />
+                <BsCollection className="mr-2" size={16} />
                 My Agents
               </Link>
             )}
@@ -126,12 +129,12 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
               to="/about" 
               className={mobileNavLinkClasses("/about")}
             >
-              <AiOutlineInfoCircle className="mr-2" size={18} />
+              <AiOutlineInfoCircle className="mr-2" size={16} />
               About
             </Link>
 
             {/* Add divider */}
-            <div className="border-t border-gray-200 my-2"></div>
+            <div className="border-t border-blue-100 my-2"></div>
             <div className="px-3 py-2">
               <LoginButton />
             </div>

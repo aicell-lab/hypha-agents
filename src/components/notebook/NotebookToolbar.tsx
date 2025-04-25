@@ -190,6 +190,7 @@ export interface NotebookToolbarProps {
   isAIReady: boolean;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
+  onPublish?: () => void;
 }
 
 interface ToolbarDropdownProps extends Omit<NotebookToolbarProps, 'onPublish'> {

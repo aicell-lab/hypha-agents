@@ -3,7 +3,7 @@ import { InitialUrlParams } from '../../hooks/useNotebookInitialization';
 import { showToast } from '../../utils/notebookUtils';
 import { IN_BROWSER_PROJECT } from '../../providers/ProjectsProvider';
 import { motion } from 'framer-motion';
-import { FaRobot, FaRegLightbulb } from 'react-icons/fa';
+import { FaRegLightbulb } from 'react-icons/fa';
 import { BiCodeAlt } from 'react-icons/bi';
 import { RiTeamLine } from 'react-icons/ri';
 import AgentConfigDialog, { AgentConfigData } from './AgentConfigDialog';
@@ -154,8 +154,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 {/* Header Section */}
                 <motion.div variants={fadeInUp} className="space-y-2 sm:space-y-4">
                     <div className="flex justify-center items-center space-x-3">
-                        <FaRobot className="w-8 h-8 sm:w-12 sm:h-12 text-blue-600" />
-                        <h1 className="text-3xl sm:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 py-1 leading-normal">
+                        <img 
+                            src="/logo.png" 
+                            alt="Hypha Agents" 
+                            className="w-8 h-8 sm:w-12 sm:h-12" 
+                        />
+                        <h1 className="text-3xl sm:text-5xl font-bold text-black py-1 leading-normal font-sans tracking-tight">
                             Hypha Agent Lab
                         </h1>
                     </div>
