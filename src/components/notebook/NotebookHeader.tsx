@@ -26,6 +26,7 @@ export interface NotebookHeaderProps {
   onMoveCellDown: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  isWelcomeScreen?: boolean;
 }
 
 const NotebookHeader: React.FC<NotebookHeaderProps> = ({
@@ -50,6 +51,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   onMoveCellDown,
   canMoveUp,
   canMoveDown,
+  isWelcomeScreen = false,
 }) => {
   return (
     <div className="flex-shrink-0 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 shadow-sm">
@@ -76,16 +78,18 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           </Link>
           {/* Always show Agent Lab */}
           <h1 className="text-base font-medium text-gray-800">Agent Lab</h1>
-          {/* Show file name on medium and larger screens */}
-          <div className="hidden md:flex items-center">
-            <div className="h-5 w-px bg-blue-100 mx-1"></div>
-            <span
-              className="text-lg font-medium bg-transparent border-none px-1 text-gray-600 truncate max-w-xs inline-block"
-              title={fileName}
-            >
-              {fileName || 'Untitled_Chat'}
-            </span>
-          </div>
+          {/* Show file name on medium and larger screens, but not on welcome screen */}
+          {!isWelcomeScreen && (
+            <div className="hidden md:flex items-center">
+              <div className="h-5 w-px bg-blue-100 mx-1"></div>
+              <span
+                className="text-lg font-medium bg-transparent border-none px-1 text-gray-600 truncate max-w-xs inline-block"
+                title={fileName}
+              >
+                {fileName || 'Untitled_Chat'}
+              </span>
+            </div>
+          )}
         </div>
 
         <NotebookToolbar
@@ -109,6 +113,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           onMoveCellDown={onMoveCellDown}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
+          isWelcomeScreen={isWelcomeScreen}
         />
       </div>
     </div>

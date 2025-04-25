@@ -1644,6 +1644,7 @@ const NotebookPage: React.FC = () => {
         onMoveCellDown={handleMoveCellDown}
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}
+        isWelcomeScreen={showWelcomeScreen}
       />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar

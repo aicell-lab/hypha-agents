@@ -3,7 +3,6 @@ import { Dialog } from '@headlessui/react';
 import { IoFlaskOutline, IoCodeOutline, IoDocumentOutline, IoGlobeOutline, IoAnalytics } from 'react-icons/io5';
 import { BiBot } from 'react-icons/bi';
 import { NotebookCell } from '../../types/notebook';
-import ModelConfigForm from '../shared/ModelConfigForm';
 import { AgentSettings, DefaultAgentConfig } from '../../utils/chatCompletion';
 
 // Define agent templates
@@ -67,7 +66,6 @@ export interface AgentConfigData {
   license: string;
   welcomeMessage: string;
   initialPrompt: string;
-  modelConfig?: AgentSettings;
 }
 
 interface AgentConfigDialogProps {
@@ -90,7 +88,6 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
   const [license, setLicense] = useState(licenses[0]);
   const [welcomeMessage, setWelcomeMessage] = useState('Hi, how can I help you today?');
   const [initialPrompt, setInitialPrompt] = useState('');
-  const [modelConfig, setModelConfig] = useState<AgentSettings>(DefaultAgentConfig);
   const [step, setStep] = useState(1);
   
   // Reset the form when the dialog is opened
@@ -103,7 +100,6 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
       setLicense(licenses[0]);
       setWelcomeMessage('Hi, how can I help you today?');
       setInitialPrompt('');
-      setModelConfig(DefaultAgentConfig);
       setStep(1);
     }
   }, [isOpen]);
@@ -128,7 +124,6 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
       license,
       welcomeMessage,
       initialPrompt,
-      modelConfig
     });
   };
   
@@ -282,14 +277,6 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
             value={initialPrompt}
             onChange={(e) => setInitialPrompt(e.target.value)}
             placeholder="Enter instructions for your agent..."
-          />
-        </div>
-        
-        {/* Model Configuration */}
-        <div className="border-t pt-4">
-          <ModelConfigForm
-            settings={modelConfig}
-            onSettingsChange={setModelConfig}
           />
         </div>
       </div>

@@ -191,6 +191,7 @@ export interface NotebookToolbarProps {
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
   onPublish?: () => void;
+  isWelcomeScreen?: boolean;
 }
 
 interface ToolbarDropdownProps extends Omit<NotebookToolbarProps, 'onPublish'> {
@@ -220,7 +221,8 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onToggleSidebar,
   isSidebarOpen,
   isOpen,
-  onClose
+  onClose,
+  isWelcomeScreen
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(metadata.title || 'Untitled Chat');
@@ -435,7 +437,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   isKernelReady,
   isAIReady,
   onToggleSidebar,
-  isSidebarOpen
+  isSidebarOpen,
+  isWelcomeScreen = false
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -448,28 +451,32 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   // Render standard toolbar for larger screens
   const renderStandardToolbar = () => (
     <div className="flex items-center">
-      <FileOperations 
-        onSave={onSave} 
-        onDownload={onDownload} 
-        onLoad={onLoad} 
-      />
-      <div className="h-5 w-px bg-gray-200 mx-1"></div>
-      <KernelControls 
-        onRunAll={onRunAll} 
-        onClearOutputs={onClearOutputs} 
-        onRestartKernel={onRestartKernel} 
-        isProcessing={isProcessing} 
-        isReady={isKernelReady} 
-      />
-      <CellControls 
-        onAddCodeCell={onAddCodeCell} 
-        onAddMarkdownCell={onAddMarkdownCell} 
-        onShowKeyboardShortcuts={onShowKeyboardShortcuts}
-        onMoveCellUp={onMoveCellUp}
-        onMoveCellDown={onMoveCellDown}
-        canMoveUp={canMoveUp}
-        canMoveDown={canMoveDown}
-      />
+      {!isWelcomeScreen && (
+        <>
+          <FileOperations 
+            onSave={onSave} 
+            onDownload={onDownload} 
+            onLoad={onLoad} 
+          />
+          <div className="h-5 w-px bg-gray-200 mx-1"></div>
+          <KernelControls 
+            onRunAll={onRunAll} 
+            onClearOutputs={onClearOutputs} 
+            onRestartKernel={onRestartKernel} 
+            isProcessing={isProcessing} 
+            isReady={isKernelReady} 
+          />
+          <CellControls 
+            onAddCodeCell={onAddCodeCell} 
+            onAddMarkdownCell={onAddMarkdownCell} 
+            onShowKeyboardShortcuts={onShowKeyboardShortcuts}
+            onMoveCellUp={onMoveCellUp}
+            onMoveCellDown={onMoveCellDown}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
+          />
+        </>
+      )}
       <LoginSection />
     </div>
   );
@@ -477,38 +484,45 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   // Render dropdown for smaller screens
   const renderDropdownToolbar = () => (
     <div className="relative">
-      <button
-        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
-        title="Toggle menu"
-      >
-        <FaBars className="w-4 h-4" />
-      </button>
+      {!isWelcomeScreen ? (
+        <>
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
+            title="Toggle menu"
+          >
+            <FaBars className="w-4 h-4" />
+          </button>
 
-      <ToolbarDropdown
-        metadata={metadata}
-        onMetadataChange={onMetadataChange}
-        onSave={onSave}
-        onDownload={onDownload}
-        onLoad={onLoad}
-        onRunAll={onRunAll}
-        onClearOutputs={onClearOutputs}
-        onRestartKernel={onRestartKernel}
-        onAddCodeCell={onAddCodeCell}
-        onAddMarkdownCell={onAddMarkdownCell}
-        onShowKeyboardShortcuts={onShowKeyboardShortcuts}
-        onMoveCellUp={onMoveCellUp}
-        onMoveCellDown={onMoveCellDown}
-        canMoveUp={canMoveUp}
-        canMoveDown={canMoveDown}
-        isProcessing={isProcessing}
-        isKernelReady={isKernelReady}
-        isAIReady={isAIReady}
-        onToggleSidebar={onToggleSidebar}
-        isSidebarOpen={isSidebarOpen}
-        isOpen={isDropdownOpen}
-        onClose={() => setIsDropdownOpen(false)}
-      />
+          <ToolbarDropdown
+            metadata={metadata}
+            onMetadataChange={onMetadataChange}
+            onSave={onSave}
+            onDownload={onDownload}
+            onLoad={onLoad}
+            onRunAll={onRunAll}
+            onClearOutputs={onClearOutputs}
+            onRestartKernel={onRestartKernel}
+            onAddCodeCell={onAddCodeCell}
+            onAddMarkdownCell={onAddMarkdownCell}
+            onShowKeyboardShortcuts={onShowKeyboardShortcuts}
+            onMoveCellUp={onMoveCellUp}
+            onMoveCellDown={onMoveCellDown}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
+            isProcessing={isProcessing}
+            isKernelReady={isKernelReady}
+            isAIReady={isAIReady}
+            onToggleSidebar={onToggleSidebar}
+            isSidebarOpen={isSidebarOpen}
+            isOpen={isDropdownOpen}
+            onClose={() => setIsDropdownOpen(false)}
+            isWelcomeScreen={isWelcomeScreen}
+          />
+        </>
+      ) : (
+        <LoginSection />
+      )}
     </div>
   );
 

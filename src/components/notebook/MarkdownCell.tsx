@@ -19,6 +19,7 @@ interface MonacoEditor {
   updateOptions: (options: any) => void;
   addCommand: (keybinding: number, handler: () => void) => void;
   setValue: (value: string) => void;
+  layout: () => void;
 }
 
 interface MarkdownCellProps {
@@ -229,23 +230,23 @@ const handleRegenerateResponse = useCallback(() => {
         }
       }
 
-      if (!isEditorFocused) return;
-
-      // Handle Shift+Enter
+      // Handle Shift+Enter - check both editor focus AND cell focus
       if (e.key === 'Enter' && e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation(); // Stop event from bubbling to other handlers
-        if (isEditing) {
-          handleRun();
-        } else {
-          handleRegenerateResponse();
+        if (isEditorFocused || isFocused) {
+          e.preventDefault();
+          e.stopPropagation(); // Stop event from bubbling to other handlers
+          if (isEditing) {
+            handleRun();
+          } else {
+            handleRegenerateResponse();
+          }
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isEditing, handleRun, handleRegenerateResponse]);
+  }, [isEditing, handleRun, handleRegenerateResponse, isFocused]);
 
   // Handle focus and blur events
   useEffect(() => {
