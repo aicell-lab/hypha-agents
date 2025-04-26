@@ -13,11 +13,50 @@ export const convert = new Convert({
 // Strip ANSI escape codes from a string
 export const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
 
+// Toast container to manage multiple toasts
+let toastContainer: HTMLElement | null = null;
+
 // Store references to toasts that need manual dismissal
 const activeToasts = new Map<string, HTMLElement>();
 
 // Maximum length for toast messages in the UI
 const MAX_TOAST_MESSAGE_LENGTH = 100;
+
+// Gap between toast messages (reduced from 8px to 4px)
+const TOAST_GAP = 4;
+
+/**
+ * Ensures the toast container exists in the DOM
+ * @returns The toast container element
+ */
+function getToastContainer(): HTMLElement {
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    // Positioned below navbar with right padding
+    toastContainer.className = 'fixed top-16 right-0 z-[100] p-4 flex flex-col items-end gap-1 pointer-events-none';
+    document.body.appendChild(toastContainer);
+  }
+  return toastContainer;
+}
+
+/**
+ * Recalculates positions for all active toasts to ensure proper stacking
+ */
+function recalculateToastPositions(): void {
+  if (!toastContainer) return;
+  
+  const toasts = Array.from(toastContainer.children) as HTMLElement[];
+  let currentOffset = 0;
+  
+  toasts.forEach((toast) => {
+    // Reset any previous transforms
+    toast.style.transform = `translateY(${currentOffset}px)`;
+    currentOffset += toast.offsetHeight + TOAST_GAP;
+    
+    // Update the transition to include transform
+    toast.style.transition = 'opacity 300ms ease-out, transform 300ms ease-out';
+  });
+}
 
 /**
  * Truncates a message if it exceeds the maximum length.
@@ -108,6 +147,9 @@ export function showToast(
   const { duration = 2000, id } = options;
   let timeoutId: ReturnType<typeof setTimeout> | null = null; // Store timeout ID
 
+  // Get or create the toast container
+  const container = getToastContainer();
+
   // Handle long messages
   let displayMessage = message;
   if (message.length > MAX_TOAST_MESSAGE_LENGTH) {
@@ -123,7 +165,8 @@ export function showToast(
   }
 
   const messageDiv = document.createElement('div');
-  messageDiv.style.opacity = '1'; // Start fully visible
+  messageDiv.style.opacity = '0'; // Start invisible for fade-in
+  messageDiv.style.transform = 'translateY(0)'; // Initial position
 
   let iconSpan = document.createElement('span');
   iconSpan.className = 'inline-block mr-2 flex-shrink-0'; // Prevent icon shrinking
@@ -150,11 +193,10 @@ export function showToast(
   }
 
   // Combine classes for new style, positioning, and layout
-  messageDiv.className = `fixed top-12 right-4 \
-                          bg-white text-gray-800 \
+  messageDiv.className = `bg-white text-gray-800 \
                           px-4 py-2 rounded shadow-xl border border-blue-500 \
-                          z-[100] transition-opacity duration-300 ease-out \
-                          flex items-center max-w-sm`; // Added max-width
+                          transition-all duration-300 ease-out \
+                          flex items-center max-w-sm pointer-events-auto`;
 
   // Set content with icon and message
   const contentWrapper = document.createElement('div');
@@ -178,8 +220,9 @@ export function showToast(
     // Dismiss logic
     messageDiv.style.opacity = '0';
     setTimeout(() => {
-      if (document.body.contains(messageDiv)) {
-        document.body.removeChild(messageDiv);
+      if (container.contains(messageDiv)) {
+        container.removeChild(messageDiv);
+        recalculateToastPositions(); // Recalculate positions after removal
       }
       if (id) {
         activeToasts.delete(id); // Clean up map entry only if it has an ID
@@ -188,7 +231,17 @@ export function showToast(
   };
   messageDiv.appendChild(closeButton);
 
-  document.body.appendChild(messageDiv);
+  // Add to container
+  container.appendChild(messageDiv);
+  
+  // Force a reflow to ensure transitions work properly
+  void messageDiv.offsetWidth;
+  
+  // Make visible with animation
+  messageDiv.style.opacity = '1';
+  
+  // Calculate positions for all toasts
+  recalculateToastPositions();
 
   // If an ID is provided, store the reference for manual dismissal
   if (id) {
@@ -198,8 +251,9 @@ export function showToast(
     timeoutId = setTimeout(() => { // Store the timeout ID
       messageDiv.style.opacity = '0';
       setTimeout(() => {
-        if (document.body.contains(messageDiv)) {
-          document.body.removeChild(messageDiv);
+        if (container.contains(messageDiv)) {
+          container.removeChild(messageDiv);
+          recalculateToastPositions(); // Recalculate positions after removal
         }
       }, 300); // Wait for opacity transition before removing
     }, duration);
@@ -212,14 +266,12 @@ export function showToast(
  */
 export function dismissToast(id: string): void {
   const toastElement = activeToasts.get(id);
-  if (toastElement) {
-    // Attempt to find and clear any associated timeout if we stored it (might need a different structure)
-    // For simplicity, the close button handler now clears the timeout directly.
-    // We just handle the removal here.
+  if (toastElement && toastContainer) {
     toastElement.style.opacity = '0';
     setTimeout(() => {
-      if (document.body.contains(toastElement)) {
-        document.body.removeChild(toastElement);
+      if (toastContainer && toastContainer.contains(toastElement)) {
+        toastContainer.removeChild(toastElement);
+        recalculateToastPositions(); // Recalculate positions after removal
       }
       activeToasts.delete(id); // Clean up map entry
     }, 300); // Wait for fade out before removing
