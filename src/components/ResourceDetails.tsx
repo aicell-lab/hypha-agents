@@ -3,7 +3,7 @@ import { useParams, Link as RouterLink } from 'react-router-dom';
 import { useHyphaStore } from '../store/hyphaStore';
 import ReactMarkdown from 'react-markdown';
 import { Resource } from '../types/resource';
-import { Button, Box, Typography, Chip, Grid, Card, CardContent, Avatar, Stack, Divider, IconButton } from '@mui/material';
+import { Button, Box, Typography, Chip, Grid, Card, CardContent, Avatar, Stack, Divider, IconButton, CircularProgress } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import SchoolIcon from '@mui/icons-material/School';
 import LinkIcon from '@mui/icons-material/Link';
@@ -81,7 +81,11 @@ const ResourceDetails = () => {
   };
 
   if (isLoading) {
-    return <div className="loading">Loading...</div>;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <CircularProgress size={60} thickness={4} color="primary" />
+      </Box>
+    );
   }
 
   if (error) {
