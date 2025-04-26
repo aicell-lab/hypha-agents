@@ -51,7 +51,7 @@ const Splash: React.FC<SplashProps> = ({ className = '' }) => {
             }}
           >
             <img 
-              src="/hypha-agents-logo.png" 
+              src="/logo.png" 
               alt="Hypha Logo" 
               className="w-32 h-32 object-contain drop-shadow-lg"
             />
