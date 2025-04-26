@@ -297,7 +297,23 @@ const NotebookPage: React.FC = () => {
           title: notebookData.metadata?.title || filePath.split('/').pop() || 'Untitled Chat',
           modified: new Date().toISOString(),
           filePath: filePath,
-          projectId: resolvedProjectId
+          projectId: resolvedProjectId,
+          // Ensure there's always an agentArtifact property
+          agentArtifact: notebookData.metadata?.agentArtifact || {
+            id: '', // Empty ID indicates it's a new agent
+            name: notebookData.metadata?.title || filePath.split('/').pop() || 'Untitled Chat',
+            description: 'An agent created from chat',
+            version: '0.1.0',
+            manifest: {
+              name: notebookData.metadata?.title || filePath.split('/').pop() || 'Untitled Chat',
+              description: 'An agent created from chat',
+              version: '0.1.0',
+              license: 'CC-BY-4.0',
+              welcomeMessage: 'Hi, how can I help you today?',
+              type: 'agent',
+              created_at: new Date().toISOString()
+            }
+          }
         }));
 
         // --- Explicitly update URL params after successful load using new names ---
@@ -573,7 +589,6 @@ const NotebookPage: React.FC = () => {
             manifest: {
               ...agent.manifest,
               // Don't include modelConfig in the notebook metadata
-              modelConfig: undefined
             }
           }
         },
@@ -1137,7 +1152,23 @@ const NotebookPage: React.FC = () => {
         modified: new Date().toISOString(),
         created: new Date().toISOString(),
         filePath: filePath,
-        projectId: IN_BROWSER_PROJECT.id
+        projectId: IN_BROWSER_PROJECT.id,
+        // Add default agent artifact metadata
+        agentArtifact: {
+          id: '', // Empty ID indicates it's a new agent
+          name: 'New Agent',
+          description: 'A new agent created from chat',
+          version: '0.1.0',
+          manifest: {
+            name: 'New Agent',
+            description: 'A new agent created from chat',
+            version: '0.1.0',
+            license: 'CC-BY-4.0',
+            welcomeMessage: 'Hi, how can I help you today?',
+            type: 'agent',
+            created_at: new Date().toISOString()
+          }
+        }
       },
       cells: []
     };
@@ -1182,8 +1213,6 @@ const NotebookPage: React.FC = () => {
           created: new Date().toISOString(),
           filePath: filePath,
           projectId: IN_BROWSER_PROJECT.id,
-          // Save the model configuration to the notebook metadata
-          modelSettings: agentData.modelConfig,
           agentArtifact: {
             id: '', // Will be filled when published
             version: agentData.version,
@@ -1532,7 +1561,6 @@ const NotebookPage: React.FC = () => {
             manifest: {
               ...agent.manifest,
               // Don't include modelConfig in the notebook metadata
-              modelConfig: undefined
             }
           }
         },
@@ -1706,6 +1734,7 @@ const NotebookPage: React.FC = () => {
                     initializationError={initializationError}
                     onShowThebeTerminal={handleShowThebeTerminalInCanvas}
                     onModelSettingsChange={handleShowModelSettingsInCanvas}
+                    onShowEditAgent={handleShowEditAgentInCanvas}
                   />
                 </div>
               </div>
