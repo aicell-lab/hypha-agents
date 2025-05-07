@@ -450,8 +450,10 @@ const NotebookPage: React.FC = () => {
       await restartKernel();
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
-      setupService();
-      showToast('Kernel restarted successfully', 'success');
+      setTimeout(() => {
+        setupService();
+        showToast('Kernel restarted successfully', 'success');
+      }, 100);
     } catch (error) {
       console.error('Failed to restart kernel:', error);
       showToast('Failed to restart kernel', 'error');
