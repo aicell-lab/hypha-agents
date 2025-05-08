@@ -15,7 +15,7 @@ def get_chatbot_api(workspace, service_id, build_dir):
     static_dir = os.path.join(os.path.dirname(__file__), "..", build_dir)
 
     # Mount standard static directories
-    for subdir in ["static/js", "static/css", "img", "icons", "thebe", "monaco-editor"]:
+    for subdir in ["static/js", "static/css", "img", "api", "thebe", "monaco-editor"]:
         mount_subdir(app, subdir, static_dir)
 
     @app.get("/", response_class=HTMLResponse)
