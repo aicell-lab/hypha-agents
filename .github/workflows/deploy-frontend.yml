@@ -69,7 +69,7 @@ jobs:
         run: pnpm install
 
       - name: Build frontend
-        run: REACT_APP_SITE_ID=hypha-agents REACT_APP_SITE_NAME="Hypha Agents" REACT_APP_SERVER_URL=https://hypha.aicell.io pnpm build
+        run: REACT_APP_SITE_ID=eurobioimaging-agents REACT_APP_SITE_NAME="Euro-BioImaging Agents" REACT_APP_SERVER_URL=https://hypha.aicell.io pnpm build
         env:
           CI: false # This prevents treating warnings as errors
           NODE_OPTIONS: "--max-old-space-size=16384" # Increase heap size to 16GB
