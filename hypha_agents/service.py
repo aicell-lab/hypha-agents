@@ -48,13 +48,6 @@ async def start_service(server_url: str = "https://hypha.aicell.io") -> None:
             "Hypha service started successfully. Agent service ID: %s", agent_svc.id
         )
 
-        frontend_service = await register_frontend_service(
-            server, os.getenv("WORKSPACE"), "agent-platform", "build"
-        )
-        logger.info(
-            "Frontend service started successfully. Service ID: %s", frontend_service.id
-        )
-
         # Register plotting service
         # plotting_svc = await register_plotting_service(server)
         # logger.info("Plotting service started successfully. Service ID: %s", plotting_svc.id)
