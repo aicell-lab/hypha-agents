@@ -10,7 +10,6 @@ import logging
 from dotenv import load_dotenv
 from hypha_rpc import connect_to_server, login
 from hypha_agents.hypha_service import register_agent_service
-from hypha_agents.asgi_service import register_frontend_service
 
 # from hypha_agents.services.plotting import register_plotting_service
 
