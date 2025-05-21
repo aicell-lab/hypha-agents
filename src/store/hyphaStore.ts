@@ -140,7 +140,7 @@ export const useHyphaStore = create<HyphaState>((set, get) => ({
   },
   fetchResources: async (page: number, searchQuery?: string) => {
     try {
-      if(page < 1) {
+      if (page < 1) {
         page = 1;
       }
       console.log('Fetching resources for page:', page, searchQuery);

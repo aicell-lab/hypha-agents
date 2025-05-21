@@ -7,7 +7,7 @@ load_dotenv()
 
 SERVER_URL = os.getenv("SERVER_URL", "https://hypha.aicell.io")
 SITE_ID = os.getenv("REACT_APP_SITE_ID", "hypha-agents")
-SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Hypha Agents")
+SITE_NAME = os.getenv("REACT_APP_SITE_NAME", "Euro-BioImaging Agents")
 
 async def create_collection():
     server = await connect_to_server({

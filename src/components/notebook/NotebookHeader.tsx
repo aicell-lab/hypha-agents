@@ -72,7 +72,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           >
             <img 
               src="/logo.png" 
-              alt="Hypha Agents" 
+              alt="Euro-BioImaging Agents" 
               className="h-6 w-6"
             />
           </Link>

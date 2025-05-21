@@ -48,7 +48,7 @@ const MyArtifacts: React.FC = () => {
       setLoading(true);
       const filters = {
         created_by: user.id,
-        version: showStagedOnly ? "stage" : "*",
+        version: showStagedOnly ? "stage" : "committed",
       };
 
       const response = await artifactManager.list({
