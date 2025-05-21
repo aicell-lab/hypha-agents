@@ -12,8 +12,6 @@ import os
 import json
 import asyncio
 from typing import Literal, Self, overload
-import jwt
-from dotenv import load_dotenv
 import requests
 from hypha_rpc import connect_to_server
 
@@ -22,14 +20,6 @@ type JsonType = str | int | float | bool | None | dict[str, "JsonType"] | list[
     "JsonType"
 ]
 type FileMode = Literal["r", "rb", "w", "wb", "a", "ab"]
-
-
-def ws_from_token(token: str) -> str:
-    """Extracts the workspace ID from the token."""
-    decoded_token = jwt.decode(token, options={"verify_signature": False})
-    scope = decoded_token.get("scope", "")
-    workspace_parts = [part for part in scope.split() if part.startswith("ws:")]
-    return workspace_parts[0].split(":", 1)[1].split("#", 1)[0]
 
 
 def remove_none(d: dict) -> dict:
@@ -247,7 +237,7 @@ class HyphaArtifact:
     token: str
     workspace_id: str
 
-    def __init__(self: Self, artifact_alias: str):
+    def __init__(self: Self, artifact_alias: str, workspace: str, token: str):
         """Initialize a HyphaArtifact instance.
 
         Parameters
@@ -255,10 +245,9 @@ class HyphaArtifact:
         artifact_id: str
             The identifier of the Hypha artifact to interact with
         """
-        load_dotenv()
         self.artifact_alias = artifact_alias
-        self.token = os.getenv("PERSONAL_TOKEN")
-        self.workspace_id = ws_from_token(self.token)
+        self.workspace_id = workspace
+        self.token = token
         self.artifact_url = "https://hypha.aicell.io/public/services/artifact-manager"
 
     def _extend_params(
