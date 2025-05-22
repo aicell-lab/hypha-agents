@@ -1071,7 +1071,8 @@ const NotebookPage: React.FC = () => {
       const api = await setupNotebookService({
         onAddWindow: handleAddWindow,
         server, executeCode, agentSettings,
-        abortSignal: currentSignal
+        abortSignal: currentSignal,
+        projectId: initialUrlParams?.projectId || IN_BROWSER_PROJECT.id,
       });
       if (currentSignal.aborted) {
           console.log('[AgentLab] Hypha Core service setup aborted before completion.');
