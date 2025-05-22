@@ -220,7 +220,7 @@ os.environ['CURRENT_URL'] = '${window.location.href}'
 os.environ['HYPHA_SERVER_URL'] = '${server.config.public_base_url}'
 os.environ['HYPHA_WORKSPACE'] = '${server.config.workspace}'
 os.environ['HYPHA_TOKEN'] = '${token}'
-os.environ['PROJECT_ID'] = '${projectId}'
+os.environ['HYPHA_PROJECT_ID'] = '${projectId}'
 os.environ['HYPHA_USER_ID'] = '${server.config.user.id}'
 print("Environment variables set successfully.")
     `, {
