@@ -569,7 +569,8 @@ class HyphaArtifact:
                 **kwargs,
             )
         elif "w" in mode or "a" in mode:
-            self._remote_edit(stage=True)
+            if auto_commit:
+                self._remote_edit(stage=True)
             upload_url = self._remote_put_file_url(normalized_path)
             file_obj = ArtifactHttpFile(
                 url=upload_url,
@@ -632,7 +633,7 @@ class HyphaArtifact:
     def _copy_single_file(self, src: str, dst: str) -> None:
         """Helper method to copy a single file"""
         content = self.cat(src)
-        with self.open(dst, mode="w") as f:
+        with self.open(dst, mode="w", auto_commit=False) as f:
             f.write(content)
 
     def cp(
@@ -993,63 +994,3 @@ class HyphaArtifact:
             Sizes of the files in bytes
         """
         return [self.size(path) for path in paths]
-
-
-async def create_artifact(artifact_id: str, token: str, server_url: str) -> bool:
-    """Create a new artifact in Hypha.
-
-    Parameters
-    ----------
-    artifact_id: str
-        The identifier for the new artifact
-    token: str
-        Authorization token for Hypha
-     server_url: str
-        The base URL of the Hypha server
-
-    Returns
-    -------
-    bool
-        True if artifact was created successfully, False otherwise
-    """
-    try:
-        # Connect to the Hypha server
-        api = await connect_to_server(
-            {
-                "name": "artifact-client",
-                "server_url": server_url,
-                "token": token,
-            }
-        )
-
-        # Get the artifact manager service
-        artifact_manager = await api.get_service("public/artifact-manager")
-
-        # Create the artifact
-        manifest = {
-            "name": artifact_id,
-            "description": f"Artifact created programmatically: {artifact_id}",
-        }
-
-        await artifact_manager.create(
-            alias=artifact_id,
-            type="generic",
-            manifest=manifest,
-            config={"permissions": {"*": "rw+", "@": "rw+"}},
-        )
-
-        # Disconnect from the server
-        await api.disconnect()
-        return True
-
-    except Exception:
-        return False
-
-
-def create_artifact_sync(artifact_id: str, token: str, server_url: str) -> bool:
-    """Synchronous wrapper for create_artifact function"""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(create_artifact(artifact_id, token, server_url))
-    finally:
-        loop.close()
