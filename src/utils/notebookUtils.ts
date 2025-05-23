@@ -22,9 +22,6 @@ const activeToasts = new Map<string, HTMLElement>();
 // Maximum length for toast messages in the UI
 const MAX_TOAST_MESSAGE_LENGTH = 100;
 
-// Gap between toast messages (reduced from 8px to 4px)
-const TOAST_GAP = 4;
-
 /**
  * Ensures the toast container exists in the DOM
  * @returns The toast container element
@@ -51,7 +48,8 @@ function recalculateToastPositions(): void {
   toasts.forEach((toast) => {
     // Reset any previous transforms
     toast.style.transform = `translateY(${currentOffset}px)`;
-    currentOffset += toast.offsetHeight + TOAST_GAP;
+    // Use quarter the height of the toast as the gap for very tight stacking
+    currentOffset += toast.offsetHeight / 400;
     
     // Update the transition to include transform
     toast.style.transition = 'opacity 300ms ease-out, transform 300ms ease-out';
