@@ -35,6 +35,16 @@ import { useNotebookInitialization } from '../hooks/useNotebookInitialization';
 import { useUrlSync } from '../hooks/useUrlSync';
 import { useNotebookKeyboardShortcuts } from '../hooks/useNotebookKeyboardShortcuts';
 
+// Import splitter storage utilities
+import { 
+  getDefaultSidebarWidth, 
+  getDefaultCanvasPanelWidth, 
+  saveSidebarWidth,
+  saveCanvasPanelWidth,
+  saveSidebarWidthDebounced, 
+  saveCanvasPanelWidthDebounced 
+} from '../utils/splitterStorage';
+
 // Add imports for Sidebar components
 import Sidebar from '../components/notebook/Sidebar';
 
@@ -165,6 +175,7 @@ const NotebookPage: React.FC = () => {
 
   // Simplified sidebar state - open by default on welcome screen
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(() => getDefaultSidebarWidth());
 
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
@@ -186,7 +197,7 @@ const NotebookPage: React.FC = () => {
     projects,
   });
 
-  const [canvasPanelWidth, setCanvasPanelWidth] = useState(600);
+  const [canvasPanelWidth, setCanvasPanelWidth] = useState(() => getDefaultCanvasPanelWidth());
   const [showCanvasPanel, setShowCanvasPanel] = useState(false);
   const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
   const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
@@ -654,7 +665,7 @@ const NotebookPage: React.FC = () => {
         setKernelStatus('error');
         setIsReady(false);
         showToast('Kernel initialization timed out. Please try restarting.', 'error');
-      }, 60000); // 60 second timeout
+      }, 180000); // 60 second timeout
       
       try {
         setKernelStatus('starting');
@@ -747,7 +758,7 @@ const NotebookPage: React.FC = () => {
         console.warn('[AgentLab] Kernel appears to be stuck in starting state');
         setIsKernelStuck(true);
         showToast('Kernel initialization is taking longer than expected. You may need to restart.', 'warning');
-      }, 45000); // 45 seconds
+      }, 180000); // 45 seconds
     } else {
       // Reset stuck state when kernel status changes
       setIsKernelStuck(false);
@@ -1532,12 +1543,29 @@ console.log('Kernel state has been reset');
 
   // --- Canvas Panel Handlers ---
   const handleCanvasPanelResize = useCallback((newWidth: number) => {
-    // Only used for external components that might need to know the width
-    // Don't update width directly for small screens
-    if (!isSmallScreen) {
-      setCanvasPanelWidth(newWidth);
-    }
-  }, [isSmallScreen]);
+    // Update the canvas panel width state
+    // The CanvasPanel component already handles small screen logic
+    setCanvasPanelWidth(newWidth);
+    // Save to localStorage with debouncing during drag
+    saveCanvasPanelWidthDebounced(newWidth);
+  }, []);
+
+  const handleCanvasPanelResizeEnd = useCallback(() => {
+    // Save immediately when resize ends to ensure data is persisted
+    saveCanvasPanelWidth(canvasPanelWidth);
+  }, [canvasPanelWidth]);
+
+  const handleSidebarResize = useCallback((newWidth: number) => {
+    // Update the sidebar width state
+    setSidebarWidth(newWidth);
+    // Save to localStorage with debouncing during drag
+    saveSidebarWidthDebounced(newWidth);
+  }, []);
+
+  const handleSidebarResizeEnd = useCallback(() => {
+    // Save immediately when resize ends to ensure data is persisted
+    saveSidebarWidth(sidebarWidth);
+  }, [sidebarWidth]);
 
   const toggleCanvasPanel = useCallback(() => {
     setShowCanvasPanel(prev => !prev);
@@ -2407,6 +2435,9 @@ console.log('Kernel state has been reset');
           isOpen={isSidebarOpen}
           onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
           onLoadNotebook={handleLoadNotebook}
+          onResize={handleSidebarResize}
+          onResizeEnd={handleSidebarResizeEnd}
+          width={sidebarWidth}
         />
 
         <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden transition-all duration-300">
@@ -2472,6 +2503,7 @@ console.log('Kernel state has been reset');
                 isVisible={showCanvasPanel}
                 activeTab={activeCanvasTab}
                 onResize={handleCanvasPanelResize}
+                onResizeEnd={handleCanvasPanelResizeEnd}
                 onClose={toggleCanvasPanel}
                 onTabChange={setActiveCanvasTab}
                 onTabClose={handleTabClose}

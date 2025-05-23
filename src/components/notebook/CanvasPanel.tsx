@@ -17,6 +17,7 @@ interface CanvasPanelProps {
   isVisible: boolean;
   activeTab: string | null;
   onResize?: (newWidth: number) => void;
+  onResizeEnd?: () => void;
   onClose: () => void;
   onTabChange: (tabId: string) => void;
   onTabClose?: (tabId: string) => void;
@@ -40,6 +41,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   isVisible,
   activeTab,
   onResize,
+  onResizeEnd,
   onClose,
   onTabChange,
   onTabClose,
@@ -50,6 +52,14 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   const [isSmallScreen, setIsSmallScreen] = React.useState(false);
   const [width, setWidth] = React.useState(defaultWidth);
   const lastWidthRef = React.useRef(defaultWidth);
+
+  // Sync internal width state with defaultWidth prop changes
+  React.useEffect(() => {
+    if (defaultWidth !== width && !isResizing) {
+      setWidth(defaultWidth);
+      lastWidthRef.current = defaultWidth;
+    }
+  }, [defaultWidth, width, isResizing]);
 
   // Filter out duplicate edit windows, keeping only the first one
   const filteredWindows = React.useMemo(() => {
@@ -93,23 +103,28 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
   // Handle width changes
   const handleWidthChange = React.useCallback((newWidth: number) => {
-    if (isSmallScreen) return; // Don't adjust width on small screens
+    // Only allow width changes when splitter is visible (i.e., not on small screens or mobile)
+    if (isSmallScreen || isMobile) {
+      return;
+    }
     
     const adjustedWidth = Math.max(newWidth, 300);
     setWidth(adjustedWidth);
     lastWidthRef.current = adjustedWidth;
     onResize?.(adjustedWidth);
-  }, [onResize, isSmallScreen]);
+  }, [onResize, isSmallScreen, isMobile]);
 
   // Style for container visibility
   const containerStyle = React.useMemo(() => {
+    const baseTransition = isResizing ? 'opacity 200ms ease-in-out' : 'width 300ms ease-in-out, opacity 200ms ease-in-out';
+    
     if (filteredWindows.length === 0) {
       return {
         width: '0px',
         maxWidth: '0px',
         opacity: 0,
         visibility: 'hidden' as const,
-        transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+        transition: baseTransition
       };
     }
 
@@ -121,7 +136,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
           maxWidth: '36px',
           opacity: 1,
           visibility: 'visible' as const,
-          transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+          transition: baseTransition
         };
       } else {
         // On small screens and collapsed, don't show the strip
@@ -130,7 +145,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
           maxWidth: '0px',
           opacity: 0,
           visibility: 'hidden' as const,
-          transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+          transition: baseTransition
         };
       }
     }
@@ -142,7 +157,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         maxWidth: '100vw',
         opacity: 1,
         visibility: 'visible' as const,
-        transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+        transition: baseTransition
       };
     }
 
@@ -151,9 +166,9 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
       maxWidth: '100vw',
       opacity: 1,
       visibility: 'visible' as const,
-      transition: 'width 300ms ease-in-out, opacity 200ms ease-in-out'
+      transition: baseTransition
     };
-  }, [isVisible, width, isMobile, isSmallScreen, filteredWindows.length]);
+  }, [isVisible, width, isMobile, isSmallScreen, filteredWindows.length, isResizing]);
 
   // Handle panel visibility toggle
   const handleVisibilityToggle = React.useCallback(() => {
@@ -259,16 +274,17 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
 
   // Render expanded view with content
   const renderExpandedView = () => (
-    <>
+    <div className="relative flex flex-col h-full">
       {/* Only show splitter on md and larger screens */}
       {!isSmallScreen && !isMobile && (
-        <div className="hidden md:block">
-          <Splitter
-            onResize={handleWidthChange}
-            onResizeStart={() => setIsResizing(true)}
-            onResizeEnd={() => setIsResizing(false)}
-          />
-        </div>
+        <Splitter
+          onResize={handleWidthChange}
+          onResizeStart={() => setIsResizing(true)}
+          onResizeEnd={() => {
+            setIsResizing(false);
+            onResizeEnd?.();
+          }}
+        />
       )}
 
       {/* Overlay to prevent iframe from capturing events during resize */}
@@ -388,7 +404,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 
   // Render floating button for small screens
@@ -410,7 +426,8 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
     <>
       {renderFloatingButton()}
       <div
-        className={`flex flex-col border-l border-gray-200 bg-white ${isSmallScreen && isVisible ? 'fixed inset-0 z-50' : isMobile ? 'fixed inset-0 z-50' : ''}`}
+        data-canvas-panel
+        className={`flex flex-col border-l border-gray-200 bg-white relative ${isSmallScreen && isVisible ? 'fixed inset-0 z-50' : isMobile ? 'fixed inset-0 z-50' : ''}`}
         style={containerStyle}
       >
         {isVisible ? renderExpandedView() : !isSmallScreen && renderCollapsedView()}
