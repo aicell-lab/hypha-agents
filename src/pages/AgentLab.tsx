@@ -654,7 +654,7 @@ const NotebookPage: React.FC = () => {
         setKernelStatus('error');
         setIsReady(false);
         showToast('Kernel initialization timed out. Please try restarting.', 'error');
-      }, 30000); // 30 second timeout
+      }, 60000); // 60 second timeout
       
       try {
         setKernelStatus('starting');
