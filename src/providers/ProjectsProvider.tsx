@@ -292,9 +292,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const projectsList = await artifactManager.list({
         parent_id: 'agent-lab-projects',
-        filters: {
-            "version": "stage"
-        },
+        stage: 'all',
         _rkwargs: true
       });
 
