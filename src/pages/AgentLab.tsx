@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { debounce } from 'lodash';
-import { ThebeProvider, useThebe } from '../components/chat/ThebeProvider';
+import { FaSpinner, FaExclamationTriangle } from 'react-icons/fa';
 import '../styles/ansi.css';
 import '../styles/notebook.css';
 import { useHyphaStore } from '../store/hyphaStore';
@@ -97,7 +97,16 @@ const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
   const [cells, setCells] = useState<NotebookCell[]>([]);
   const [executionCounter, setExecutionCounter] = useState(1);
-  const { isReady, executeCode, restartKernel, status: kernelStatus } = useThebe();
+  
+  // Replace Thebe-related code with our own state variables
+  const [isReady, setIsReady] = useState(false);
+  const [kernelStatus, setKernelStatus] = useState<'idle' | 'busy' | 'starting' | 'error'>('starting');
+  const [executeCode, setExecuteCode] = useState<any>(null);
+  const [kernelInfo, setKernelInfo] = useState<{ kernelId?: string; version?: string }>({});
+  
+  // Add ref to store executeCode function to avoid circular dependencies
+  const executeCodeRef = useRef<any>(null);
+  
   const [isShortcutsDialogOpen, setIsShortcutsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const hasInitialized = useRef(false); // Tracks if the initial load effect has completed
@@ -112,6 +121,7 @@ const NotebookPage: React.FC = () => {
   const [isAIReady, setIsAIReady] = useState(false);
   const [agentSettings, setAgentSettings] = useState(() => loadModelSettings());
   const [hyphaCoreApi, setHyphaCoreApi] = useState<any>(null);
+  const [isKernelStuck, setIsKernelStuck] = useState(false);
   const {
     selectedProject,
     setSelectedProject,
@@ -124,24 +134,33 @@ const NotebookPage: React.FC = () => {
     initialLoadComplete,
     projects,
   } = useProjects();
+  
+  // Add kernel execution log state
+  const [kernelExecutionLog, setKernelExecutionLog] = useState<Array<{
+    timestamp: number;
+    type: 'input' | 'output' | 'error' | 'status';
+    content: string;
+    cellId?: string;
+  }>>([]);
+  
+  // Add function to update kernel log
+  const addKernelLogEntry = useCallback((entryData: Omit<typeof kernelExecutionLog[0], 'timestamp'>) => {
+    const newEntry = {
+      ...entryData,
+      timestamp: Date.now(),
+    };
+    setKernelExecutionLog(prevLog => [...prevLog, newEntry]);
+  }, []);
 
   // === New State ===
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
   const [parsedUrlParams, setParsedUrlParams] = useState<InitialUrlParams | null>(null);
   // === End New State ===
 
-  // Get projects list for the initialization hook
-  const { projects: projectsFromHook } = useProjects();
-
-  const [canvasPanelWidth, setCanvasPanelWidth] = useState(600);
-  const [showCanvasPanel, setShowCanvasPanel] = useState(false);
-  const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
-  const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
-  
   // Track screen size for responsive behavior
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   
-  // Initialize the cell manager
+  // Initialize the cell manager - moved here to fix initialization order
   const cellManager = useRef<CellManager | null>(null);
 
   // Simplified sidebar state - open by default on welcome screen
@@ -150,15 +169,33 @@ const NotebookPage: React.FC = () => {
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
 
+  // Get projects list for the initialization hook
+  const { projects: projectsFromHook } = useProjects();
+
+  // Initialization Hook - moved here to fix initialization order
+  const { hasInitialized: initRefObject, initialUrlParams } = useNotebookInitialization({
+    isLoggedIn,
+    initialLoadComplete,
+    setSelectedProject,
+    getInBrowserProject,
+    setNotebookMetadata,
+    setCells,
+    setExecutionCounter,
+    defaultNotebookMetadata,
+    cellManagerRef: cellManager,
+    projects,
+  });
+
+  const [canvasPanelWidth, setCanvasPanelWidth] = useState(600);
+  const [showCanvasPanel, setShowCanvasPanel] = useState(false);
+  const [hyphaCoreWindows, setHyphaCoreWindows] = useState<HyphaCoreWindow[]>([]);
+  const [activeCanvasTab, setActiveCanvasTab] = useState<string | null>(null);
+  
   // Add the keyboard shortcuts hook
   useNotebookKeyboardShortcuts({
     cellManager: cellManager.current,
     isEditing
   });
-
-  // === New State ===
-  const [showEditAgentAfterLoad, setShowEditAgentAfterLoad] = useState(false);
-  // === End New State ===
 
   // --- Define handleAddWindow callback ---
   const handleAddWindow = useCallback((config: any) => {
@@ -178,6 +215,554 @@ const NotebookPage: React.FC = () => {
     setActiveCanvasTab(config.window_id);
     setShowCanvasPanel(true);
   }, [setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]); // Dependencies for the callback
+
+  // Setup service function - moved here to fix initialization order
+  const setupService = useCallback(async () => {
+    setHyphaCoreApi(null);
+    if(!server || !executeCodeRef.current) {
+      showToast('Hypha Core Service is not available, please login.', 'warning');
+      return;
+    }
+    console.log('[AgentLab] Setting up Hypha Core service for notebook:', notebookMetadata.filePath);
+    const currentSignal = hyphaServiceAbortControllerRef.current.signal;
+    try {
+      // Get the current executeCode function from ref
+      const currentExecuteCode = executeCodeRef.current;
+      const api = await setupNotebookService({
+        onAddWindow: handleAddWindow,
+        server, 
+        executeCode: currentExecuteCode, 
+        agentSettings,
+        abortSignal: currentSignal,
+        projectId: initialUrlParams?.projectId || IN_BROWSER_PROJECT.id,
+      });
+      if (currentSignal.aborted) {
+          console.log('[AgentLab] Hypha Core service setup aborted before completion.');
+          return;
+      }
+      setHyphaCoreApi(api);
+      console.log('[AgentLab] Hypha Core service successfully set up.');
+      showToast('Hypha Core Service Connected', 'success');
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+          console.log('[AgentLab] Hypha Core service setup explicitly aborted.');
+      } else {
+          console.error('[AgentLab] Failed to set up notebook service:', error);
+          showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      }
+      setHyphaCoreApi(null);
+    }
+  }, [handleAddWindow, server, agentSettings, notebookMetadata.filePath, initialUrlParams?.projectId]);
+
+  // Function to initialize the executeCode function - moved up to avoid reference error
+  const initializeExecuteCode = useCallback((deno: any, kernelInfo: any) => {
+    if (!deno || !kernelInfo) return;
+    
+      async function executeCode(code: string, callbacks?: {
+        onOutput?: (output: { type: string; content: string; short_content?: string; attrs?: any }) => void;
+        onStatus?: (status: string) => void;
+      cellId?: string;
+    }, timeout: number = 600000) {
+      const { onOutput, onStatus, cellId } = callbacks || {};
+      
+      // Log for debugging
+      console.log(`[Deno Executor] Executing code for cell: ${cellId || 'unknown'}`);
+      
+      // Check for empty or whitespace-only code
+      if (!code || code.trim() === '') {
+        console.log(`[Deno Executor] Empty code detected for cell: ${cellId || 'unknown'}, skipping execution`);
+        
+        // Log the empty execution
+        addKernelLogEntry({ type: 'input', content: code || '', cellId });
+        addKernelLogEntry({ type: 'status', content: 'Completed (empty cell)', cellId });
+        
+        // Notify completion immediately
+        onStatus?.('Completed');
+        
+        // Keep kernel status as idle since we didn't actually execute anything
+        setKernelStatus('idle');
+        
+        return; // Early return for empty code
+      }
+      
+      // Update kernel status
+      setKernelStatus('busy');
+      
+      // Log input to kernel log
+      addKernelLogEntry({ type: 'input', content: code, cellId });
+      
+      // Notify that execution has started
+      onStatus?.('Executing code...');
+      
+      // Timeout handling with a simple flag
+      let isTimedOut = false;
+      const timeoutId = setTimeout(() => {
+        isTimedOut = true;
+        console.warn(`[Deno Executor] Execution timeout after ${timeout/1000}s`);
+        
+        // Since we can't abort, we'll just notify about the timeout
+        onOutput?.({
+          type: 'stderr',
+          content: `Execution timeout after ${timeout/1000}s. The operation might still be running in the background.`,
+          short_content: `Execution timeout after ${timeout/1000}s. The operation might still be running in the background.`
+        });
+        
+        setKernelStatus('error');
+        onStatus?.('Error');
+        addKernelLogEntry({ 
+          type: 'error', 
+          content: `Execution timeout after ${timeout/1000}s`, 
+          cellId 
+        });
+      }, timeout);
+      
+      // Execution states for tracking status
+      let hasError = false;
+      let executionStarted = false;
+      let executionCompleted = false;
+      
+      try {
+        // Use the correct API call format - the Deno streamExecution expects an object with kernelId and code
+        const streamGenerator = await deno.streamExecution({
+          kernelId: kernelInfo.id,
+          code: code
+        });
+        
+        // Process the stream
+        for await (const output of streamGenerator) {
+          // Break if timeout occurred
+          if (isTimedOut) break;
+          
+          // Mark execution as started with first output
+          if (!executionStarted) {
+            executionStarted = true;
+            onStatus?.('Running...');
+            addKernelLogEntry({ type: 'status', content: 'Running', cellId });
+          }
+          
+          // Handle completion message
+          if (output.type === 'complete') {
+            executionCompleted = true;
+            setKernelStatus('idle');
+            onStatus?.('Completed');
+            addKernelLogEntry({ type: 'status', content: 'Completed', cellId });
+            continue;
+          }
+          
+          // Handle errors
+          if (output.type === 'error') {
+            hasError = true;
+            const errorData = output.data || {};
+            const errorText = errorData.traceback ? 
+              errorData.traceback.join('\n') :
+              `${errorData.ename || 'Error'}: ${errorData.evalue || 'Unknown error'}`;
+            
+            addKernelLogEntry({ type: 'error', content: errorText, cellId });
+            onOutput?.({
+              type: 'stderr', 
+              content: errorText,
+              short_content: errorText
+            });
+            
+            setKernelStatus('error');
+            onStatus?.('Error');
+            continue;
+          }
+          
+          // Process standard output types
+          switch (output.type) {
+            case 'stream':
+              const streamData = output.data;
+              const streamType = streamData.name; // 'stdout' or 'stderr'
+              const content = streamData.text;
+              if (!content) continue;
+              
+              addKernelLogEntry({ 
+                type: streamType === 'stderr' ? 'error' : 'output', 
+                content: content, 
+                cellId 
+              });
+              
+              onOutput?.({
+                type: streamType,
+                content: content,
+                short_content: content.length > 4096 ? 
+                  `${content.substring(0, 2000)}... [truncated] ...${content.substring(content.length - 2000)}` : 
+                  content
+              });
+              
+              if (streamType === 'stderr') {
+                hasError = true;
+                onStatus?.('Error');
+              }
+              break;
+
+            case 'execute_error':
+              hasError = true;
+              // Fix: The error information is in output.data, not output.bundle
+              const errorData = output.data || {};
+              const errorText = Array.isArray(errorData.traceback) 
+                ? errorData.traceback.join('\n')
+                : `${errorData.ename || 'Error'}: ${errorData.evalue || 'Unknown error'}`;
+              
+              addKernelLogEntry({ 
+                type: 'error', 
+                content: errorText, 
+                cellId 
+              });
+              
+              onOutput?.({
+                type: 'stderr',
+                content: errorText,
+                short_content: errorText
+              });
+              
+              setKernelStatus('error');
+              onStatus?.('Error');
+              break;
+              
+            case 'display_data':
+            case 'update_display_data':
+              // Fix: The data is in output.data, not output.bundle
+              const displayData = output.data || {};
+              
+              // Try to extract content from different mime types in order of preference
+              let displayContent = '';
+              let displayOutputType = 'stdout'; // Default output type
+              
+              if (displayData.data && typeof displayData.data === 'object') {
+                // Handle structure where data is nested inside data
+                const mimeData = displayData.data;
+                if (mimeData['text/html']) {
+                  displayContent = mimeData['text/html'];
+                  displayOutputType = 'html';
+                } else if (mimeData['image/png']) {
+                  displayContent = `data:image/png;base64,${mimeData['image/png']}`;
+                  displayOutputType = 'img';
+                } else if (mimeData['image/jpeg']) {
+                  displayContent = `data:image/jpeg;base64,${mimeData['image/jpeg']}`;
+                  displayOutputType = 'img';
+                } else if (mimeData['image/svg+xml']) {
+                  displayContent = mimeData['image/svg+xml'];
+                  displayOutputType = 'svg';
+                } else if (mimeData['text/plain']) {
+                  displayContent = mimeData['text/plain'];
+                  displayOutputType = 'stdout';
+                } else {
+                  displayContent = JSON.stringify(mimeData);
+                  displayOutputType = 'stdout';
+                }
+              } else {
+                // Handle flat structure
+                displayContent = JSON.stringify(displayData);
+                displayOutputType = 'stdout';
+              }
+              
+              if (!displayContent) continue;
+              
+              addKernelLogEntry({ 
+                type: 'output', 
+                content: displayContent,
+                cellId 
+              });
+              
+              onOutput?.({
+                type: displayOutputType,  // Use the converted output type
+                content: displayContent,
+                short_content: displayContent.length > 4096 ? 
+                  `${displayContent.substring(0, 2000)}... [truncated] ...${displayContent.substring(displayContent.length - 2000)}` : 
+                  displayContent,
+                attrs: (displayData.metadata || {})
+              });
+              break;
+              
+            case 'execute_result':
+              // Fix: The result is in output.data, not output.bundle
+              const resultData = output.data || {};
+              
+              // Similar to display_data, extract content based on mime types
+              let resultContent = '';
+              let resultOutputType = 'stdout'; // Default output type
+              
+              if (resultData.data && typeof resultData.data === 'object') {
+                // Handle structure where data is nested inside data
+                const mimeData = resultData.data;
+                if (mimeData['text/html']) {
+                  resultContent = mimeData['text/html'];
+                  resultOutputType = 'html';
+                } else if (mimeData['image/png']) {
+                  resultContent = `data:image/png;base64,${mimeData['image/png']}`;
+                  resultOutputType = 'img';
+                } else if (mimeData['image/jpeg']) {
+                  resultContent = `data:image/jpeg;base64,${mimeData['image/jpeg']}`;
+                  resultOutputType = 'img';
+                } else if (mimeData['image/svg+xml']) {
+                  resultContent = mimeData['image/svg+xml'];
+                  resultOutputType = 'svg';
+                } else if (mimeData['text/plain']) {
+                  resultContent = mimeData['text/plain'];
+                  resultOutputType = 'stdout';
+                } else {
+                  resultContent = JSON.stringify(mimeData);
+                  resultOutputType = 'stdout';
+                }
+              } else {
+                // Handle flat structure
+                resultContent = JSON.stringify(resultData);
+                resultOutputType = 'stdout';
+              }
+              
+              if (!resultContent) continue;
+              
+              addKernelLogEntry({ 
+                type: 'output', 
+                content: resultContent,
+                cellId 
+              });
+              
+              onOutput?.({
+                type: resultOutputType,  // Use the converted output type
+                content: resultContent,
+                short_content: resultContent.length > 4096 ? 
+                  `${resultContent.substring(0, 2000)}... [truncated] ...${resultContent.substring(resultContent.length - 2000)}` : 
+                  resultContent,
+                attrs: (resultData.metadata || {})
+              });
+              break;
+              
+            case 'clear_output':
+              // Fix: The clear output info is in output.data, not output.bundle
+              const clearData = output.data || {};
+              addKernelLogEntry({ 
+                type: 'status', 
+                content: `Clear output (wait: ${clearData.wait ? 'true' : 'false'})`, 
+                cellId 
+              });
+              break;
+              
+            case 'input_request':
+              // Fix: The input request info is in output.data, not output.content
+              const inputData = output.data || {};
+              const promptText = `[Input Requested]: ${inputData.prompt || ''}`;
+              
+              addKernelLogEntry({ 
+                type: 'output', 
+                content: promptText, 
+                cellId 
+              });
+              
+              onOutput?.({
+                type: 'stderr',
+                content: 'Input requests are not supported in this environment.',
+                short_content: 'Input requests are not supported in this environment.'
+              });
+              break;
+              
+            case 'status':
+              const statusContent = output.content || output.data;
+              addKernelLogEntry({ type: 'status', content: statusContent, cellId });
+              
+              if (statusContent === 'busy') {
+                setKernelStatus('busy');
+                onStatus?.('Running...');
+              } else if (statusContent === 'idle') {
+                executionCompleted = true;
+                setKernelStatus('idle');
+                onStatus?.('Completed');
+              }
+              break;
+              
+            default:
+              // Handle any other output type
+              const defaultContent = output.content || output.data || (output.bundle ? JSON.stringify(output.bundle) : null);
+              if (!defaultContent) continue;
+              
+              addKernelLogEntry({ 
+                type: 'output', 
+                content: typeof defaultContent === 'string' ? defaultContent : JSON.stringify(output),
+                cellId 
+              });
+              
+              onOutput?.({
+                type: output.type || 'stdout',
+                content: defaultContent,
+                short_content: typeof defaultContent === 'string' && defaultContent.length > 4096 ? 
+                  `${defaultContent.substring(0, 2000)}... [truncated] ...${defaultContent.substring(defaultContent.length - 2000)}` : 
+                  defaultContent,
+                attrs: output.attrs
+              });
+          }
+        }
+        
+        // If we've completed the stream without explicit completion or error
+        if (!isTimedOut && !executionCompleted && !hasError) {
+          setKernelStatus('idle');
+          onStatus?.('Completed');
+          addKernelLogEntry({ type: 'status', content: 'Completed', cellId });
+          console.log(`[Deno Executor] Execution completed for cell: ${cellId || 'unknown'}`);
+        }
+
+
+      } catch (error) {
+        // Handle errors during stream creation or processing
+        if (!isTimedOut) {
+          console.error('[Deno Executor] Error executing code:', error);
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          
+          addKernelLogEntry({ 
+            type: 'error', 
+            content: `Execution failed: ${errorMsg}`, 
+            cellId 
+          });
+          
+          onOutput?.({
+            type: 'stderr',
+            content: `Execution failed: ${errorMsg}`,
+            short_content: `Execution failed: ${errorMsg}`
+          });
+          
+          setKernelStatus('error');
+          onStatus?.('Error');
+          
+          throw error;
+        }
+      } finally {
+        // Clear the timeout if not already triggered
+        if (!isTimedOut) {
+          clearTimeout(timeoutId);
+        }
+      }
+    }
+    
+    setExecuteCode(() => executeCode);
+    executeCodeRef.current = executeCode;
+    // Re-initialize services
+    setupService();
+    
+    if (cellManager.current) {
+      cellManager.current.executeCodeFn = executeCode;
+    }
+  }, [addKernelLogEntry, setKernelStatus, setupService]);
+
+  // Kernel initialization
+  useEffect(() => {
+    async function initializeKernel() {
+      if (!server) return;
+      
+      const initTimeout = setTimeout(() => {
+        console.error('[Deno Kernel] Initialization timeout after 30 seconds');
+        setKernelStatus('error');
+        setIsReady(false);
+        showToast('Kernel initialization timed out. Please try restarting.', 'error');
+      }, 30000); // 30 second timeout
+      
+      try {
+        setKernelStatus('starting');
+        console.log('[Deno Kernel] Initializing Deno kernel...');
+        
+        // Get the Deno service with timeout
+        const deno = await Promise.race([
+          server.getService('hypha-agents/deno-app-engine', { mode: 'random' }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Service connection timeout')), 15000)
+          )
+        ]);
+        
+        console.log('[Deno Kernel] Got Deno service, creating kernel...');
+        
+        // Create a new kernel with timeout
+        const newKernelInfo = await Promise.race([
+          deno.createKernel({}),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Kernel creation timeout')), 15000)
+          )
+        ]);
+
+        
+        console.log('[Deno Kernel] Created kernel:', newKernelInfo);
+        
+        // Clear the timeout since we succeeded
+        clearTimeout(initTimeout);
+        
+        // Update state
+        setKernelInfo(newKernelInfo);
+        setKernelStatus('idle');
+        setIsReady(true);
+        
+        // Initialize the executeCode function
+        initializeExecuteCode(deno, newKernelInfo);
+
+        if (!cellManager.current) {
+          cellManager.current = new CellManager(
+            cells,
+            setCells,
+            activeCellId,
+            setActiveCellId,
+            executionCounter,
+            setExecutionCounter,
+            editorRefs,
+            notebookMetadata,
+            lastAgentCellRef,
+            executeCode,
+          );
+        } else {
+          // Update the references when they change
+          cellManager.current.cells = cells;
+          cellManager.current.activeCellId = activeCellId;
+          cellManager.current.executionCounter = executionCounter;
+          cellManager.current.notebookMetadata = notebookMetadata;
+          cellManager.current.executeCodeFn = executeCode;
+        }
+        
+        console.log('[Deno Kernel] Kernel initialization completed successfully');
+      } catch (error) {
+        clearTimeout(initTimeout);
+        console.error('[Deno Kernel] Initialization error:', error);
+        setKernelStatus('error');
+        setIsReady(false);
+        
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('timeout')) {
+          showToast('Kernel initialization timed out. Please check your connection and try restarting.', 'error');
+        } else {
+          showToast(`Kernel initialization failed: ${errorMessage}`, 'error');
+        }
+      }
+    }
+
+    initializeKernel();
+  }, [
+    server,
+    initializeExecuteCode,
+    setupService
+  ]);
+
+  // Monitor kernel status for stuck states
+  useEffect(() => {
+    let stuckTimer: NodeJS.Timeout;
+    
+    if (kernelStatus === 'starting') {
+      // Set a timer to detect if kernel is stuck in starting state
+      stuckTimer = setTimeout(() => {
+        console.warn('[AgentLab] Kernel appears to be stuck in starting state');
+        setIsKernelStuck(true);
+        showToast('Kernel initialization is taking longer than expected. You may need to restart.', 'warning');
+      }, 45000); // 45 seconds
+    } else {
+      // Reset stuck state when kernel status changes
+      setIsKernelStuck(false);
+    }
+    
+    return () => {
+      if (stuckTimer) {
+        clearTimeout(stuckTimer);
+      }
+    };
+  }, [kernelStatus]);
+
+  // === New State ===
+  const [showEditAgentAfterLoad, setShowEditAgentAfterLoad] = useState(false);
+  // === End New State ===
 
   if (!cellManager.current) {
     cellManager.current = new CellManager(
@@ -263,7 +848,7 @@ const NotebookPage: React.FC = () => {
   // --- Core Notebook Loading & Saving Functions ---
   const loadNotebookContent = useCallback(async (projectId: string | undefined, filePath: string) => {
     const loadingToastId = 'loading-notebook';
-    showToast('Loading notebook...', 'loading', { id: loadingToastId });
+    showToast('Loading notebook...', 'loading');
 
     try {
       let rawContent: string | NotebookData;
@@ -342,8 +927,12 @@ const NotebookPage: React.FC = () => {
         lastAgentCellRef.current = assistantCells[assistantCells.length - 1]?.id || null;
         cellManager.current?.clearRunningState();
         setShowWelcomeScreen(false);
-        setupService();
+
+        // Note: setupService is called automatically when kernel is created/restarted
+        // No need to call it here when just loading notebook content
+        
         showToast('Notebook loaded successfully', 'success');
+        console.log('[AgentLab] Notebook loading completed successfully');
       } else {
         console.warn('Invalid notebook file format found after parsing:', { projectId: resolvedProjectId, filePath });
         throw new Error('Invalid notebook file format');
@@ -351,7 +940,13 @@ const NotebookPage: React.FC = () => {
     } catch (error) {
       console.error('Error loading file content:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      showToast(`Failed to load notebook: ${errorMessage}`, 'error');
+      
+      if (errorMessage.includes('timeout')) {
+        showToast(`Loading timed out: ${errorMessage}`, 'error');
+      } else {
+        showToast(`Failed to load notebook: ${errorMessage}`, 'error');
+      }
+      
       setCells([]);
       setNotebookMetadata(defaultNotebookMetadata);
       setExecutionCounter(1);
@@ -372,7 +967,7 @@ const NotebookPage: React.FC = () => {
     setCells,
     setExecutionCounter,
     setSelectedProject,
-    setAgentSettings,
+    setAgentSettings
   ]);
 
   // Add useEffect to hide address bar on mobile devices
@@ -435,34 +1030,61 @@ const NotebookPage: React.FC = () => {
   }, []);
 
   const handleRestartKernel = useCallback(async () => {
-    if (!cellManager.current) return;
+    if (!cellManager.current || !server) return;
     showToast('Restarting kernel...', 'loading');
+    
     try {
-      cellManager.current?.clearRunningState();
+      setKernelStatus('starting');
+      cellManager.current.clearRunningState();
 
-      // Abort any ongoing Hypha service operations before restarting
+      // Abort any ongoing Hypha service operations
       hyphaServiceAbortControllerRef.current.abort('Kernel restart initiated');
-      hyphaServiceAbortControllerRef.current = new AbortController(); // Create new one
+      hyphaServiceAbortControllerRef.current = new AbortController();
 
       // Clear the hyphaCoreApi state to trigger re-initialization after restart
       setHyphaCoreApi(null);
 
-      await restartKernel();
+      // Get the Deno interpreter service and create a new kernel
+      const deno = await server.getService('hypha-agents/deno-app-engine');
+      
+      // First attempt to close the existing kernel if we have one
+      if (kernelInfo.id) {
+        try {
+          // Use destroyKernel instead of closeKernel to match the service API
+          await deno.destroyKernel({ kernelId: kernelInfo.id });
+          console.log('[Deno Kernel] Destroyed existing kernel:', kernelInfo.id);
+        } catch (closeError) {
+          console.warn('[Deno Kernel] Error destroying existing kernel:', closeError);
+          // Continue with restart even if destroy fails
+        }
+      }
+      
+      // Create a new kernel with empty options object
+      const newKernelInfo = await deno.createKernel({});
+      console.log('[Deno Kernel] Created new kernel:', newKernelInfo);
+
+      // Update our state with the new kernel info
+      setKernelInfo(newKernelInfo);
+      setKernelStatus('idle');
+      setIsReady(true);
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
-      setTimeout(() => {
-        setupService();
-        showToast('Kernel restarted successfully', 'success');
-      }, 100);
+      
+      // Re-initialize executeCode function with the new kernel
+      initializeExecuteCode(deno, newKernelInfo);
+
+      
     } catch (error) {
       console.error('Failed to restart kernel:', error);
+      setKernelStatus('error');
+      setIsReady(false);
       showToast('Failed to restart kernel', 'error');
     }
-  }, [restartKernel, setExecutionCounter, setHyphaCoreApi]);
+  }, [server, setExecutionCounter, setIsReady, setKernelStatus, setKernelInfo, setHyphaCoreApi, setupService]);
 
   // --- Kernel State Reset Function ---
   const handleResetKernelState = useCallback(async () => {
-    if (!isReady) {
+    if (!isReady || !server) {
       // If kernel isn't ready, perform a full restart
       console.warn('Kernel not ready, performing full restart instead of reset.');
       await handleRestartKernel();
@@ -477,26 +1099,63 @@ const NotebookPage: React.FC = () => {
       hyphaServiceAbortControllerRef.current.abort('Kernel reset initiated');
       hyphaServiceAbortControllerRef.current = new AbortController(); // Create new one
 
-      // Execute the reset command
-      await executeCode('%reset -f');
+      // Get Deno service
+      const deno = await server.getService('hypha-agents/deno-app-engine');
+      
+      // Execute a simple reset command to clear variables
+      if (kernelInfo.kernelId) {
+        setKernelStatus('busy');
+        
+        // Execute a command to reset the interpreter state
+        // We use a Python-style reset command for compatibility
+        const resetCode = `
+# Reset all variables in the global scope
+import { globalThis } from 'npm:@types/node';
+const keys = Object.keys(globalThis);
+const builtins = ['globalThis', 'self', 'window', 'global', 'Array', 'Boolean', 'console', 'Date', 'Error', 'Function', 'JSON', 'Math', 'Number', 'Object', 'RegExp', 'String'];
+for (const key of keys) {
+  if (!builtins.includes(key) && typeof globalThis[key] !== 'function') {
+    try {
+      delete globalThis[key];
+    } catch (e) {
+      console.log(\`Could not delete \${key}\`);
+    }
+  }
+}
+console.log('Kernel state has been reset');
+        `;
+        
+        // Use our executeCode function from ref to run the reset command
+        const currentExecuteCode = executeCodeRef.current;
+        if (currentExecuteCode) {
+          await currentExecuteCode(resetCode, {
+            onOutput: (output) => {
+              console.log('[Deno Kernel Reset]', output);
+            },
+            onStatus: (status) => {
+              console.log('[Deno Kernel Reset] Status:', status);
+            }
+          });
+        }
+      }
 
       // Reset execution counter and system cell flag
       setExecutionCounter(1);
       systemCellsExecutedRef.current = false;
 
       // Reset the hyphaCoreApi state to trigger re-initialization
-      setHyphaCoreApi(null); // This will trigger the setup useEffect again
-      setupService();
+      setHyphaCoreApi(null);
+      
+      // Update status
+      setKernelStatus('idle');
+      
       showToast('Kernel state reset successfully', 'success');
-      // Keep AI ready state as true, kernel is still technically ready
-      // setIsAIReady(true);
     } catch (error) {
       console.error('Failed to reset kernel state:', error);
+      setKernelStatus('error');
       showToast('Failed to reset kernel state', 'error');
-      // Consider if AI should be marked as not ready on reset failure
-      // setIsAIReady(false);
     }
-  }, [isReady, executeCode, setExecutionCounter, showToast, handleRestartKernel]); // Added dependencies
+  }, [isReady, server, setExecutionCounter, showToast, handleRestartKernel, kernelInfo, setupService]);
 
   // Add createNotebookFromAgentTemplate function
   const createNotebookFromAgentTemplate = useCallback(async (agentId: string, projectId?: string) => {
@@ -630,20 +1289,6 @@ const NotebookPage: React.FC = () => {
     getInBrowserProject,
     handleResetKernelState
   ]);
-
-  // Initialization Hook - Now returns the correct ref type
-  const { hasInitialized: initRefObject, initialUrlParams } = useNotebookInitialization({
-    isLoggedIn,
-    initialLoadComplete,
-    setSelectedProject,
-    getInBrowserProject,
-    setNotebookMetadata,
-    setCells,
-    setExecutionCounter,
-    defaultNotebookMetadata,
-    cellManagerRef: cellManager,
-    projects,
-  });
 
   // Store parsed params once initialization is done and set welcome screen visibility
   useEffect(() => {
@@ -992,6 +1637,14 @@ const NotebookPage: React.FC = () => {
     }
   }, [isReady, setIsAIReady]); // Dependency array ensures this runs when isReady changes
 
+  // Setup Hypha Core service when kernel is ready
+  useEffect(() => {
+    if (isReady && executeCodeRef.current && server) {
+      console.log('[AgentLab] Kernel is ready, setting up Hypha Core service...');
+      setupService();
+    }
+  }, [isReady, server, setupService]);
+
   // Load agent settings from localStorage on component mount
   useEffect(() => {
     const settings = loadModelSettings();
@@ -1059,38 +1712,10 @@ const NotebookPage: React.FC = () => {
     };
   }, [saveNotebook, showWelcomeScreen]); // Depend on showWelcomeScreen
 
-  const setupService = useCallback(async () => {
-    setHyphaCoreApi(null);
-    if(!server || !executeCode) {
-      showToast('Hypha Core Service is not available, please login.', 'warning');
-      return;
-    }
-    console.log('[AgentLab] Setting up Hypha Core service for notebook:', notebookMetadata.filePath);
-    const currentSignal = hyphaServiceAbortControllerRef.current.signal;
-    try {
-      const api = await setupNotebookService({
-        onAddWindow: handleAddWindow,
-        server, executeCode, agentSettings,
-        abortSignal: currentSignal,
-        projectId: initialUrlParams?.projectId || IN_BROWSER_PROJECT.id,
-      });
-      if (currentSignal.aborted) {
-          console.log('[AgentLab] Hypha Core service setup aborted before completion.');
-          return;
-      }
-      setHyphaCoreApi(api);
-      console.log('[AgentLab] Hypha Core service successfully set up.');
-      showToast('Hypha Core Service Connected', 'success');
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-          console.log('[AgentLab] Hypha Core service setup explicitly aborted.');
-      } else {
-          console.error('[AgentLab] Failed to set up notebook service:', error);
-          showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
-      }
-      setHyphaCoreApi(null);
-    }
-  }, [handleAddWindow, server, executeCode, agentSettings, notebookMetadata.filePath]);
+  // --- Render Logic ---
+  
+  // Show loading overlay if kernel is in error state and not ready
+  const showKernelErrorOverlay = (kernelStatus === 'error' && !isReady) || isKernelStuck;
 
   // Get system cell for publish dialog (Now used for canvas edit/publish)
   const systemCell = useMemo(() => {
@@ -1263,6 +1888,115 @@ const NotebookPage: React.FC = () => {
     }
   }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent]);
 
+  // --- Callback to show Deno Terminal in Canvas Panel ---
+  const handleShowDenoTerminalInCanvas = useCallback(() => {
+    const windowId = 'deno-terminal';
+    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+
+    if (!windowExists) {
+      const newWindow: HyphaCoreWindow = {
+        id: windowId,
+        name: 'Deno Terminal',
+        component: (
+          <DenoTerminalPanel />
+        )
+      };
+      setHyphaCoreWindows(prev => [...prev, newWindow]);
+    }
+
+    setActiveCanvasTab(windowId);
+    setShowCanvasPanel(true);
+
+  }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]);
+
+  // --- Function to show Model Settings in Canvas Panel ---
+  const handleShowModelSettingsInCanvas = useCallback(() => {
+    const windowId = 'model-settings';
+
+    // Check if window already exists
+    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+
+    if (windowExists) {
+      // Just activate the existing tab
+      setActiveCanvasTab(windowId);
+      setShowCanvasPanel(true);
+      return;
+    }
+
+    // Create a new window
+    const newWindow: HyphaCoreWindow = {
+      id: windowId,
+      name: 'Model Settings',
+      component: (
+        <ModelSettingsCanvasContent
+          onSettingsChange={setAgentSettings}
+        />
+      )
+    };
+
+    setHyphaCoreWindows(prev => [...prev, newWindow]);
+    setActiveCanvasTab(windowId);
+    setShowCanvasPanel(true);
+  }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel, setAgentSettings]);
+
+  // --- Function to show Edit Agent in Canvas Panel ---
+  const handleShowEditAgentInCanvas = useCallback(() => {
+    const agentArtifact = notebookMetadata.agentArtifact;
+
+    // Prepare initial agent data, including the existing ID if available
+    const initialAgentData: Partial<EditAgentFormData> = {
+      agentId: agentArtifact?.id || '', // Pass existing ID
+      name: agentArtifact?.name || notebookMetadata.title || '',
+      description: agentArtifact?.description || '',
+      version: agentArtifact?.version || '0.1.0',
+      license: agentArtifact?.manifest?.license || 'CC-BY-4.0',
+      welcomeMessage: agentArtifact?.manifest?.welcomeMessage || 'Hi, how can I help you today?',
+      initialPrompt: systemCell ? systemCell.content : ''
+    };
+
+    const windowId = 'edit-agent-config';
+    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+
+    if (windowExists) {
+      // Update existing window
+      setHyphaCoreWindows(prev => prev.map(win => {
+        if (win.id === windowId) {
+          return {
+            ...win,
+            name: `Edit: ${initialAgentData.name || 'Agent'}`,
+            component: (
+              <EditAgentCanvasContent
+                initialAgentData={initialAgentData}
+                onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
+                onPublishAgent={handlePublishAgentFromCanvas}
+              />
+            )
+          };
+        }
+        return win;
+      }));
+    } else {
+      // Create a new window
+      const newWindow: HyphaCoreWindow = {
+        id: windowId,
+        name: `Edit: ${initialAgentData.name || 'Agent'}`,
+        component: (
+          <EditAgentCanvasContent
+            initialAgentData={initialAgentData}
+            onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
+            onPublishAgent={handlePublishAgentFromCanvas}
+          />
+        )
+      };
+      setHyphaCoreWindows(prev => [...prev, newWindow]);
+    }
+
+    // Activate the tab and show the panel
+    setActiveCanvasTab(windowId);
+    setShowCanvasPanel(true);
+
+  }, [notebookMetadata, systemCell, hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]);
+
   // --- Callback to save agent settings from canvas to notebook metadata ---
   const handleSaveAgentSettingsToNotebook = useCallback((data: EditAgentFormData) => {
     const agentArtifactMeta = notebookMetadata.agentArtifact ? {
@@ -1295,8 +2029,6 @@ const NotebookPage: React.FC = () => {
         startup_script: data.initialPrompt,
       }
     };
-
-    // Save model settings to notebook metadata
 
     // Update notebook metadata with agent config (but not model settings)
     setNotebookMetadata(prev => ({
@@ -1414,103 +2146,6 @@ const NotebookPage: React.FC = () => {
     setNotebookMetadata, cellManager, showToast, dismissToast, SITE_ID, agentSettings
   ]);
 
-  // --- Function to show Model Settings in Canvas Panel ---
-  const handleShowModelSettingsInCanvas = useCallback(() => {
-    const windowId = 'model-settings';
-
-    // Check if window already exists
-    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
-
-    if (windowExists) {
-      // Just activate the existing tab
-      setActiveCanvasTab(windowId);
-      setShowCanvasPanel(true);
-      return;
-    }
-
-    // Create a new window
-    const newWindow: HyphaCoreWindow = {
-      id: windowId,
-      name: 'Model Settings',
-      component: (
-        <ModelSettingsCanvasContent
-          onSettingsChange={setAgentSettings}
-        />
-      )
-    };
-
-    setHyphaCoreWindows(prev => [...prev, newWindow]);
-    setActiveCanvasTab(windowId);
-    setShowCanvasPanel(true);
-  }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel, setAgentSettings]);
-
-  // --- Generic function to show/update window in Canvas Panel ---
-  const showWindowInCanvas = useCallback((windowId: string, windowName: string, component: React.ReactNode) => {
-    // Check if window already exists
-    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
-
-    if (windowExists) {
-      // Update existing window
-      setHyphaCoreWindows(prev => prev.map(win => {
-        if (win.id === windowId) {
-          return {
-            ...win,
-            name: windowName,
-            component
-          };
-        }
-        return win;
-      }));
-    } else {
-      // Create a new window
-      const newWindow: HyphaCoreWindow = {
-        id: windowId,
-        name: windowName,
-        component
-      };
-      setHyphaCoreWindows(prev => [...prev, newWindow]);
-    }
-
-    // Activate the tab and show the panel
-    setActiveCanvasTab(windowId);
-    setShowCanvasPanel(true);
-  }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]);
-
-  // --- Function to show Edit Agent in Canvas Panel ---
-  const handleShowEditAgentInCanvas = useCallback(() => {
-    const agentArtifact = notebookMetadata.agentArtifact;
-
-    // Prepare initial agent data, including the existing ID if available
-    const initialAgentData: Partial<EditAgentFormData> = {
-      agentId: agentArtifact?.id || '', // Pass existing ID
-      name: agentArtifact?.name || notebookMetadata.title || '',
-      description: agentArtifact?.description || '',
-      version: agentArtifact?.version || '0.1.0',
-      license: agentArtifact?.manifest?.license || 'CC-BY-4.0',
-      welcomeMessage: agentArtifact?.manifest?.welcomeMessage || 'Hi, how can I help you today?',
-      initialPrompt: systemCell ? systemCell.content : ''
-    };
-
-    showWindowInCanvas(
-      'edit-agent-config',
-      `Edit: ${initialAgentData.name || 'Agent'}`,
-      <EditAgentCanvasContent
-        initialAgentData={initialAgentData}
-        onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
-        onPublishAgent={handlePublishAgentFromCanvas}
-      />
-    );
-
-  }, [notebookMetadata, showWindowInCanvas, handleSaveAgentSettingsToNotebook, handlePublishAgentFromCanvas, systemCell]);
-
-  // Add an effect to handle showing edit window when notebookMetadata changes
-  useEffect(() => {
-    if (showEditAgentAfterLoad && notebookMetadata.agentArtifact) {
-      handleShowEditAgentInCanvas();
-      setShowEditAgentAfterLoad(false);
-    }
-  }, [showEditAgentAfterLoad, notebookMetadata, handleShowEditAgentInCanvas]);
-
   // Update the handleEditAgentFromWelcomeScreen function
   const handleEditAgentFromWelcomeScreen = useCallback(async (workspace: string, agentId: string) => {
     if (!artifactManager || !isLoggedIn) {
@@ -1624,35 +2259,123 @@ const NotebookPage: React.FC = () => {
     dismissToast
   ]);
 
-  // --- Callback to show Thebe Terminal in Canvas Panel ---
-  const handleShowThebeTerminalInCanvas = useCallback(() => {
-    const windowId = 'thebe-terminal';
-    const windowExists = hyphaCoreWindows.some(win => win.id === windowId);
+  // --- Create a Deno Terminal Panel component ---
+  const DenoTerminalPanel: React.FC = () => {
+    const [output, setOutput] = useState<string[]>([]);
+    const [command, setCommand] = useState('');
+    
+    const handleRunCommand = async () => {
+      if (!command.trim() || !server || !kernelInfo.kernelId) return;
+      
+      try {
+        setOutput(prev => [...prev, `> ${command}`]);
+        
+        // Execute the command and collect output
+        await executeCode(command, {
+          onOutput: (output) => {
+            if (output.content) {
+              setOutput(prev => [...prev, output.content]);
+            }
+          },
+          onStatus: (status) => {
+            console.log('Terminal command status:', status);
+          }
+        });
+        
+        setCommand('');
+      } catch (error) {
+        console.error('Terminal error:', error);
+        setOutput(prev => [...prev, `Error: ${error instanceof Error ? error.message : String(error)}`]);
+      }
+    };
+    
+    return (
+      <div className="p-4 bg-black text-green-400 h-full flex flex-col">
+        <div className="flex-1 overflow-auto font-mono whitespace-pre-wrap">
+          {output.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
+        <div className="mt-2 flex">
+          <input
+            type="text"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRunCommand()}
+            className="flex-1 bg-black text-green-400 border border-green-500 p-2"
+            placeholder="Enter JavaScript/TypeScript command..."
+          />
+          <button 
+            onClick={handleRunCommand}
+            className="ml-2 bg-green-800 text-white px-4 py-2"
+          >
+            Run
+          </button>
+        </div>
+      </div>
+    );
+  };
 
-    if (!windowExists) {
-      const newWindow: HyphaCoreWindow = {
-        id: windowId,
-        name: 'Kernel Terminal',
-        component: (
-          <ThebeTerminalPanel /> // Use the refactored component
-        )
-      };
-      setHyphaCoreWindows(prev => [...prev, newWindow]);
-    }
-
-    setActiveCanvasTab(windowId);
-    setShowCanvasPanel(true);
-
-  }, [hyphaCoreWindows, setHyphaCoreWindows, setActiveCanvasTab, setShowCanvasPanel]); // Dependencies
-
-
-  // --- Render Logic ---
   if (!initRefObject.current) {
-    return <div className="flex justify-center items-center h-screen">Initializing...</div>;
+    return (
+      <div className="flex flex-col justify-center items-center h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Initializing Agent Lab</h2>
+          <p className="text-gray-600">Setting up your workspace...</p>
+          {!isReady && (
+            <div className="mt-4 text-sm text-gray-500">
+              <div className="flex items-center justify-center gap-2">
+                <FaSpinner className="w-4 h-4 animate-spin" />
+                <span>Kernel Status: {kernelStatus}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden relative">
+      {/* Kernel Error Overlay */}
+      {showKernelErrorOverlay && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4 text-center">
+            <div className={`mb-4 ${isKernelStuck ? 'text-yellow-600' : 'text-red-600'}`}>
+              {isKernelStuck ? (
+                <FaSpinner className="w-12 h-12 mx-auto animate-spin" />
+              ) : (
+                <FaExclamationTriangle className="w-12 h-12 mx-auto" />
+              )}
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">
+              {isKernelStuck ? 'Kernel Initialization Delayed' : 'Kernel Error'}
+            </h3>
+            <p className="text-gray-600 mb-4">
+              {isKernelStuck 
+                ? 'The kernel is taking longer than expected to initialize. This might be due to a slow connection or server load.'
+                : 'The kernel failed to initialize. This might be due to a connection issue or server problem.'
+              }
+            </p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={handleRestartKernel}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              >
+                {isKernelStuck ? 'Restart Kernel' : 'Retry Kernel'}
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+              >
+                Reload Page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <NotebookHeader
         metadata={notebookMetadata}
         fileName={notebookFileName}
@@ -1676,6 +2399,8 @@ const NotebookPage: React.FC = () => {
         canMoveUp={canMoveUp}
         canMoveDown={canMoveDown}
         isWelcomeScreen={showWelcomeScreen}
+        kernelStatus={kernelStatus}
+        onRetryKernel={handleRestartKernel}
       />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
@@ -1731,11 +2456,11 @@ const NotebookPage: React.FC = () => {
                     onSendMessage={handleCommandOrSendMessage}
                     onStopChatCompletion={handleAbortExecution}
                     isProcessing={isProcessingAgentResponse}
-                    isThebeReady={isReady}
-                    thebeStatus={kernelStatus}
+                    isKernelReady={isReady}
+                    kernelStatus={kernelStatus}
                     isAIReady={isAIReady}
                     initializationError={initializationError}
-                    onShowThebeTerminal={handleShowThebeTerminalInCanvas}
+                    onShowTerminal={handleShowDenoTerminalInCanvas}
                     onModelSettingsChange={handleShowModelSettingsInCanvas}
                     onShowEditAgent={handleShowEditAgentInCanvas}
                   />
@@ -1769,11 +2494,9 @@ const NotebookPage: React.FC = () => {
 // Wrap NotebookPage with providers
 const AgentLab: React.FC = () => {
   return (
-    <ThebeProvider>
       <ProjectsProvider>
         <NotebookPage />
       </ProjectsProvider>
-    </ThebeProvider>
   );
 };
 
