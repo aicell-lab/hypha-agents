@@ -1159,7 +1159,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Sidebar Footer */}
         <div className="p-2 border-t border-gray-200 mt-auto">
           <div className="text-xs text-gray-500 text-center">
-            Euro-BioImaging Agents v1.0
+            Hypha Agents v1.0
           </div>
         </div>
         

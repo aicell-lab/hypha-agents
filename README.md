@@ -24,16 +24,9 @@ Hypha Agents is a comprehensive solution for creating, managing, and deploying A
 
 ```bash
 # Clone the repository
-git clone https://github.com/aicell-lab/eurobioimaging-agents.git
-cd eurobioimaging-agents
+git clone https://github.com/aicell-lab/hypha-agents.git
+cd hypha-agents
 
-# Create and activate conda environment
-conda create -n eurobioimaging-agents python=3.11
-conda activate eurobioimaging-agents
-
-# Install Python dependencies
-pip install -e .
-pip install -r requirements_test.txt
 
 # Install frontend dependencies
 pnpm install

@@ -162,7 +162,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                     <div className="flex justify-center items-center space-x-3">
                         <img 
                             src="/logo.png" 
-                            alt="Euro-BioImaging Agents" 
+                            alt="Hypha Agents" 
                             className="w-8 h-8 sm:w-12 sm:h-12" 
                         />
                         <h1 className="text-3xl sm:text-5xl font-bold text-black py-1 leading-normal font-sans tracking-tight">
