@@ -97,7 +97,7 @@ const NotebookPage: React.FC = () => {
   const navigate = useNavigate();
   const [cells, setCells] = useState<NotebookCell[]>([]);
   const [executionCounter, setExecutionCounter] = useState(1);
-  const { isReady, executeCode, restartKernel, status: kernelStatus, interruptKernel, kernelInfo, kernel } = useThebe();
+  const { isReady, executeCode, restartKernel, status: kernelStatus } = useThebe();
   const [isShortcutsDialogOpen, setIsShortcutsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const hasInitialized = useRef(false); // Tracks if the initial load effect has completed
