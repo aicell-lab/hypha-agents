@@ -1742,9 +1742,6 @@ console.log('Kernel state has been reset');
 
   // --- Render Logic ---
   
-  // Show loading overlay if kernel is in error state and not ready
-  const showKernelErrorOverlay = (kernelStatus === 'error' && !isReady) || isKernelStuck;
-
   // Get system cell for publish dialog (Now used for canvas edit/publish)
   const systemCell = useMemo(() => {
     return cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code') || null;
@@ -2366,44 +2363,6 @@ console.log('Kernel state has been reset');
 
   return (
     <div className="flex flex-col h-screen overflow-hidden relative">
-      {/* Kernel Error Overlay */}
-      {showKernelErrorOverlay && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md mx-4 text-center">
-            <div className={`mb-4 ${isKernelStuck ? 'text-yellow-600' : 'text-red-600'}`}>
-              {isKernelStuck ? (
-                <FaSpinner className="w-12 h-12 mx-auto animate-spin" />
-              ) : (
-                <FaExclamationTriangle className="w-12 h-12 mx-auto" />
-              )}
-            </div>
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              {isKernelStuck ? 'Kernel Initialization Delayed' : 'Kernel Error'}
-            </h3>
-            <p className="text-gray-600 mb-4">
-              {isKernelStuck 
-                ? 'The kernel is taking longer than expected to initialize. This might be due to a slow connection or server load.'
-                : 'The kernel failed to initialize. This might be due to a connection issue or server problem.'
-              }
-            </p>
-            <div className="flex gap-2 justify-center">
-              <button
-                onClick={handleRestartKernel}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-              >
-                {isKernelStuck ? 'Restart Kernel' : 'Retry Kernel'}
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-              >
-                Reload Page
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <NotebookHeader
         metadata={notebookMetadata}
         fileName={notebookFileName}

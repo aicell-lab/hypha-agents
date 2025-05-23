@@ -28,11 +28,11 @@ const KernelStatusIndicator: React.FC<KernelStatusIndicatorProps> = ({
   const getStatusInfo = () => {
     if (!isReady) {
       return {
-        color: 'text-gray-400',
+        color: 'text-gray-800',
         bgColor: 'bg-gray-100',
         icon: <FaSpinner className="w-3 h-3 animate-spin" />,
         text: 'Initializing...',
-        dot: 'bg-gray-400',
+        dot: 'bg-gray-600',
         clickable: false
       };
     }
@@ -208,9 +208,9 @@ export const KernelControls: React.FC<KernelControlsProps> = ({
       onClick={onRestartKernel}
       className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition group relative"
       title="Restart kernel and clear outputs"
-      disabled={!isReady || isProcessing}
+      disabled={isProcessing || (kernelStatus !== 'error' && !isReady)}
     >
-      <FaRedo className={`w-3.5 h-3.5 ${(!isReady || isProcessing) ? 'opacity-50' : ''}`} />
+      <FaRedo className={`w-3.5 h-3.5 ${(isProcessing || (kernelStatus !== 'error' && !isReady)) ? 'opacity-50' : ''}`} />
     </button>
   </div>
 );
@@ -528,7 +528,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
         </button>
         <button
           onClick={onRestartKernel}
-          disabled={!isKernelReady || isProcessing}
+          disabled={isProcessing || (kernelStatus !== 'error' && !isKernelReady)}
           className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
         >
           <FaRedo className="w-3.5 h-3.5 mr-2" />
