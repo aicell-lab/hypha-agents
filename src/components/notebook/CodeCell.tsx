@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useThebe } from '../chat/ThebeProvider';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
@@ -62,6 +61,7 @@ interface CodeCellProps {
   parent?: string;
   output?: OutputItem[];
   staged?: boolean; // Whether this is a staged (uncommitted) cell
+  isReady?: boolean; // Kernel ready state from AgentLab
 }
 
 export const CodeCell: React.FC<CodeCellProps> = ({ 
@@ -82,9 +82,9 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   onOutputVisibilityChange,
   parent,
   output,
-  staged = false
+  staged = false,
+  isReady = false
 }) => {
-  const { status, isReady } = useThebe();
   const [codeValue, setCodeValue] = useState(code);
   const outputRef = useRef<HTMLDivElement>(null);
   const internalEditorRef = useRef<MonacoEditor | null>(null);

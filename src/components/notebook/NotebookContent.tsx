@@ -109,6 +109,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                         parent={cell.metadata?.parent}
                         output={cell.output}
                         staged={cell.metadata?.staged === true}
+                        isReady={isReady}
                       />
                     ) : (
                       <MarkdownCell

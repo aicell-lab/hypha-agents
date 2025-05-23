@@ -27,6 +27,8 @@ export interface NotebookHeaderProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   isWelcomeScreen?: boolean;
+  kernelStatus: 'idle' | 'busy' | 'starting' | 'error';
+  onRetryKernel?: () => void;
 }
 
 const NotebookHeader: React.FC<NotebookHeaderProps> = ({
@@ -52,6 +54,8 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   canMoveUp,
   canMoveDown,
   isWelcomeScreen = false,
+  kernelStatus,
+  onRetryKernel,
 }) => {
   return (
     <div className="flex-shrink-0 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 shadow-sm">
@@ -114,6 +118,8 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
           isWelcomeScreen={isWelcomeScreen}
+          kernelStatus={kernelStatus}
+          onRetryKernel={onRetryKernel}
         />
       </div>
     </div>

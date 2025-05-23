@@ -209,13 +209,20 @@ export const setupNotebookService = async ({
     console.log(`Notebook service registered with id ${svc.id}`);
     
     const token = await server.generateToken();
-    await executeCode(`from hypha_rpc import connect_to_server
+    await executeCode(`import micropip
+await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http', 'ipywidgets'])
+import pyodide_http
+pyodide_http.patch_all()
+%matplotlib inline
+
+from hypha_rpc import connect_to_server
 server = await connect_to_server(server_url="${server.config.public_base_url}", token="${token}")
 api = await server.get_service("${svc.id}")
 print("Hypha Core service connected in kernel.")
 
 # Set environment variables
 import os
+os.environ['CURRENT_URL'] = '${window.location.href}'
 os.environ['CURRENT_URL'] = '${window.location.href}'
 os.environ['HYPHA_SERVER_URL'] = '${server.config.public_base_url}'
 os.environ['HYPHA_WORKSPACE'] = '${server.config.workspace}'
