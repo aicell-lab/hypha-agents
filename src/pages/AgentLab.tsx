@@ -937,7 +937,10 @@ const NotebookPage: React.FC = () => {
         lastUserCellRef.current = userCells[userCells.length - 1]?.id || null;
         lastAgentCellRef.current = assistantCells[assistantCells.length - 1]?.id || null;
         cellManager.current?.clearRunningState();
-        setShowWelcomeScreen(false);
+        // Only hide welcome screen if user is logged in
+        if (isLoggedIn) {
+          setShowWelcomeScreen(false);
+        }
 
         // Note: setupService is called automatically when kernel is created/restarted
         // No need to call it here when just loading notebook content
@@ -978,7 +981,8 @@ const NotebookPage: React.FC = () => {
     setCells,
     setExecutionCounter,
     setSelectedProject,
-    setAgentSettings
+    setAgentSettings,
+    isLoggedIn
   ]);
 
   // Add useEffect to hide address bar on mobile devices
@@ -1306,6 +1310,13 @@ console.log('Kernel state has been reset');
     if (initRefObject.current && initialUrlParams) {
       setParsedUrlParams(initialUrlParams);
       
+      // Always show welcome screen if user is not logged in
+      if (!isLoggedIn) {
+        console.log('[AgentLab] User not logged in, showing welcome screen');
+        setShowWelcomeScreen(true);
+        return;
+      }
+      
       // Handle file URL parameter
       if (initialUrlParams.filePath) {
         // Automatically load the file without showing the welcome screen
@@ -1314,7 +1325,10 @@ console.log('Kernel state has been reset');
         loadNotebookContent(projectId, initialUrlParams.filePath)
           .then(() => {
             console.log(`[AgentLab] Successfully loaded file from URL parameter: ${initialUrlParams.filePath}`);
-            setShowWelcomeScreen(false);
+            // Only hide welcome screen if user is logged in
+            if (isLoggedIn) {
+              setShowWelcomeScreen(false);
+            }
           })
           .catch(error => {
             console.error(`[AgentLab] Error loading file from URL parameter:`, error);
@@ -1326,14 +1340,25 @@ console.log('Kernel state has been reset');
       
       // Only show welcome screen if we don't have a filePath parameter
       const shouldShowWelcome = !initialUrlParams.filePath;
-      setShowWelcomeScreen(shouldShowWelcome);
+      // Always show welcome screen if user is not logged in, regardless of other conditions
+      setShowWelcomeScreen(!isLoggedIn || shouldShowWelcome);
       // If we have an edit parameter, we'll handle it in the welcome screen
       // This ensures the edit button is visible and clickable
       if (initialUrlParams.edit) {
         console.log('[AgentLab] Edit parameter detected:', initialUrlParams.edit);
       }
     }
-  }, [initRefObject.current, initialUrlParams, loadNotebookContent]); // Added loadNotebookContent to dependencies
+  }, [initRefObject.current, initialUrlParams, loadNotebookContent, isLoggedIn]); // Added isLoggedIn to dependencies
+
+  // Handle login state changes - always show welcome screen when not logged in
+  useEffect(() => {
+    if (!isLoggedIn) {
+      console.log('[AgentLab] User logged out or not logged in, showing welcome screen');
+      setShowWelcomeScreen(true);
+    }
+    // Note: We don't automatically hide the welcome screen when user logs in
+    // because they might want to choose what to do next
+  }, [isLoggedIn]);
 
   // Notebook Commands Hook
   const { handleCommand } = useNotebookCommands({
@@ -1833,13 +1858,16 @@ console.log('Kernel state has been reset');
 
       // Load the newly created notebook
       await loadNotebookContent(IN_BROWSER_PROJECT.id, filePath);
-      setShowWelcomeScreen(false);
+      // Only hide welcome screen if user is logged in
+      if (isLoggedIn) {
+        setShowWelcomeScreen(false);
+      }
       showToast('Created new chat notebook', 'success');
     } catch (error) {
       console.error('Error creating new notebook:', error);
       showToast(`Failed to create notebook: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
-  }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent]);
+  }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent, isLoggedIn]);
 
   // Add onCreateAgentTemplate function after handleCreateNewNotebook
   const handleCreateAgentTemplate = useCallback(async (agentData: AgentConfigData) => {
@@ -1904,14 +1932,17 @@ console.log('Kernel state has been reset');
 
       // Load the newly created notebook
       await loadNotebookContent(IN_BROWSER_PROJECT.id, filePath);
-      setShowWelcomeScreen(false);
+      // Only hide welcome screen if user is logged in
+      if (isLoggedIn) {
+        setShowWelcomeScreen(false);
+      }
       showToast('Created new agent template', 'success');
     } catch (error) {
       console.error('Error creating agent template:', error);
       showToast(`Failed to create agent template: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
       throw error; // Re-throw to allow the caller to handle it
     }
-  }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent]);
+  }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, loadNotebookContent, isLoggedIn]);
 
   // --- Callback to show Deno Terminal in Canvas Panel ---
   const handleShowDenoTerminalInCanvas = useCallback(() => {
