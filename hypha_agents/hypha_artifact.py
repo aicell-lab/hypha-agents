@@ -11,7 +11,7 @@ import locale
 import os
 import json
 import asyncio
-from typing import Literal, Self, overload
+from typing import Callable, Literal, Self, overload
 import requests
 from hypha_rpc import connect_to_server
 
@@ -48,6 +48,8 @@ class ArtifactHttpFile(io.IOBase):
     This implements a file interface for Hypha artifacts, handling HTTP operations
     via the requests library instead of relying on Pyodide.
     """
+
+    _on_close: Callable | None = None
 
     def __init__(
         self: Self,
@@ -213,6 +215,18 @@ class ArtifactHttpFile(io.IOBase):
         finally:
             self._closed = True
             self._buffer.close()
+            if self._on_close is not None:
+                self._on_close()
+
+    @property
+    def on_close(self: Self) -> Callable | None:
+        """Get on_close callback function"""
+        return self._on_close
+
+    @on_close.setter
+    def on_close(self: Self, func: Callable | None) -> None:
+        """Set on_close callback function"""
+        self._on_close = func
 
     def __enter__(self: Self) -> Self:
         """Enter context manager"""
@@ -283,8 +297,6 @@ class HyphaArtifact:
 
     def _remote_get(self: Self, method_name: str, params: dict[str, JsonType]) -> None:
         extended_params = self._extend_params(params)
-        if extended_params.get("version") is None:
-            extended_params["version"] = "stage"
         cleaned_params = remove_none(extended_params)
 
         response = requests.get(
@@ -305,6 +317,7 @@ class HyphaArtifact:
         config: dict | None = None,
         secrets: dict | None = None,
         version: str | None = None,
+        stage: bool = False,
         comment: str | None = None,
         copy_files: bool | None = None,
     ) -> None:
@@ -316,7 +329,7 @@ class HyphaArtifact:
                 Ensure the manifest follows the required schema
                 if applicable (e.g., for collections).
             artifact_type (str | None): Optional. The type of the artifact.
-                Supported values are collection, generic and any other custom type.
+                Supported values are collection, vector-collection, generic and any other custom type.
                 By default, it's set to generic which contains fields tailored for
                 displaying the artifact as cards on a webpage.
             permissions (dict | None): Optional. A dictionary containing user permissions.
@@ -325,18 +338,19 @@ class HyphaArtifact:
                 and {"user_id_1": "r+"} grants read and create permissions to a specific user.
                 You can also set permissions for specific operations,
                 such as {"user_id_1": ["read", "create"]}.
-                See detailed explanation about permissions below.
             secrets (dict | None): Optional. A dictionary containing secrets to be stored
                 with the artifact. Secrets are encrypted and can only be accessed
                 by the artifact owner or users with appropriate permissions.
-                See the create function for a list of supported secrets.
-            config (dict | None): Optional. Optional. A dictionary containing additional
+            config (dict | None): Optional. A dictionary containing additional
                 configuration options for the artifact.
-            version (str | None): Optional. Optional. The version of the artifact to edit.
+            version (str | None): Optional. The version of the artifact to edit.
                 By default, it set to None, the version will stay the same.
-                If you want to create a staged version, you can set it to "stage".
+                If stage=True is specified, any version parameter is ignored.
                 You can set it to any version in text, e.g. 0.1.0 or v1.
                 If you set it to "new", it will generate a version similar to v0, v1, etc.
+            stage (bool): Optional. If True, the artifact will be edited in staging mode
+                regardless of the version parameter. Default is False. When in staging mode,
+                committing will create a new version.
             comment (str | None): Optional. A comment to describe the changes made to the artifact.
             copy_files (bool | None): Optional. A boolean flag indicating whether to copy files
                 from the previous version when creating a new staged version.
@@ -350,10 +364,34 @@ class HyphaArtifact:
             "config": config,
             "secrets": secrets,
             "version": version,
+            "stage": stage,
             "comment": comment,
             "copy_files": copy_files,
         }
         self._remote_post("edit", params)
+
+    def _remote_commit(
+        self: Self, version: str | None = None, comment: str | None = None
+    ) -> None:
+        """Finalizes and commits an artifact's staged changes.
+            Validates uploaded files and commits the staged manifest.
+            This process also updates view and download statistics.
+
+        Args:
+            self (Self): The instance of the HyphaArtifact class.
+            version (str | None): Optional. The version number to use for the committed artifact.
+                By default, it's set to None, the version will stay the same.
+                Note that this only affects the version number - whether a new version is created
+                or the current version is updated depends on whether the artifact was in staging mode.
+                If committing from staging mode, a new version is always created.
+                If committing a direct edit, the current version is updated.
+            comment (str | None): Optional. A comment to describe the changes made to the artifact.
+        """
+        params = {
+            "version": version,
+            "comment": comment,
+        }
+        self._remote_post("commit", params)
 
     def _remote_put_file_url(
         self: Self,
@@ -478,9 +516,9 @@ class HyphaArtifact:
             for p in path:
                 try:
                     result[p] = self.cat(p, recursive=recursive, on_error=on_error)
-                except Exception:
+                except Exception as e:
                     if on_error == "raise":
-                        raise
+                        raise e
             return result
 
         # Handle recursive case
@@ -492,15 +530,16 @@ class HyphaArtifact:
         try:
             with self.open(path, mode="r") as file:
                 return file.read()
-        except Exception:
+        except Exception as e:
             if on_error == "raise":
-                raise
+                raise e
             return None
 
     def open(
         self: Self,
         urlpath: str,
         mode: FileMode = "rb",
+        auto_commit: bool = True,
         **kwargs,
     ) -> ArtifactHttpFile:
         """Open a file for reading or writing
@@ -511,10 +550,12 @@ class HyphaArtifact:
             Path to the file within the artifact
         mode: FileMode
             File mode, one of 'r', 'rb', 'w', 'wb', 'a', 'ab'
+        auto_commit: bool
+            If True, automatically commit changes when the file is closed
 
         Returns
         -------
-        WithHTTPFile
+        ArtifactHttpFile
             A file-like object
         """
         normalized_path = urlpath[1:] if urlpath.startswith("/") else urlpath
@@ -528,7 +569,7 @@ class HyphaArtifact:
                 **kwargs,
             )
         elif "w" in mode or "a" in mode:
-            self._remote_edit(version="stage")
+            self._remote_edit(stage=True)
             upload_url = self._remote_put_file_url(normalized_path)
             file_obj = ArtifactHttpFile(
                 url=upload_url,
@@ -536,6 +577,9 @@ class HyphaArtifact:
                 name=normalized_path,
                 **kwargs,
             )
+
+            if auto_commit:
+                file_obj.on_close = self._remote_commit
 
             return file_obj
         else:
@@ -566,7 +610,7 @@ class HyphaArtifact:
             What to do if a file is not found
         """
         # Stage the artifact for edits
-        self._remote_edit(version="stage")
+        self._remote_edit(stage=True)
         # Handle recursive case
         if recursive and self.isdir(path1):
             files = self.find(path1, maxdepth=maxdepth)
@@ -576,12 +620,14 @@ class HyphaArtifact:
                 dest_path = f"{path2}/{rel_path}" if path2 else rel_path
                 try:
                     self._copy_single_file(file_path, dest_path)
-                except Exception:
+                except Exception as e:
                     if on_error == "raise":
-                        raise
+                        raise e
         else:
             # Copy a single file
             self._copy_single_file(path1, path2)
+
+        self._remote_commit()
 
     def _copy_single_file(self, src: str, dst: str) -> None:
         """Helper method to copy a single file"""
@@ -629,8 +675,9 @@ class HyphaArtifact:
         -------
         None
         """
-        self._remote_edit(version="stage")
+        self._remote_edit(stage=True)
         self._remote_remove_file(path)
+        self._remote_commit()
 
     def created(self: Self, path: str):
         """Get the creation time of a file
@@ -970,7 +1017,7 @@ async def create_artifact(artifact_id: str, token: str, server_url: str) -> bool
         api = await connect_to_server(
             {
                 "name": "artifact-client",
-                "server_url": "https://hypha.aicell.io",
+                "server_url": server_url,
                 "token": token,
             }
         )

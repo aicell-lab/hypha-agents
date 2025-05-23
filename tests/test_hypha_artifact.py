@@ -72,8 +72,10 @@ def create_artifact_sync(artifact_id: str, token: str) -> bool:
 def artifact(artifact_name):
     """Create a test artifact with a real connection to Hypha."""
 
-    create_artifact_sync(artifact_name, os.getenv("PERSONAL_TOKEN"))
-    _artifact = HyphaArtifact(artifact_name)
+    personal_token = os.getenv("PERSONAL_TOKEN")
+    workspace = os.getenv("PERSONAL_WORKSPACE")
+    create_artifact_sync(artifact_name, personal_token)
+    _artifact = HyphaArtifact(artifact_name, workspace, personal_token)
     print(f"Created test artifact: {artifact_name}")
     return _artifact
 
