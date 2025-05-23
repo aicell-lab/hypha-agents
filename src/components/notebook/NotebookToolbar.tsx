@@ -587,13 +587,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   const renderStandardToolbar = () => (
     <div className="flex items-center">
       {!isWelcomeScreen && (
-        <>
-          <FileOperations 
-            onSave={onSave} 
-            onDownload={onDownload} 
-            onLoad={onLoad} 
-          />
-          <div className="h-5 w-px bg-gray-200 mx-1"></div>
+        <>          
           <KernelControls 
             onRunAll={onRunAll} 
             onClearOutputs={onClearOutputs} 
@@ -602,6 +596,12 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             isReady={isKernelReady} 
             kernelStatus={kernelStatus}
             onRetryKernel={onRetryKernel}
+          />
+          <div className="h-5 w-px bg-gray-200 mx-1"></div>
+          <FileOperations 
+            onSave={onSave} 
+            onDownload={onDownload} 
+            onLoad={onLoad} 
           />
           <CellControls 
             onAddCodeCell={onAddCodeCell} 
