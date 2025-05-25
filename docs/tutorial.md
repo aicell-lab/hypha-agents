@@ -620,14 +620,11 @@ tools_schema_json = json.dumps(tools_schema, indent=2)
 print("You are a helpful assistant.") # Role definition
 
 print(f"""You can use the tools defined below to help answer questions.
-
-Here are the available tools and their schemas:
+Here are the available tool functions with their arguments schema:
 ```json
 {tools_schema_json}
 ```
-
 These tools are accessible from the variable `tools`.
-
 For example, to use the calculator tool:
 ```python
 result = await tools.calculator({{"operation": "+", "x": 5, "y": 3}})
@@ -707,7 +704,7 @@ In this section, you'll learn a **modern and elegant** way to define tools for y
 
 ### 🧠 What is `@schema_function`?
 
-The `@schema_function` decorator is a **powerful feature of the Hypha framework** that automatically generates JSON schemas for your Python functions, making them compatible with Large Language Models (LLMs) and AI agents.
+The `@schema_function` decorator is a **useful utility of the hypha framework** that automatically generates JSON schemas for your Python functions, making them compatible with Large Language Models (LLMs) and AI agents.
 
 **Key Features:**
 
@@ -852,7 +849,7 @@ python modern_calculator.py
 
 ### Step 2: Connect to the Tool and Check the Schema
 
-In your Hypha Agent Lab, create a new **Code** cell, change the role to **System**and paste the following:
+In your Hypha Agent Lab, create a new **Code** cell, change the role to **System** and paste the following:
 
 ```python
 import json
@@ -907,12 +904,9 @@ print("You are a helpful AI assistant that performs calculations using external 
 # Provide tool schema and usage instructions
 print(f"""
 You have access to the following tools:
-
-
 ```json
 {calculator_schema}
 ```
-
 To use a tool, call:
 
 ```python
