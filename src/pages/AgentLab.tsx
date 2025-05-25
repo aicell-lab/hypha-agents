@@ -643,13 +643,7 @@ const NotebookPage: React.FC = () => {
     const executeSystemCell = async () => {
       // Wait for all initialization to complete including Hypha Core service setup
       if (showWelcomeScreen || !kernelManager.isReady || !initRefObject.current || systemCellsExecutedRef.current || !hyphaCoreApi) {
-        console.log('[AgentLab] System cell execution waiting for:', {
-          showWelcomeScreen,
-          kernelReady: kernelManager.isReady,
-          initialized: initRefObject.current,
-          alreadyExecuted: systemCellsExecutedRef.current,
-          hyphaCoreApiReady: !!hyphaCoreApi
-        });
+
         return;
       }
       
