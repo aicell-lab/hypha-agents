@@ -930,7 +930,7 @@ When you have many tools available, you can use a for loop to automatically gene
 ```python
 
 all_tools = [tools.calculator, tools.weather, tools.news]
-tool_schemas = [json.dumps(tool.__schema__, indent=2) for tool in all_tools]
+tool_schemas = [json.dumps(tool.__schema__) for tool in all_tools]
 
 # Print all tool schemas in a formatted way
 print("You have access to the following tools:")
