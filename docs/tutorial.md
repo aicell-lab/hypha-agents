@@ -203,21 +203,22 @@ Now let's test if your agent works:
 ### Step 4: Save Your Work
 
 To save your progress:
-- **Quick save**: Press `Ctrl + S` (Windows/Linux) or `Cmd + S` (Mac)
-- **Export**: Click the "Download" button in the top toolbar to export your chat session
+
+1. **Set the system cell role and hide it**:
+   - Make sure your system cell is set to "System" role (click the user icon 👤 to change it)
+   - Click the "Hide" button on the system cell to hide it from users
+2. **Quick save**: Press `Ctrl + S` (Windows/Linux) or `Cmd + S` (Mac)
+3. **Export**: Click the "Download" button in the top toolbar to export your chat session
 
 ### 💡 Pro Tips for Basic Agents
 
 **Hiding System Configuration:**
-- If you don't want users to see your system configuration, click the "Hide" button on the system cell
+- Always set your system configuration cells to "System" role by clicking the user icon (👤)
+- Click the "Hide" button on system cells so users don't see your agent's internal configuration
+- This keeps your agent's setup clean and professional
 
 **Improving Your Agent's Personality:**
 Try replacing the basic system message with something more detailed:
-```python
-print("You are Bee, a friendly and knowledgeable AI assistant. You are patient, helpful, and always try to provide clear explanations. When you don't know something, you admit it honestly.")
-```
-
----
 
 ## 🔧 Part 2: Adding External Tools
 
@@ -368,10 +369,12 @@ If you see an error, check the [Troubleshooting](#troubleshooting) section.
 ### Step 6: Test Your Enhanced Agent
 
 Now test your agent with calculations:
-
-1. **In the chat input box**, type: `What is the result of 4983*234 + (2^5)?`
-2. **Send the message**
-3. **You should see**:
+1. **Set the system cell role and hide it**:
+   - Make sure your system cell is set to "System" role (click the user icon 👤 to change it)
+   - Click the "Hide" button on the system cell to hide it from users
+2. **In the chat input box**, type: `What is the result of 4983*234 + (2^5)?`
+3. **Send the message**
+4. **You should see**:
    - Your agent generates code to use the calculator
    - The calculation results appear
    - Final answer: `The result of the expression 4983*234 + (2^5) is 1,166,029.`
@@ -527,11 +530,73 @@ python annotated_calculator_service.py
 ```
 3. **Copy the new service ID** that appears in the output
 
-### Step 3: Connect to the Advanced Service
+
+### Step 3: Connect to the Advanced Service and Test the Schema
+
+Create a new cell to examine the automatically generated schema:
+
+```python
+import json
+import micropip
+
+# Install required packages
+await micropip.install(["hypha-rpc"])
+from hypha_rpc import connect_to_server
+
+# Connect to server
+server = await connect_to_server({"server_url": "https://hypha.aicell.io"})
+
+# Connect to the annotated calculator service
+# REPLACE with your actual service ID
+calculator_extension = await server.get_service("ws-user-capable-raccoon-57051682/SwqeFiN2UjJum:annotated-calculator-extension")
+annotation = await calculator_extension.get_schema()
+print("Generated Tool Schema:")
+print(json.dumps(annotation, indent=2))
+```
+
+**Expected Output:**
+```json
+{
+  "calculator": {
+    "$defs": {
+      "OperationType": {
+        "description": "Enumeration of supported calculator operations",
+        "enum": ["+", "-", "*", "/"],
+        "title": "OperationType",
+        "type": "string"
+      }
+    },
+    "description": "Calculator tool for performing mathematical operations...",
+    "properties": {
+      "operation": {
+        "allOf": [{"$ref": "#/$defs/OperationType"}],
+        "description": "The mathematical operation to perform (+, -, *, or /)"
+      },
+      "x": {
+        "description": "First number for the operation",
+        "title": "X",
+        "type": "number"
+      },
+      "y": {
+        "description": "Second number for the operation", 
+        "title": "Y",
+        "type": "number"
+      }
+    },
+    "required": ["operation", "x", "y"],
+    "title": "CalculatorTool",
+    "type": "object"
+  }
+}
+```
+
+Next we will try to for the schema along with the tool usage instructions and print it in the system cell.
+
+### Step 4: Configure Your Agent with Tool Instructions
 
 Update your system configuration in the Hypha Agent Lab:
 
-```python
+````python
 import json
 import micropip
 
@@ -575,54 +640,16 @@ print("""⚠️ **Important guidelines**:
 - Only use supported operations (+, -, *, /)
 - Make sure to provide both x and y values as numbers
 """)  # Additional guidelines
-```
+````
 
-### Step 4: Test the Schema Generation
+Run the above cell and you will see the tool schema and usage instructions in the system cell.
 
-Create a new cell to examine the automatically generated schema:
+> **📋 Important Note:** Read the output of the cell carefully and you will see the tool schema and usage instructions. You should think as if you are the agent and check if the instructions are correct and informative.
 
-```python
-import json
-annotation = await calculator_extension.get_schema()
-print("Generated Tool Schema:")
-print(json.dumps(annotation, indent=2))
-```
 
-**Expected Output:**
-```json
-{
-  "calculator": {
-    "$defs": {
-      "OperationType": {
-        "description": "Enumeration of supported calculator operations",
-        "enum": ["+", "-", "*", "/"],
-        "title": "OperationType",
-        "type": "string"
-      }
-    },
-    "description": "Calculator tool for performing mathematical operations...",
-    "properties": {
-      "operation": {
-        "allOf": [{"$ref": "#/$defs/OperationType"}],
-        "description": "The mathematical operation to perform (+, -, *, or /)"
-      },
-      "x": {
-        "description": "First number for the operation",
-        "title": "X",
-        "type": "number"
-      },
-      "y": {
-        "description": "Second number for the operation", 
-        "title": "Y",
-        "type": "number"
-      }
-    },
-    "required": ["operation", "x", "y"],
-    "title": "CalculatorTool",
-    "type": "object"
-  }
-}
-```
+Now you can set the system cell role and hide it:
+   - Make sure your system cell is set to "System" role (click the user icon 👤 to change it)
+   - Click the "Hide" button on the system cell to hide it from users
 
 ### Step 5: Test Your Advanced Agent
 
@@ -644,9 +671,9 @@ You should see your agent:
 2. Use the calculator tool for each operation
 3. Combine results to give final answers
 
-### 📝 Best Practices for Tool Design
+### 📝 Best Practices for Creating Hypha Agent Prompts
 
-When creating tools, follow these guidelines:
+When creating an agent prompt in the system configuration, make sure your prompt is informative and helpful. Your prompt should contain the following information:
 
 **1. Role Definition:**
 
@@ -822,11 +849,42 @@ python modern_calculator.py
 2. **Copy the service ID** shown in the terminal for the next step
 
 
-### Step 2: Connect to the Tool in Your Hypha Agent Lab
 
-In your Hypha Agent Lab, create a new **System** cell and paste the following:
+### Step 2: Connect to the Tool and Check the Schema
+
+In your Hypha Agent Lab, create a new **Code** cell, change the role to **System**and paste the following:
 
 ```python
+import json
+import micropip
+await micropip.install("hypha-rpc")
+
+from hypha_rpc import connect_to_server
+
+# Connect to server
+server = await connect_to_server({"server_url": "https://hypha.aicell.io"})
+
+# Connect to your modern calculator tool
+# REPLACE with your actual service ID from Step 1
+tools = await server.get_service("ws-user-yourworkspace/your-service-id:modern-calculator")
+
+result = await tools.calculate(operation="+", a=12, b=30)
+print(result)  # Expected output: 42
+
+# Get schema and format it nicely
+calculator_schema = json.dumps(tools.calculate.__schema__, indent=2)
+print(calculator_schema)
+```
+
+If you get the correct result, your tool is connected and functional, and you can see the schema of the tool in the output.
+
+### Step 3: Configure Your Agent with Tool Instructions
+
+Now you can configure your agent with tool instructions by following the structure of prompt in the previous part.
+
+Here is an example:
+
+````python
 import json
 import micropip
 await micropip.install("hypha-rpc")
@@ -868,18 +926,7 @@ print("""⚠️ Important guidelines:
 - Only use supported operations: +, -, *, /
 - Avoid invalid input such as dividing by zero
 """)
-```
-
-### Step 3: Test Your Tool
-
-To test that your tool is working correctly, create a new code cell:
-
-```python
-result = await tools.calculate(operation="+", a=12, b=30)
-print(result)  # Expected output: 42
-```
-
-If you get the correct result, your tool is connected and functional!
+````
 
 ### Step 4: Putting It All Together
 
@@ -889,6 +936,8 @@ You now have:
 - A **registered Hypha service**
 - An **Hypha agent** that can access and use the tool
 - A fully formatted tool schema used in the agent's prompt
+
+Make sure you configure the system cell with the role "System" and hide the content.
 
 Try chatting with your agent in the Hypha Agent Lab:
 
