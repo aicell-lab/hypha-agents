@@ -32,6 +32,7 @@ interface AgentLabLayoutProps {
   onRunAll: () => Promise<void>;
   onClearOutputs: () => void;
   onRestartKernel: () => Promise<void>;
+  onInterruptKernel: () => Promise<void>;
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onCreateNewNotebook: () => Promise<void>;
@@ -116,6 +117,7 @@ export const AgentLabLayout: React.FC<AgentLabLayoutProps> = ({
   onRunAll,
   onClearOutputs,
   onRestartKernel,
+  onInterruptKernel,
   onAddCodeCell,
   onAddMarkdownCell,
   onCreateNewNotebook,
@@ -193,6 +195,7 @@ export const AgentLabLayout: React.FC<AgentLabLayoutProps> = ({
         onRunAll={onRunAll}
         onClearOutputs={onClearOutputs}
         onRestartKernel={onRestartKernel}
+        onInterruptKernel={onInterruptKernel}
         onAddCodeCell={onAddCodeCell}
         onAddMarkdownCell={onAddMarkdownCell}
         onShowKeyboardShortcuts={() => setIsShortcutsDialogOpen(true)}

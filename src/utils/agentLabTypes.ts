@@ -38,6 +38,8 @@ export interface KernelManager {
   initializeExecuteCode: (deno: any, kernelInfo: KernelInfo) => void;
   addKernelLogEntry: (entry: Omit<KernelExecutionLog, 'timestamp'>) => void;
   kernelExecutionLog: KernelExecutionLog[];
+  interruptKernel: () => Promise<boolean>;
+  destroyCurrentKernel: () => Promise<void>;
 }
 
 export interface ProjectManifest {

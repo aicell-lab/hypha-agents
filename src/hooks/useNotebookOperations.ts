@@ -136,7 +136,7 @@ export const useNotebookOperations = ({
   // Load notebook content
   const loadNotebookContent = useCallback(async (projectId: string | undefined, filePath: string) => {
     const loadingToastId = 'loading-notebook';
-    showToast('Loading notebook...', 'loading');
+    showToast('Loading notebook...', 'loading', { id: loadingToastId });
 
     try {
       let rawContent: string | NotebookData;

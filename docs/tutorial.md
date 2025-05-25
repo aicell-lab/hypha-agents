@@ -906,13 +906,14 @@ print("You are a helpful AI assistant that performs calculations using external 
 
 # Provide tool schema and usage instructions
 print(f"""
-You have access to the following tool:
+You have access to the following tools:
+
 
 ```json
 {calculator_schema}
 ```
 
-To use the tool, call:
+To use a tool, call:
 
 ```python
 result = await tools.calculate(operation="+", a=3, b=5)
@@ -927,6 +928,21 @@ print("""⚠️ Important guidelines:
 - Avoid invalid input such as dividing by zero
 """)
 ````
+
+### 💡 Pro Tip: Managing Multiple Tools
+
+When you have many tools available, you can use a for loop to automatically generate a formatted list of all tool schemas:
+
+```python
+
+all_tools = [tools.calculator, tools.weather, tools.news]
+tool_schemas = [json.dumps(tool.__schema__, indent=2) for tool in all_tools]
+
+# Print all tool schemas in a formatted way
+print("You have access to the following tools:")
+for schema in tool_schemas:
+    print(f" - {schema['name']}:\n```json\n{schema}\n```")
+```
 
 ### Step 4: Putting It All Together
 

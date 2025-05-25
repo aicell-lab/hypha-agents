@@ -14,6 +14,7 @@ export interface NotebookHeaderProps {
   onRunAll: () => void;
   onClearOutputs: () => void;
   onRestartKernel: () => void;
+  onInterruptKernel?: () => Promise<void>;
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
@@ -41,6 +42,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   onRunAll,
   onClearOutputs,
   onRestartKernel,
+  onInterruptKernel,
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
@@ -105,6 +107,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           onRunAll={onRunAll}
           onClearOutputs={onClearOutputs}
           onRestartKernel={onRestartKernel}
+          onInterruptKernel={onInterruptKernel}
           onAddCodeCell={onAddCodeCell}
           onAddMarkdownCell={onAddMarkdownCell}
           onShowKeyboardShortcuts={onShowKeyboardShortcuts}

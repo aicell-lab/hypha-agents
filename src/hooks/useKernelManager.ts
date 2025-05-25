@@ -10,9 +10,10 @@ import { showToast } from '../utils/notebookUtils';
 interface UseKernelManagerProps {
   server: any;
   setupService: () => Promise<void>;
+  clearRunningState?: () => void;
 }
 
-export const useKernelManager = ({ server, setupService }: UseKernelManagerProps): KernelManager => {
+export const useKernelManager = ({ server, setupService, clearRunningState }: UseKernelManagerProps): KernelManager => {
   const [isReady, setIsReady] = useState(false);
   const [kernelStatus, setKernelStatus] = useState<'idle' | 'busy' | 'starting' | 'error'>('starting');
   const [executeCode, setExecuteCode] = useState<((code: string, callbacks?: ExecuteCodeCallbacks, timeout?: number) => Promise<void>) | null>(null);
@@ -22,6 +23,12 @@ export const useKernelManager = ({ server, setupService }: UseKernelManagerProps
   
   // Add ref to store executeCode function to avoid circular dependencies
   const executeCodeRef = useRef<any>(null);
+  // Add ref to store the Deno service instance
+  const denoServiceRef = useRef<any>(null);
+  // Add ref for ping interval
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Add ref to prevent multiple initializations
+  const isInitializingRef = useRef(false);
 
   // Function to update kernel log
   const addKernelLogEntry = useCallback((entryData: Omit<KernelExecutionLog, 'timestamp'>) => {
@@ -32,29 +39,125 @@ export const useKernelManager = ({ server, setupService }: UseKernelManagerProps
     setKernelExecutionLog(prevLog => [...prevLog, newEntry]);
   }, []);
 
+  // Function to ping kernel periodically
+  const startKernelPing = useCallback((kernelInfoParam: KernelInfo) => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+    }
+
+    const deno = denoServiceRef.current;
+    const kernelId = kernelInfoParam.kernelId || kernelInfoParam.id;
+    
+    if (!deno || !kernelId) return;
+
+    // Ping every 30 seconds to keep kernel alive
+    pingIntervalRef.current = setInterval(async () => {
+      try {
+        const success = await deno.pingKernel({kernelId});
+        if (!success) {
+          console.warn('[Deno Kernel] Failed to ping kernel, it may have been destroyed');
+          // Optionally set kernel status to error or try to reconnect
+        }
+      } catch (error) {
+        console.error('[Deno Kernel] Error pinging kernel:', error);
+      }
+    }, 30000); // 30 seconds
+  }, []); // No dependencies since we pass kernelInfo as parameter
+
+  // Function to stop kernel ping
+  const stopKernelPing = useCallback(() => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+  }, []);
+
+  // Function to destroy current kernel
+  const destroyCurrentKernel = useCallback(async () => {
+    const deno = denoServiceRef.current;
+    const kernelId = kernelInfo.kernelId || kernelInfo.id;
+    
+    if (!deno || !kernelId) return;
+
+    try {
+      console.log('[Deno Kernel] Destroying current kernel:', kernelId);
+      await deno.destroyKernel({ kernelId });
+      stopKernelPing();
+    } catch (error) {
+      console.warn('[Deno Kernel] Error destroying kernel:', error);
+    }
+  }, [kernelInfo, stopKernelPing]);
+
+  // Function to interrupt kernel execution
+  const interruptKernel = useCallback(async () => {
+    const deno = denoServiceRef.current;
+    const kernelId = kernelInfo.kernelId || kernelInfo.id;
+    
+    if (!deno || !kernelId) {
+      showToast('No active kernel to interrupt', 'warning');
+      return false;
+    }
+
+    try {
+      showToast('Interrupting kernel execution...', 'loading');
+      console.log('[Deno Kernel] Interrupting kernel:', kernelId);
+      const result = await deno.interruptKernel({kernelId});
+      
+      if (result.success) {
+        showToast('Kernel execution interrupted', 'success');
+      } else {
+        showToast('Failed to interrupt kernel execution', 'error');
+      }
+      
+      return result.success;
+    } catch (error) {
+      console.error('[Deno Kernel] Error interrupting kernel:', error);
+      showToast('Error interrupting kernel execution', 'error');
+      return false;
+    }
+  }, [kernelInfo]);
+
   // Function to initialize the executeCode function
   const initializeExecuteCode = useCallback((deno: any, kernelInfo: KernelInfo) => {
     if (!deno || !kernelInfo) return;
+    
+    // Store deno service reference
+    denoServiceRef.current = deno;
     
     const executeCodeFn = createExecuteCodeFunction(deno, kernelInfo, setKernelStatus, addKernelLogEntry);
     
     setExecuteCode(() => executeCodeFn);
     executeCodeRef.current = executeCodeFn;
     
-    // Re-initialize services
-    setupService();
-  }, [addKernelLogEntry, setKernelStatus, setupService]);
+    // Start ping interval
+    startKernelPing(kernelInfo);
+    
+    // Re-initialize services (call setupService but don't include it in dependencies to avoid circular dependency)
+    setupService().catch(error => {
+      console.warn('[Deno Kernel] Failed to setup service after kernel initialization:', error);
+    });
+  }, [addKernelLogEntry, setKernelStatus]); // Removed startKernelPing from dependency array
 
   // Kernel initialization
   useEffect(() => {
     async function initializeKernel() {
       if (!server) return;
       
+      // Prevent multiple concurrent initializations
+      if (isInitializingRef.current) {
+        console.log('[Deno Kernel] Initialization already in progress, skipping...');
+        return;
+      }
+      
+      // Mark as initializing
+      isInitializingRef.current = true;
+      
       const initTimeout = setTimeout(() => {
         console.error('[Deno Kernel] Initialization timeout after 30 seconds');
         setKernelStatus('error');
         setIsReady(false);
         showToast('Kernel initialization timed out. Please try restarting.', 'error');
+        isInitializingRef.current = false; // Reset flag on timeout
       }, 180000); // 60 second timeout
       
       try {
@@ -63,7 +166,7 @@ export const useKernelManager = ({ server, setupService }: UseKernelManagerProps
         
         // Get the Deno service with timeout
         const deno = await Promise.race([
-          server.getService('hypha-agents/deno-app-engine', { mode: 'random' }),
+          server.getService('ws-user-github|478667/nj28otnzbq1748150520231:deno-app-engine', { mode: 'random' }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Service connection timeout')), 15000)
           )
@@ -93,6 +196,9 @@ export const useKernelManager = ({ server, setupService }: UseKernelManagerProps
         initializeExecuteCode(deno, newKernelInfo);
         
         console.log('[Deno Kernel] Kernel initialization completed successfully');
+        
+        // Reset initialization flag
+        isInitializingRef.current = false;
       } catch (error) {
         clearTimeout(initTimeout);
         console.error('[Deno Kernel] Initialization error:', error);
@@ -105,11 +211,14 @@ export const useKernelManager = ({ server, setupService }: UseKernelManagerProps
         } else {
           showToast(`Kernel initialization failed: ${errorMessage}`, 'error');
         }
+        
+        // Reset initialization flag on error
+        isInitializingRef.current = false;
       }
     }
 
     initializeKernel();
-  }, [server, initializeExecuteCode, setupService]);
+  }, [server, initializeExecuteCode]); // Removed setupService from dependency array
 
   // Monitor kernel status for stuck states
   useEffect(() => {
@@ -134,47 +243,60 @@ export const useKernelManager = ({ server, setupService }: UseKernelManagerProps
     };
   }, [kernelStatus]);
 
+  // Cleanup ping interval on unmount
+  useEffect(() => {
+    return () => {
+      stopKernelPing();
+    };
+  }, [stopKernelPing]);
+
   const restartKernel = useCallback(async () => {
-    if (!server) return;
+    const deno = denoServiceRef.current;
+    const kernelId = kernelInfo.kernelId || kernelInfo.id;
+    
+    if (!deno || !kernelId) {
+      showToast('No kernel service available for restart', 'error');
+      return;
+    }
+
     showToast('Restarting kernel...', 'loading');
     
     try {
       setKernelStatus('starting');
+      stopKernelPing();
 
-      // Get the Deno interpreter service and create a new kernel
-      const deno = await server.getService('hypha-agents/deno-app-engine');
+      // Use the new service restartKernel function
+      const success = await deno.restartKernel({kernelId});
       
-      // First attempt to close the existing kernel if we have one
-      if (kernelInfo.kernelId || kernelInfo.id) {
-        try {
-          // Use destroyKernel instead of closeKernel to match the service API
-          await deno.destroyKernel({ kernelId: kernelInfo.kernelId || kernelInfo.id });
-          console.log('[Deno Kernel] Destroyed existing kernel:', kernelInfo.kernelId || kernelInfo.id);
-        } catch (closeError) {
-          console.warn('[Deno Kernel] Error destroying existing kernel:', closeError);
-          // Continue with restart even if destroy fails
+      if (success) {
+        console.log(`[Deno Kernel] Kernel restarted successfully: ${kernelId}`);
+        setKernelStatus('idle');
+        setIsReady(true);
+        
+        // Clear any running cell states after successful restart
+        if (clearRunningState) {
+          clearRunningState();
+          console.log('[Deno Kernel] Cleared running cell states after restart');
         }
+        
+        // Re-initialize executeCode function with the existing service and kernel info
+        initializeExecuteCode(deno, kernelInfo);
+        
+        showToast('Kernel restarted successfully', 'success');
+      } else {
+        console.error('[Deno Kernel] Failed to restart kernel');
+        setKernelStatus('error');
+        setIsReady(false);
+        showToast('Failed to restart kernel', 'error');
       }
-      
-      // Create a new kernel with empty options object
-      const newKernelInfo = await deno.createKernel({});
-      console.log('[Deno Kernel] Created new kernel:', newKernelInfo);
-
-      // Update our state with the new kernel info
-      setKernelInfo(newKernelInfo);
-      setKernelStatus('idle');
-      setIsReady(true);
-      
-      // Re-initialize executeCode function with the new kernel
-      initializeExecuteCode(deno, newKernelInfo);
       
     } catch (error) {
       console.error('Failed to restart kernel:', error);
       setKernelStatus('error');
       setIsReady(false);
-      showToast('Failed to restart kernel', 'error');
+      showToast(`Failed to restart kernel: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
-  }, [server, initializeExecuteCode, kernelInfo]);
+  }, [kernelInfo, initializeExecuteCode, stopKernelPing, clearRunningState]);
 
   const resetKernelState = useCallback(async () => {
     if (!isReady || !server) {
@@ -187,7 +309,7 @@ export const useKernelManager = ({ server, setupService }: UseKernelManagerProps
     showToast('Resetting kernel state...', 'loading');
     try {
       // Get Deno service
-      const deno = await server.getService('hypha-agents/deno-app-engine');
+      const deno = denoServiceRef.current || await server.getService('ws-user-github|478667/nj28otnzbq1748150520231:deno-app-engine');
       
       // Execute a simple reset command to clear variables
       if (kernelInfo.kernelId || kernelInfo.id) {
@@ -229,6 +351,8 @@ export const useKernelManager = ({ server, setupService }: UseKernelManagerProps
     resetKernelState,
     initializeExecuteCode,
     addKernelLogEntry,
-    kernelExecutionLog
+    kernelExecutionLog,
+    interruptKernel,
+    destroyCurrentKernel
   };
 }; 

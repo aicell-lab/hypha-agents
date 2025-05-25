@@ -114,8 +114,15 @@ const NotebookPage: React.FC = () => {
   // Initialize the cell manager
   const cellManager = useRef<CellManager | null>(null);
 
+  // State to prevent multiple simultaneous service setups
+  const [isSettingUpService, setIsSettingUpService] = useState(false);
+
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
+
+  // Initialize canvas panel and sidebar hooks early
+  const canvasPanel = useCanvasPanel();
+  const sidebar = useSidebar();
 
   // Initialization Hook
   const { hasInitialized: initRefObject, initialUrlParams } = useNotebookInitialization({
@@ -131,22 +138,64 @@ const NotebookPage: React.FC = () => {
     projects,
   });
 
-  // Setup service function
+  // Define handleAddWindow callback early
+  const handleAddWindow = useCallback((config: any) => {
+    canvasPanel.setHyphaCoreWindows(prev => {
+      if (prev.some(win => win.id === config.window_id)) {
+        return prev;
+      }
+      const newWindow: HyphaCoreWindow = {
+        id: config.window_id,
+        src: config.src,
+        name: config.name || `${config.src || 'Untitled Window'}`
+      };
+      return [...prev, newWindow];
+    });
+    canvasPanel.setActiveCanvasTab(config.window_id);
+    canvasPanel.setShowCanvasPanel(true);
+  }, [canvasPanel]);
+
+  // Placeholder setupService function for kernelManager
   const setupService = useCallback(async () => {
-    setHyphaCoreApi(null);
-    if(!server) {
-      showToast('Hypha Core Service is not available, please login.', 'warning');
+    // This will be replaced by setupServiceWithKernel when kernel is ready
+    console.log('[AgentLab] setupService called (placeholder)');
+  }, []);
+
+  // Initialize hooks
+  const kernelManager = useKernelManager({ 
+    server, 
+    setupService,
+    clearRunningState: () => cellManager.current?.clearRunningState()
+  });
+  
+  // Setup service with kernel when ready
+  const setupServiceWithKernel = useCallback(async () => {
+    if (!kernelManager.isReady || !kernelManager.executeCode) {
+      console.log('[AgentLab] Kernel not ready yet, skipping Hypha Core service setup');
       return;
     }
-    console.log('[AgentLab] Setting up Hypha Core service');
+    
+    if (isSettingUpService) {
+      console.log('[AgentLab] Service setup already in progress, skipping');
+      return;
+    }
+    
+    setIsSettingUpService(true);
+    setHyphaCoreApi(null);
+    
+    if(!server) {
+      showToast('Hypha Core Service is not available, please login.', 'warning');
+      setIsSettingUpService(false);
+      return;
+    }
+    
+    console.log('[AgentLab] Setting up Hypha Core service with ready kernel');
     const currentSignal = hyphaServiceAbortControllerRef.current.signal;
     try {
       const api = await setupNotebookService({
         onAddWindow: handleAddWindow,
         server, 
-        executeCode: kernelManager.executeCode || (async (code: string) => {
-          throw new Error('Kernel not ready');
-        }), 
+        executeCode: kernelManager.executeCode,
         agentSettings,
         abortSignal: currentSignal,
         projectId: initialUrlParams?.projectId || IN_BROWSER_PROJECT.id,
@@ -166,12 +215,18 @@ const NotebookPage: React.FC = () => {
           showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
       }
       setHyphaCoreApi(null);
+    } finally {
+      setIsSettingUpService(false);
     }
-  }, [server, agentSettings, initialUrlParams?.projectId]);
-
-  // Initialize hooks
-  const kernelManager = useKernelManager({ server, setupService });
+  }, [kernelManager.isReady, kernelManager.executeCode, server, agentSettings, initialUrlParams?.projectId, handleAddWindow]);
   
+  // Effect to setup service when kernel becomes ready
+  useEffect(() => {
+    if (kernelManager.isReady && kernelManager.executeCode && !isSettingUpService && !hyphaCoreApi) {
+      setupServiceWithKernel();
+    }
+  }, [kernelManager.isReady, kernelManager.executeCode, isSettingUpService, hyphaCoreApi]);
+
   const notebookOps = useNotebookOperations({
     cellManager: cellManager.current,
     notebookMetadata,
@@ -195,31 +250,11 @@ const NotebookPage: React.FC = () => {
     () => {} // setCanvasPanelComponent placeholder
   );
 
-  const canvasPanel = useCanvasPanel();
-  const sidebar = useSidebar();
-
   // Add the keyboard shortcuts hook
   useNotebookKeyboardShortcuts({
     cellManager: cellManager.current,
     isEditing
   });
-
-  // Define handleAddWindow callback
-  const handleAddWindow = useCallback((config: any) => {
-    canvasPanel.setHyphaCoreWindows(prev => {
-      if (prev.some(win => win.id === config.window_id)) {
-        return prev;
-      }
-      const newWindow: HyphaCoreWindow = {
-        id: config.window_id,
-        src: config.src,
-        name: config.name || `${config.src || 'Untitled Window'}`
-      };
-      return [...prev, newWindow];
-    });
-    canvasPanel.setActiveCanvasTab(config.window_id);
-    canvasPanel.setShowCanvasPanel(true);
-  }, [canvasPanel]);
 
   // Initialize cell manager
   if (!cellManager.current) {
@@ -327,12 +362,23 @@ const NotebookPage: React.FC = () => {
   });
 
   // Handle abort execution
-  const handleAbortExecution = useCallback(() => {
-    console.log('[AgentLab] Aborting Hypha Core service operations...');
+  const handleAbortExecution = useCallback(async () => {
+    console.log('[AgentLab] Aborting execution...');
+    
+    // Interrupt kernel execution
+    await kernelManager.interruptKernel();
+    
+    // Also abort Hypha Core service operations
     hyphaServiceAbortControllerRef.current.abort();
     hyphaServiceAbortControllerRef.current = new AbortController();
     handleStopChatCompletion();
-  }, [handleStopChatCompletion]);
+  }, [kernelManager, handleStopChatCompletion]);
+
+  // Handle interrupt kernel execution
+  const handleInterruptKernel = useCallback(async () => {
+    await kernelManager.interruptKernel();
+
+  }, [kernelManager]);
 
   // Cell action handlers
   const handleActiveCellChange = useCallback((id: string) => cellManager.current?.setActiveCell(id), []);
@@ -555,12 +601,18 @@ const NotebookPage: React.FC = () => {
 
   // Load notebook from file
   const handleLoadNotebook = useCallback(async (project: Project, file: any) => {
+      // If switching to a different project, cleanup current kernel
+      if (selectedProject?.id !== project.id && kernelManager.destroyCurrentKernel) {
+        console.log('[AgentLab] Switching projects, cleaning up current kernel');
+        await kernelManager.destroyCurrentKernel();
+      }
+      
       if (selectedProject?.id !== project.id) {
           setSelectedProject(project);
       }
       await notebookOps.loadNotebookContent(project.id, file.path);
       await kernelManager.resetKernelState();
-  }, [notebookOps.loadNotebookContent, setSelectedProject, selectedProject?.id, kernelManager.resetKernelState]);
+  }, [notebookOps.loadNotebookContent, setSelectedProject, selectedProject?.id, kernelManager.resetKernelState, kernelManager.destroyCurrentKernel]);
 
   // Effects
   useEffect(() => {
@@ -787,6 +839,7 @@ const NotebookPage: React.FC = () => {
       // Footer and messaging
                     onSendMessage={handleCommandOrSendMessage}
       onAbortExecution={handleAbortExecution}
+      onInterruptKernel={handleInterruptKernel}
                     onShowTerminal={handleShowDenoTerminalInCanvas}
                     onModelSettingsChange={handleShowModelSettingsInCanvas}
                     onShowEditAgent={handleShowEditAgentInCanvas}

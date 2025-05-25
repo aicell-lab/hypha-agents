@@ -77,6 +77,7 @@ export const createExecuteCodeFunction = (
     let executionCompleted = false;
     
     try {
+      console.log(`[Deno Executor] Starting execution, kernelId: ${kernelInfo.kernelId || kernelInfo.id}`);
       // Use the correct API call format - the Deno streamExecution expects an object with kernelId and code
       const streamGenerator = await deno.streamExecution({
         kernelId: kernelInfo.kernelId || kernelInfo.id,
