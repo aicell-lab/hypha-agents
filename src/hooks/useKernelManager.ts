@@ -166,7 +166,7 @@ export const useKernelManager = ({ server, setupService, clearRunningState }: Us
         
         // Get the Deno service with timeout
         const deno = await Promise.race([
-          server.getService('ws-user-github|478667/nj28otnzbq1748150520231:deno-app-engine', { mode: 'random' }),
+          server.getService('hypha-agents/deno-app-engine', { mode: 'random' }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Service connection timeout')), 15000)
           )
@@ -308,9 +308,6 @@ export const useKernelManager = ({ server, setupService, clearRunningState }: Us
 
     showToast('Resetting kernel state...', 'loading');
     try {
-      // Get Deno service
-      const deno = denoServiceRef.current || await server.getService('ws-user-github|478667/nj28otnzbq1748150520231:deno-app-engine');
-      
       // Execute a simple reset command to clear variables
       if (kernelInfo.kernelId || kernelInfo.id) {
         setKernelStatus('busy');
