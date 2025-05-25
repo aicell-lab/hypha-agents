@@ -638,30 +638,45 @@ const NotebookPage: React.FC = () => {
     hasInitialized: !showWelcomeScreen && initRefObject.current,
   });
 
-  // Run system cells on startup
+  // Run system cells on startup - wait for Hypha Core service to be ready
   useEffect(() => {
     const executeSystemCell = async () => {
-      if (showWelcomeScreen || !kernelManager.isReady || !initRefObject.current || systemCellsExecutedRef.current) return;
+      // Wait for all initialization to complete including Hypha Core service setup
+      if (showWelcomeScreen || !kernelManager.isReady || !initRefObject.current || systemCellsExecutedRef.current || !hyphaCoreApi) {
+        console.log('[AgentLab] System cell execution waiting for:', {
+          showWelcomeScreen,
+          kernelReady: kernelManager.isReady,
+          initialized: initRefObject.current,
+          alreadyExecuted: systemCellsExecutedRef.current,
+          hyphaCoreApiReady: !!hyphaCoreApi
+        });
+        return;
+      }
+      
       const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
       if (!systemCell) {
+        console.log('[AgentLab] No system cell found, marking as executed');
         systemCellsExecutedRef.current = true;
-      return;
-    }
+        return;
+      }
+      
       const systemCellId = systemCell.id;
+      console.log('[AgentLab] Executing system cell after full initialization');
       systemCellsExecutedRef.current = true;
 
       try {
         await cellManager.current?.executeCell(systemCellId, true);
         cellManager.current?.hideCellOutput(systemCellId);
         cellManager.current?.hideCode(systemCellId);
+        console.log('[AgentLab] System cell executed successfully');
       } catch (error) {
-        console.error('Error executing system cell:', error);
+        console.error('[AgentLab] Error executing system cell:', error);
         cellManager.current?.showCellOutput(systemCellId);
         cellManager.current?.hideCode(systemCellId);
       }
     };
     executeSystemCell();
-  }, [showWelcomeScreen, kernelManager.isReady, cells, initRefObject.current, cellManager]);
+  }, [showWelcomeScreen, kernelManager.isReady, cells, initRefObject.current, hyphaCoreApi, cellManager]);
 
   // Set AI readiness based on kernel readiness
   useEffect(() => {
