@@ -404,7 +404,7 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500 py-12">
               <div className="bg-white rounded-lg p-8 shadow-sm max-w-2xl w-full text-center">
                 <FaRegLightbulb className="w-12 h-12 mx-auto mb-4 text-blue-500" />
-                <h2 className="text-2xl font-semibold text-gray-700 mb-3">Welcome to AICell Lab</h2>
+                <h2 className="text-2xl font-semibold text-gray-700 mb-3">Welcome to Hypha Agent Lab</h2>
                 <p className="text-gray-600 mb-6">
                   This is your workspace for creating AI Agents. Start by typing a message or adding a cell.
                 </p>
