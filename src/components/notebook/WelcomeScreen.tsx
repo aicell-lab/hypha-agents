@@ -115,18 +115,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         }
     };
 
-    // Auto-open file from URL params when component mounts
-    useEffect(() => {
-        if (urlParams?.filePath) {
-            // Check login for remote projects
-            if (urlParams.projectId && urlParams.projectId !== IN_BROWSER_PROJECT.id && !isLoggedIn) {
-                showToast("Please log in to open remote notebooks.", "warning");
-                return;
-            }
-            // Automatically open the file
-            onOpenFile(urlParams.projectId || undefined, urlParams.filePath);
-        }
-    }, [urlParams, isLoggedIn, onOpenFile]);
+    // Note: Auto-opening files from URL params is now handled by AgentLab component
+    // to prevent duplicate loading. This component only shows the welcome screen.
 
     const fadeInUp = {
         hidden: { opacity: 0, y: 20 },

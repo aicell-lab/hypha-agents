@@ -96,6 +96,7 @@ const NotebookPage: React.FC = () => {
   const [isAIReady, setIsAIReady] = useState(false);
   const [agentSettings, setAgentSettings] = useState(() => loadModelSettings());
   const [hyphaCoreApi, setHyphaCoreApi] = useState<any>(null);
+  const isLoadingFromUrlRef = useRef(false);
   
   const {
     selectedProject,
@@ -704,17 +705,28 @@ const NotebookPage: React.FC = () => {
       if (initialUrlParams.filePath) {
         console.log(`[AgentLab] File URL parameter detected, loading: ${initialUrlParams.filePath}`);
         const projectId = initialUrlParams.projectId || IN_BROWSER_PROJECT.id;
-        notebookOps.loadNotebookContent(projectId, initialUrlParams.filePath)
-          .then(() => {
-            console.log(`[AgentLab] Successfully loaded file from URL parameter: ${initialUrlParams.filePath}`);
-            if (isLoggedIn) {
-              setShowWelcomeScreen(false);
-            }
-          })
-          .catch(error => {
-            console.error(`[AgentLab] Error loading file from URL parameter:`, error);
-            setShowWelcomeScreen(true);
-          });
+        
+        // Only load if we haven't already loaded this file and not currently loading (prevent duplicate loading)
+        if (notebookMetadata.filePath !== initialUrlParams.filePath && !isLoadingFromUrlRef.current) {
+          isLoadingFromUrlRef.current = true;
+          notebookOps.loadNotebookContent(projectId, initialUrlParams.filePath)
+            .then(() => {
+              console.log(`[AgentLab] Successfully loaded file from URL parameter: ${initialUrlParams.filePath}`);
+              if (isLoggedIn) {
+                setShowWelcomeScreen(false);
+              }
+            })
+            .catch(error => {
+              console.error(`[AgentLab] Error loading file from URL parameter:`, error);
+              setShowWelcomeScreen(true);
+            })
+            .finally(() => {
+              isLoadingFromUrlRef.current = false;
+            });
+        } else {
+          console.log(`[AgentLab] File already loaded or loading in progress, hiding welcome screen`);
+          setShowWelcomeScreen(false);
+        }
         return;
       }
       
@@ -724,7 +736,7 @@ const NotebookPage: React.FC = () => {
         console.log('[AgentLab] Edit parameter detected:', initialUrlParams.edit);
       }
     }
-  }, [initRefObject.current, initialUrlParams, notebookOps.loadNotebookContent, isLoggedIn]);
+  }, [initRefObject.current, initialUrlParams, notebookOps.loadNotebookContent, isLoggedIn, notebookMetadata.filePath]);
 
   // Handle login state changes
   useEffect(() => {
