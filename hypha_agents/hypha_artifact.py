@@ -272,6 +272,40 @@ class HyphaArtifact:
 
         return params
 
+    def _remote_request(
+        self: Self,
+        artifact_method: str,
+        method: Literal["GET", "POST"],
+        params: dict[str, JsonType] | None = None,
+        json: dict[str, JsonType] | None = None,
+    ) -> str:
+        """Make a remote request to the artifact service.
+        Args:
+            method_name (str): The name of the method to call on the artifact service.
+            method (Literal["GET", "POST"]): The HTTP method to use for the request.
+            params (dict[str, JsonType] | None): Optional. Parameters to include in the request.
+            json (dict[str, JsonType] | None): Optional. JSON body to include in the request.
+        Returns:
+            str: The response content from the artifact service.
+        """
+        extended_params = self._extend_params(params or json or {})
+        cleaned_params = remove_none(extended_params)
+
+        request_url = f"{self.artifact_url}/{artifact_method}"
+
+        response = requests.request(
+            method,
+            request_url,
+            json=cleaned_params if json else None,
+            params=cleaned_params if params else None,
+            headers={"Authorization": f"Bearer {self.token}"},
+            timeout=20,
+        )
+
+        response.raise_for_status()
+
+        return response.content
+
     def _remote_post(self: Self, method_name: str, params: dict[str, JsonType]) -> str:
         """Make a POST request to the artifact service with extended parameters.
 
@@ -279,21 +313,11 @@ class HyphaArtifact:
             For put_file requests, returns the pre-signed URL as a string.
             For other requests, returns the response content.
         """
-        extended_params = self._extend_params(params)
-        cleaned_params = remove_none(extended_params)
-
-        request_url = f"{self.artifact_url}/{method_name}"
-
-        response = requests.post(
-            request_url,
-            json=cleaned_params,
-            headers={"Authorization": f"Bearer {self.token}"},
-            timeout=20,
+        return self._remote_request(
+            method_name,
+            method="POST",
+            json=params,
         )
-
-        response.raise_for_status()
-
-        return response.content
 
     def _remote_get(self: Self, method_name: str, params: dict[str, JsonType]) -> None:
         """Make a GET request to the artifact service with extended parameters.
@@ -301,21 +325,11 @@ class HyphaArtifact:
         Returns:
             The response content.
         """
-        extended_params = self._extend_params(params)
-        cleaned_params = remove_none(extended_params)
-
-        request_url = f"{self.artifact_url}/{method_name}"
-
-        response = requests.get(
-            request_url,
-            params=cleaned_params,
-            headers={"Authorization": f"Bearer {self.token}"},
-            timeout=20,
+        return self._remote_request(
+            method_name,
+            method="GET",
+            params=params,
         )
-
-        response.raise_for_status()
-
-        return response.content
 
     def _remote_edit(
         self: Self,
