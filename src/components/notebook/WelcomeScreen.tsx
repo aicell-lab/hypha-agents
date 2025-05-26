@@ -115,18 +115,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         }
     };
 
-    // Auto-open file from URL params when component mounts
-    useEffect(() => {
-        if (urlParams?.filePath) {
-            // Check login for remote projects
-            if (urlParams.projectId && urlParams.projectId !== IN_BROWSER_PROJECT.id && !isLoggedIn) {
-                showToast("Please log in to open remote notebooks.", "warning");
-                return;
-            }
-            // Automatically open the file
-            onOpenFile(urlParams.projectId || undefined, urlParams.filePath);
-        }
-    }, [urlParams, isLoggedIn, onOpenFile]);
+    // Note: Auto-opening files from URL params is now handled by AgentLab component
+    // to prevent duplicate loading. This component only shows the welcome screen.
 
     const fadeInUp = {
         hidden: { opacity: 0, y: 20 },
@@ -162,7 +152,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                     <div className="flex justify-center items-center space-x-3">
                         <img 
                             src="/logo.png" 
-                            alt="Euro-BioImaging Agents" 
+                            alt="Hypha Agents" 
                             className="w-8 h-8 sm:w-12 sm:h-12" 
                         />
                         <h1 className="text-3xl sm:text-5xl font-bold text-black py-1 leading-normal font-sans tracking-tight">

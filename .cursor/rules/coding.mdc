@@ -1,24 +1,52 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
 You are an expert TypeScript/React developer focusing on the frontend of this project. You have deep knowledge of building modern web applications—particularly for LLM-powered agent systems and real-time communication. Your code should be production-ready, well-documented, and consistent with best practices for TypeScript and React development.
 
-This project aims to provide a user-friendly interface for:
-1. Building and customizing AI agents for various applications
-2. Managing knowledge bases and document uploads
-3. Configuring and monitoring agent behaviors
-4. Facilitating agent sharing and collaboration within the community
+This project is a comprehensive platform for hosting AI agents and applications, providing:
+1. **Agent Gallery**: A curated collection of published AI agents and applications that users can discover, explore, and interact with
+2. **Agent Lab**: An interactive development environment for building, testing, and chatting with AI agents
+3. **Agent Hosting**: Infrastructure for deploying and sharing AI agents with the community
+4. **Collaborative Development**: Tools for agent sharing, collaboration, and community-driven improvements
 
+## Platform Architecture
+
+### Agent Lab Environment
+The Agent Lab provides a Jupyter notebook-like interface where:
+- **Remote Kernel Connection**: Connects to a remote Jupyter kernel running in Deno with Pyodide
+- **Interactive Development**: Users can write code or send messages to agents
+- **Code Generation**: Agents generate and execute code to respond to user queries
+- **Real-time Execution**: Live code execution with immediate feedback and results
+- **Multi-language Support**: Primarily Python through Pyodide, with JavaScript/TypeScript capabilities
+
+### Agent Gallery
+A marketplace-style interface featuring:
+- **Published Agents**: Browse and discover community-created agents
+- **Agent Previews**: Interactive demos and descriptions
+- **Categories & Tags**: Organized browsing by use case, domain, or functionality
+- **User Ratings & Reviews**: Community feedback and quality indicators
+- **One-click Deployment**: Easy agent installation and setup
+
+### Core Technologies
 The frontend is built with:
 - **React** for component-based UI development
 - **TypeScript** for type-safe code
 - **Tailwind CSS** for styling
 - **pnpm** as the package manager
 - **Vite** for fast development and building
+- **WebSocket** for real-time kernel communication
+- **Jupyter Protocol** for notebook-style interactions
 
 ## Project Context
-The frontend application is designed to provide a rich user interface for agent management:
-- Real-time agent interaction and monitoring
-- Document upload and knowledge base management
-- Tool configuration and customization
-- WebSocket-based communication for live updates
+The frontend application provides a comprehensive platform for AI agent development and hosting:
+- **Agent Development Environment**: Jupyter-like interface with code execution capabilities
+- **Real-time Agent Interaction**: Chat interface with code generation and execution
+- **Agent Publishing**: Tools for sharing and distributing agents
+- **Community Features**: Agent discovery, ratings, and collaborative development
+- **Knowledge Base Integration**: Document upload and management for agent training
+- **Tool Configuration**: Extensible tool system for agent capabilities
 
 ## Coding Standards
 
@@ -41,10 +69,11 @@ The frontend application is designed to provide a rich user interface for agent 
 - Implement proper data fetching and caching strategies
 - Handle WebSocket connections and real-time updates efficiently
 - Use proper form state management (e.g., React Hook Form)
+- Manage kernel state and execution lifecycle properly
 
 ### Naming Conventions
-- **Components**: `PascalCase` (e.g., `AgentCard.tsx`)
-- **Hooks**: `camelCase` prefixed with 'use' (e.g., `useAgentState`)
+- **Components**: `PascalCase` (e.g., `AgentCard.tsx`, `AgentLab.tsx`)
+- **Hooks**: `camelCase` prefixed with 'use' (e.g., `useAgentState`, `useKernelConnection`)
 - **Utils/Helpers**: `camelCase`
 - **Constants**: `UPPER_SNAKE_CASE`
 - **Files and Folders**: `kebab-case`
@@ -56,6 +85,7 @@ The frontend application is designed to provide a rich user interface for agent 
 - Provide meaningful error messages to users
 - Log errors appropriately for debugging
 - Handle network errors and retries gracefully
+- Manage kernel connection failures and recovery
 
 ## Project Structure
 ```

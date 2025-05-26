@@ -42,7 +42,7 @@ export interface ChatCompletionOptions {
 }
 
 const RESPONSE_INSTRUCTIONS = `
-You are an expert assistant capable of solving tasks by writing and executing Python code.
+You are capable of solving tasks by writing and executing Python code.
 You will be given a task and must plan and execute Python code snippets to achieve the goal.
 
 Follow this iterative cycle meticulously:

@@ -117,6 +117,7 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
       await connect({
         server_url: serverUrl,
         token: token,
+        method_timeout: 180000,
       });
 
       // Redirect after successful connect
@@ -153,6 +154,7 @@ export default function LoginButton({ className = '' }: LoginButtonProps) {
           await connect({
             server_url: serverUrl,
             token: token,
+            method_timeout: 180000,
           });
 
           // Redirect after successful auto-login connect

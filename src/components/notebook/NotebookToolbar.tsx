@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaCircle, FaExclamationTriangle } from 'react-icons/fa';
+import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaCircle, FaExclamationTriangle, FaStop } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -28,11 +28,11 @@ const KernelStatusIndicator: React.FC<KernelStatusIndicatorProps> = ({
   const getStatusInfo = () => {
     if (!isReady) {
       return {
-        color: 'text-gray-400',
+        color: 'text-gray-800',
         bgColor: 'bg-gray-100',
         icon: <FaSpinner className="w-3 h-3 animate-spin" />,
         text: 'Initializing...',
-        dot: 'bg-gray-400',
+        dot: 'bg-gray-600',
         clickable: false
       };
     }
@@ -61,7 +61,7 @@ const KernelStatusIndicator: React.FC<KernelStatusIndicatorProps> = ({
           color: 'text-blue-600',
           bgColor: 'bg-blue-50',
           icon: <FaSpinner className="w-3 h-3 animate-spin" />,
-          text: 'Starting...',
+          text: 'Restarting...',
           dot: 'bg-blue-500',
           clickable: false
         };
@@ -161,6 +161,7 @@ interface KernelControlsProps {
   onRunAll: () => void;
   onClearOutputs: () => void;
   onRestartKernel: () => void;
+  onInterruptKernel?: () => Promise<void>;
   isProcessing: boolean;
   isReady: boolean;
   kernelStatus: KernelStatus;
@@ -171,6 +172,7 @@ export const KernelControls: React.FC<KernelControlsProps> = ({
   onRunAll,
   onClearOutputs,
   onRestartKernel,
+  onInterruptKernel,
   isProcessing,
   isReady,
   kernelStatus,
@@ -196,6 +198,15 @@ export const KernelControls: React.FC<KernelControlsProps> = ({
         <FaPlay className="w-3.5 h-3.5" />
       )}
     </button>
+    {onInterruptKernel && kernelStatus === 'busy' && (
+      <button
+        onClick={onInterruptKernel}
+        className="p-1.5 text-orange-600 hover:text-orange-800 hover:bg-orange-50 rounded transition"
+        title="Interrupt kernel execution"
+      >
+        <FaStop className="w-3.5 h-3.5" />
+      </button>
+    )}
     <button
       onClick={onClearOutputs}
       className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
@@ -208,9 +219,9 @@ export const KernelControls: React.FC<KernelControlsProps> = ({
       onClick={onRestartKernel}
       className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition group relative"
       title="Restart kernel and clear outputs"
-      disabled={!isReady || isProcessing}
+      disabled={isProcessing || (kernelStatus !== 'error' && !isReady)}
     >
-      <FaRedo className={`w-3.5 h-3.5 ${(!isReady || isProcessing) ? 'opacity-50' : ''}`} />
+      <FaRedo className={`w-3.5 h-3.5 ${(isProcessing || (kernelStatus !== 'error' && !isReady)) ? 'opacity-50' : ''}`} />
     </button>
   </div>
 );
@@ -298,6 +309,7 @@ export interface NotebookToolbarProps {
   onRunAll: () => void;
   onClearOutputs: () => void;
   onRestartKernel: () => void;
+  onInterruptKernel?: () => Promise<void>;
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
@@ -330,6 +342,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onRunAll,
   onClearOutputs,
   onRestartKernel,
+  onInterruptKernel,
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
@@ -518,6 +531,15 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
           )}
           Run All
         </button>
+        {onInterruptKernel && kernelStatus === 'busy' && (
+          <button
+            onClick={onInterruptKernel}
+            className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            <FaStop className="w-3.5 h-3.5 mr-2" />
+            Interrupt Kernel
+          </button>
+        )}
         <button
           onClick={onClearOutputs}
           disabled={isProcessing}
@@ -528,7 +550,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
         </button>
         <button
           onClick={onRestartKernel}
-          disabled={!isKernelReady || isProcessing}
+          disabled={isProcessing || (kernelStatus !== 'error' && !isKernelReady)}
           className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
         >
           <FaRedo className="w-3.5 h-3.5 mr-2" />
@@ -559,6 +581,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onRunAll,
   onClearOutputs,
   onRestartKernel,
+  onInterruptKernel,
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
@@ -587,21 +610,22 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   const renderStandardToolbar = () => (
     <div className="flex items-center">
       {!isWelcomeScreen && (
-        <>
-          <FileOperations 
-            onSave={onSave} 
-            onDownload={onDownload} 
-            onLoad={onLoad} 
-          />
-          <div className="h-5 w-px bg-gray-200 mx-1"></div>
+        <>          
           <KernelControls 
             onRunAll={onRunAll} 
             onClearOutputs={onClearOutputs} 
             onRestartKernel={onRestartKernel} 
+            onInterruptKernel={onInterruptKernel}
             isProcessing={isProcessing} 
             isReady={isKernelReady} 
             kernelStatus={kernelStatus}
             onRetryKernel={onRetryKernel}
+          />
+          <div className="h-5 w-px bg-gray-200 mx-1"></div>
+          <FileOperations 
+            onSave={onSave} 
+            onDownload={onDownload} 
+            onLoad={onLoad} 
           />
           <CellControls 
             onAddCodeCell={onAddCodeCell} 
@@ -640,6 +664,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onRunAll={onRunAll}
             onClearOutputs={onClearOutputs}
             onRestartKernel={onRestartKernel}
+            onInterruptKernel={onInterruptKernel}
             onAddCodeCell={onAddCodeCell}
             onAddMarkdownCell={onAddMarkdownCell}
             onShowKeyboardShortcuts={onShowKeyboardShortcuts}

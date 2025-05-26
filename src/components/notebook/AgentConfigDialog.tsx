@@ -110,7 +110,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
       const template = agentTemplates.find(t => t.id === selectedTemplate);
       if (template) {
         setName(`${template.name}`);
-        setDescription(`A ${template.name.toLowerCase()} powered by Euro-BioImaging Lab`);
+        setDescription(`A ${template.name.toLowerCase()} powered by AICell Lab`);
         setInitialPrompt(template.initialPrompt);
       }
     }

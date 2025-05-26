@@ -46,7 +46,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = '' }) => {
             <Link to="/" className="flex items-center">
               <img 
                 src="/logo.png" 
-                alt="Euro-BioImaging Agents" 
+                alt="Hypha Agents" 
                 className="h-7 w-7" 
               />
               <span className="ml-2 text-lg font-bold text-gray-800">
