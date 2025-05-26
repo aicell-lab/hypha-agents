@@ -757,6 +757,38 @@ You can verify the generated json schema by calling the `__schema__` property of
 print(add.__schema__)
 ```
 
+Or you can print the schema in a more readable format:
+
+```python
+print(json.dumps(add.__schema__, indent=2))
+```
+
+The output will be like this:
+
+```json
+{
+  "name": "add",
+  "description": "Add two numbers.",
+  "parameters": {
+    "properties": {
+      "a": {
+        "description": "first number",
+        "type": "integer"
+      },
+      "b": {
+        "description": "second number",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "a",
+      "b"
+    ],
+    "type": "object"
+  }
+}
+```
+
 **For Class Methods**: If you're defining tools as methods within a class, use `@schema_method` instead of `@schema_function`:
 
 ```python
@@ -771,6 +803,10 @@ class CalculatorService:
     ) -> int:
         """Add two numbers."""
         return a + b
+```
+
+```python
+print(CalculatorService.add.__schema__)
 ```
 
 **When to Use Each:**
