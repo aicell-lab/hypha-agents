@@ -286,9 +286,9 @@ class HyphaArtifact:
 
         response = requests.post(
             request_url,
-            json=cleaned_params,  # Send as JSON in request body
+            json=cleaned_params,
             headers={"Authorization": f"Bearer {self.token}"},
-            timeout=60,  # Increased timeout
+            timeout=20,
         )
 
         response.raise_for_status()
@@ -296,17 +296,25 @@ class HyphaArtifact:
         return response.content
 
     def _remote_get(self: Self, method_name: str, params: dict[str, JsonType]) -> None:
+        """Make a GET request to the artifact service with extended parameters.
+
+        Returns:
+            The response content.
+        """
         extended_params = self._extend_params(params)
         cleaned_params = remove_none(extended_params)
 
+        request_url = f"{self.artifact_url}/{method_name}"
+
         response = requests.get(
-            f"{self.artifact_url}/{method_name}",
+            request_url,
             params=cleaned_params,
             headers={"Authorization": f"Bearer {self.token}"},
             timeout=20,
         )
 
         response.raise_for_status()
+
         return response.content
 
     def _remote_edit(
@@ -718,6 +726,7 @@ class HyphaArtifact:
         bool
             True if the path exists, False otherwise
         """
+        # TODO: use read 0 bytes to check existence
         try:
             self.info(path)
             return True

@@ -30,7 +30,7 @@ def artifact_name():
     return f"test_artifact_{uuid.uuid4().hex[:8]}"
 
 
-async def create_artifact(artifact_id: str, token: str):
+async def get_artifact_manager(token: str):
     api = await connect_to_server(
         {
             "name": "artifact-client",
@@ -42,28 +42,48 @@ async def create_artifact(artifact_id: str, token: str):
     # Get the artifact manager service
     artifact_manager = await api.get_service("public/artifact-manager")
 
+    return artifact_manager, api
+
+
+async def create_artifact(artifact_id: str, token: str):
+    artifact_manager, api = await get_artifact_manager(token)
+
     # Create the artifact
     manifest = {
         "name": artifact_id,
         "description": f"Artifact created programmatically: {artifact_id}",
     }
 
+    print(f"============Creating artifact: {artifact_id}============")
     await artifact_manager.create(
         alias=artifact_id,
         type="generic",
         manifest=manifest,
         config={"permissions": {"*": "rw+", "@": "rw+"}},
     )
+    print(f"============Created artifact: {artifact_id}============")
 
     # Disconnect from the server
     await api.disconnect()
 
 
-def create_artifact_sync(artifact_id: str, token: str) -> bool:
-    """Synchronous wrapper for create_artifact function"""
+async def delete_artifact(artifact_id: str, token: str):
+    artifact_manager, api = await get_artifact_manager(token)
+
+    # Delete the artifact
+    print(f"============Deleting artifact: {artifact_id}============")
+    await artifact_manager.delete(artifact_id)
+    print(f"============Deleted artifact: {artifact_id}============")
+
+    # Disconnect from the server
+    await api.disconnect()
+
+
+def run_func_sync(artifact_id: str, token: str, func: callable) -> bool:
+    """Synchronous wrapper for delete_artifact function"""
     loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(create_artifact(artifact_id, token))
+        return loop.run_until_complete(func(artifact_id, token))
     finally:
         loop.close()
 
@@ -74,10 +94,10 @@ def artifact(artifact_name):
 
     personal_token = os.getenv("PERSONAL_TOKEN")
     workspace = os.getenv("PERSONAL_WORKSPACE")
-    create_artifact_sync(artifact_name, personal_token)
+    run_func_sync(artifact_name, personal_token, create_artifact)
     _artifact = HyphaArtifact(artifact_name, workspace, personal_token)
-    print(f"Created test artifact: {artifact_name}")
-    return _artifact
+    yield _artifact
+    run_func_sync(artifact_name, personal_token, delete_artifact)
 
 
 @pytest.fixture
@@ -158,12 +178,20 @@ class TestHyphaArtifactIntegration:
             with artifact.open(source_path, "w") as f:
                 f.write(test_content)
 
+        assert artifact.exists(
+            source_path
+        ), f"Source file {source_path} should exist before copying"
+
         # Copy the file
         artifact.copy(source_path, copy_path)
 
         # Verify both files exist
-        assert artifact.exists(source_path), f"Source file {source_path} should exist"
-        assert artifact.exists(copy_path), f"Copied file {copy_path} should exist"
+        assert artifact.exists(
+            source_path
+        ), f"Source file {source_path} should exist after copying"
+        assert artifact.exists(
+            copy_path
+        ), f"Copied file {copy_path} should exist after copying"
 
         # Verify content is the same
         source_content = artifact.cat(source_path)
