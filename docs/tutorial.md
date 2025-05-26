@@ -739,6 +739,7 @@ To use `@schema_function`, you need to import the `schema_function` decorator fr
 Importantly, you can define tool with `__doc__` string and pydantic `Field` object to specify the the arguments using the `description` parameter, and the schema will be generated automatically. See the example below:
 
 ```python
+from pydantic import Field
 from hypha_rpc.utils.schema import schema_function
 
 @schema_function
@@ -759,6 +760,7 @@ print(add.__schema__)
 **For Class Methods**: If you're defining tools as methods within a class, use `@schema_method` instead of `@schema_function`:
 
 ```python
+from pydantic import Field
 from hypha_rpc.utils.schema import schema_method
 
 class CalculatorService:
