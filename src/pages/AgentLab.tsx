@@ -156,26 +156,8 @@ const NotebookPage: React.FC = () => {
     canvasPanel.setShowCanvasPanel(true);
   }, [canvasPanel]);
 
-  // Placeholder setupService function for kernelManager
-  const setupService = useCallback(async () => {
-    // This will be replaced by setupServiceWithKernel when kernel is ready
-    console.log('[AgentLab] setupService called (placeholder)');
-  }, []);
-
-  // Initialize hooks
-  const kernelManager = useKernelManager({ 
-    server, 
-    setupService,
-    clearRunningState: () => cellManager.current?.clearRunningState()
-  });
-  
   // Setup service with kernel when ready
-  const setupServiceWithKernel = useCallback(async () => {
-    if (!kernelManager.isReady || !kernelManager.executeCode) {
-      console.log('[AgentLab] Kernel not ready yet, skipping Hypha Core service setup');
-      return;
-    }
-    
+  const setupServiceWithKernel = useCallback(async (executeCode: (code: string, callbacks?: any, timeout?: number) => Promise<void>) => {
     if (isSettingUpService) {
       console.log('[AgentLab] Service setup already in progress, skipping');
       return;
@@ -196,7 +178,7 @@ const NotebookPage: React.FC = () => {
       const api = await setupNotebookService({
         onAddWindow: handleAddWindow,
         server, 
-        executeCode: kernelManager.executeCode,
+        executeCode: executeCode,
         agentSettings,
         abortSignal: currentSignal,
         projectId: initialUrlParams?.projectId || IN_BROWSER_PROJECT.id,
@@ -219,15 +201,15 @@ const NotebookPage: React.FC = () => {
     } finally {
       setIsSettingUpService(false);
     }
-  }, [kernelManager.isReady, kernelManager.executeCode, server, agentSettings, initialUrlParams?.projectId, handleAddWindow]);
-  
-  // Effect to setup service when kernel becomes ready
-  useEffect(() => {
-    if (kernelManager.isReady && kernelManager.executeCode && !isSettingUpService && !hyphaCoreApi) {
-      setupServiceWithKernel();
-    }
-  }, [kernelManager.isReady, kernelManager.executeCode, isSettingUpService, hyphaCoreApi]);
+  }, [isSettingUpService, server, agentSettings, initialUrlParams?.projectId, handleAddWindow]);
 
+  // Initialize hooks
+  const kernelManager = useKernelManager({ 
+    server, 
+    clearRunningState: () => cellManager.current?.clearRunningState(),
+    onKernelReady: setupServiceWithKernel
+  });
+  
   const notebookOps = useNotebookOperations({
     cellManager: cellManager.current,
     notebookMetadata,

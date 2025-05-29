@@ -9,11 +9,11 @@ import { showToast } from '../utils/notebookUtils';
 
 interface UseKernelManagerProps {
   server: any;
-  setupService: () => Promise<void>;
   clearRunningState?: () => void;
+  onKernelReady?: (executeCode: (code: string, callbacks?: ExecuteCodeCallbacks, timeout?: number) => Promise<void>) => void;
 }
 
-export const useKernelManager = ({ server, setupService, clearRunningState }: UseKernelManagerProps): KernelManager => {
+export const useKernelManager = ({ server, clearRunningState, onKernelReady }: UseKernelManagerProps): KernelManager => {
   const [isReady, setIsReady] = useState(false);
   const [kernelStatus, setKernelStatus] = useState<'idle' | 'busy' | 'starting' | 'error'>('starting');
   const [executeCode, setExecuteCode] = useState<((code: string, callbacks?: ExecuteCodeCallbacks, timeout?: number) => Promise<void>) | null>(null);
@@ -29,6 +29,13 @@ export const useKernelManager = ({ server, setupService, clearRunningState }: Us
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Add ref to prevent multiple initializations
   const isInitializingRef = useRef(false);
+  // Add ref to store onKernelReady callback to prevent dependency issues
+  const onKernelReadyRef = useRef(onKernelReady);
+
+  // Update the onKernelReady ref when it changes
+  useEffect(() => {
+    onKernelReadyRef.current = onKernelReady;
+  }, [onKernelReady]);
 
   // Function to update kernel log
   const addKernelLogEntry = useCallback((entryData: Omit<KernelExecutionLog, 'timestamp'>) => {
@@ -133,10 +140,8 @@ export const useKernelManager = ({ server, setupService, clearRunningState }: Us
     startKernelPing(kernelInfo);
     
     // Re-initialize services (call setupService but don't include it in dependencies to avoid circular dependency)
-    setupService().catch(error => {
-      console.warn('[Deno Kernel] Failed to setup service after kernel initialization:', error);
-    });
-  }, [addKernelLogEntry, setKernelStatus]); // Removed startKernelPing from dependency array
+    onKernelReadyRef.current?.((executeCodeFn));
+  }, [addKernelLogEntry, setKernelStatus]); // Removed onKernelReadyRef from dependency array since refs are stable
 
   // Kernel initialization
   useEffect(() => {
@@ -218,7 +223,7 @@ export const useKernelManager = ({ server, setupService, clearRunningState }: Us
     }
 
     initializeKernel();
-  }, [server, initializeExecuteCode]); // Removed setupService from dependency array
+  }, [server, initializeExecuteCode]); // Removed onKernelReady from dependency array
 
   // Monitor kernel status for stuck states
   useEffect(() => {
