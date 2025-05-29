@@ -1,9 +1,10 @@
 import { loader } from '@monaco-editor/react';
+import { getBaseUrl } from '../utils/urlHelpers';
 
-// Configure Monaco to use local files
+// Configure Monaco to use local files with dynamic base URL
 loader.config({
   paths: {
-    vs: '/monaco-editor/vs'
+    vs: `${getBaseUrl()}/monaco-editor/vs`
   },
   'vs/nls': {
     availableLanguages: {

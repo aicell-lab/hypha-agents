@@ -3,6 +3,7 @@ import getSetupCode from './StartupCode';
 import { executeScripts } from '../../utils/script-utils';
 import { processTextOutput, processAnsiInOutputElement } from '../../utils/ansi-utils';
 import { useHyphaStore } from '../../store/hyphaStore';
+import { getBaseUrl } from '../../utils/urlHelpers';
 
 // Define types for JupyterLab services
 interface KernelMessage {
@@ -307,7 +308,7 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
         }
         
         // Load thebe-lite script
-        await loadScript('/thebe/thebe-lite.min.js');
+        await loadScript(`${getBaseUrl()}/thebe/thebe-lite.min.js`);
         
         // Wait for thebe-lite setup to complete
         if (window.setupThebeLite) {
@@ -523,9 +524,9 @@ print(f"{sys.version.split()[0]}")
         // Start JupyterLite server with configuration
         const server = await window.thebeLite.startJupyterLiteServer({
           ...jupyterLiteConfig,
-          baseUrl: '/',
-          appUrl: '/',
-          assetsUrl: '/thebe/',
+          baseUrl: getBaseUrl(),
+          appUrl: getBaseUrl(),
+          assetsUrl: `${getBaseUrl()}/thebe/`,
           fullMathjaxUrl: 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js',
         });
 
