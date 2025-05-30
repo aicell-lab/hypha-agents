@@ -2,7 +2,6 @@
   "name": "hypha-agents",
   "version": "0.1.0",
   "private": true,
-  "homepage": ".",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
@@ -73,8 +72,8 @@
   "scripts": {
     "copy-thebe": "bash scripts/copy-thebe.sh",
     "copy-monaco": "node scripts/copy-monaco.js",
-    "start": "npm run copy-thebe && npm run copy-monaco && react-app-rewired start",
-    "build": "npm run copy-thebe && npm run copy-monaco && react-app-rewired build",
+    "start": "npm run copy-thebe && npm run copy-monaco && PUBLIC_URL=/ react-app-rewired start",
+    "build": "npm run copy-thebe && npm run copy-monaco && PUBLIC_URL=/ react-app-rewired build",
     "test": "react-app-rewired test",
     "eject": "react-scripts eject"
   },

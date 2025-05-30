@@ -1,6 +1,18 @@
 import { SITE_ID, SERVER_URL } from './env';
 
 /**
+ * Gets the base URL from the PUBLIC_URL environment variable
+ * @returns The base URL path (empty string for root, or the configured path)
+ */
+export const getBaseUrl = (): string => {
+  const homepage = process.env.PUBLIC_URL;
+  if (!homepage || homepage === '/' || homepage === '.') return '';
+
+  // Ensure the path starts with a forward slash
+  return homepage.startsWith('/') ? homepage : `/${homepage}`;
+};
+
+/**
  * Resolves a relative URL to a full Hypha artifact URL
  * @param path - The relative path to resolve
  * @param resourceId - The resource ID
