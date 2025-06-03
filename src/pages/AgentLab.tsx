@@ -201,7 +201,7 @@ const NotebookPage: React.FC = () => {
     } finally {
       setIsSettingUpService(false);
     }
-  }, [isSettingUpService, server, agentSettings, initialUrlParams?.projectId, handleAddWindow]);
+  }, [isSettingUpService, server, agentSettings, selectedProject, handleAddWindow]);
 
   // Initialize hooks
   const kernelManager = useKernelManager({ 
