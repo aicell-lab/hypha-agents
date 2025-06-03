@@ -27,13 +27,6 @@ Hypha Agents is a comprehensive solution for creating, managing, and deploying A
 git clone https://github.com/aicell-lab/hypha-agents.git
 cd hypha-agents
 
-# Create and activate conda environment
-conda create -n hypha-agents python=3.11
-conda activate hypha-agents
-
-# Install Python dependencies
-pip install -e .
-pip install -r requirements_test.txt
 
 # Install frontend dependencies
 pnpm install

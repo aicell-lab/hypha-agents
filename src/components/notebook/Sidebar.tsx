@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
-import { FaFolder, FaSync, FaPlus, FaFile, FaTrash, FaLaptop, FaChevronDown, FaUpload, FaComment } from 'react-icons/fa';
+import { FaFolder, FaSync, FaPlus, FaFile, FaTrash, FaLaptop, FaChevronDown, FaUpload, FaComment, FaSpinner, FaChevronRight } from 'react-icons/fa';
 import { useProjects, ProjectFile, IN_BROWSER_PROJECT, Project } from '../../providers/ProjectsProvider';
 import FileTree from '../FileTree';
 import { useDropzone } from 'react-dropzone';
 import { useHyphaStore } from '../../store/hyphaStore';
 import ConfirmDialog from '../common/ConfirmDialog';
+import { Splitter } from './Splitter';
 
 import { convertProjectFilesToTreeNodes } from '../../utils/fileTreeConverter';
 import { TreeNode } from '../../hooks/useTraverseTree';
@@ -14,11 +15,13 @@ interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   onResize?: (width: number) => void;
+  onResizeEnd?: () => void;
   onLoadNotebook: (project: Project, file: ProjectFile) => void;
   notebookMetadata?: {
     filePath?: string;
     [key: string]: any;
   };
+  width?: number;
 }
 
 // Add upload status type
@@ -61,8 +64,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onToggle,
   onResize,
+  onResizeEnd,
   onLoadNotebook,
-  notebookMetadata
+  notebookMetadata,
+  width
 }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -70,6 +75,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<string | null>(null); // Added for file deletion
+  const [isResizing, setIsResizing] = useState(false); // Track resize state
   const { artifactManager, isLoggedIn } = useHyphaStore();
   const { 
     projects, 
@@ -233,33 +239,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
   
-  // Add resize functionality
-  const handleResize = useCallback((e: React.MouseEvent) => {
-    if (!onResize || isMobile) return;
-    
-    const startX = e.clientX;
-    const startWidth = 240; // Fixed width when open
-    
-    const doDrag = (moveEvent: MouseEvent) => {
-      const newWidth = Math.max(240, Math.min(400, startWidth + moveEvent.clientX - startX));
-      onResize(newWidth);
-    };
-    
-    const stopDrag = () => {
-      document.removeEventListener('mousemove', doDrag);
-      document.removeEventListener('mouseup', stopDrag);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
-    
-    document.addEventListener('mousemove', doDrag);
-    document.addEventListener('mouseup', stopDrag);
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
-    
-    e.preventDefault();
-  }, [onResize, isMobile]);
-
   // Function to refresh the in-browser file list state
   const refreshInBrowserFiles = useCallback(async () => {
     // console.log('[Sidebar] refreshInBrowserFiles called.'); // Removed simple call log
@@ -889,6 +868,12 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   }, [selectedProject, getProjectFiles, fileTreeData, listInBrowserFiles, filterHiddenFiles]);
 
+  // Memoize the container style to reduce re-renders during dragging
+  const containerStyle = useMemo(() => ({
+    width: isOpen ? `${width || 240}px` : '0px',
+    transition: isResizing ? 'none' : 'width 300ms ease-in-out' // Disable transition during resize
+  }), [isOpen, width, isResizing]);
+
   if (!isOpen) {
     return null;
   }
@@ -896,10 +881,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div
       className={`
-        flex-shrink-0 h-full border-r border-gray-200 bg-white 
-        transition-width duration-300 ease-in-out overflow-hidden flex flex-col 
-        ${isOpen ? 'w-60' : 'w-0 border-none'}
+        flex-shrink-0 h-full border-r border-gray-200 bg-white relative
+        overflow-hidden flex flex-col 
+        ${isOpen ? '' : 'w-0 border-none'}
       `}
+      style={containerStyle}
     >
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Sidebar Header */}
@@ -1003,8 +989,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Project Details Section */}
           {(selectedProject || isInBrowserProject) && (
-            <div className="border-t border-gray-200" {...getRootProps()}>
-              <div className="p-2">
+            <div className="border-t border-gray-200 flex-1 flex flex-col overflow-hidden" {...getRootProps()}>
+              <div className="p-2 flex-shrink-0">
                 <h3 className="text-sm font-medium text-gray-900 mb-2">
                   {isInBrowserProject ? 'In-Browser Project' : selectedProject?.manifest.name}
                 </h3>
@@ -1041,129 +1027,129 @@ const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                   </div>
                 )}
+              </div>
 
-                {/* File Tree */}
-                <div className="border-t border-gray-100 pt-2 flex-1 overflow-hidden">
-                  <div className="h-[300px] min-h-[200px] overflow-y-auto relative border border-gray-100 rounded-md">
-                    {fileTreeData && (
-                      <FileTree
-                        explorerData={fileTreeData}
-                        handleInsertNode={handleInsertNode}
-                        handleDeleteNode={handleDeleteNode}
-                        handleUpdateFolder={handleUpdateFolder}
-                        onFileDoubleClick={handleFileDoubleClick}
-                        showRoot={false}
-                        selectedFiles={selectedFileIds}
-                        onSelection={handleFileSelection}
-                        showControls={true}
-                        onRefresh={handleRefreshFiles}
-                        isLoading={isLoadingFiles}
-                        onOpenDirectory={handleOpenDirectory}
-                        rootActions={[
-                          {
-                            label: "New Chat",
-                            icon: <FaComment className="w-3 h-3" />,
-                            onClick: () => handleCreateNewChat(isInBrowserProject)
-                          },
-                          {
-                            label: "New File",
-                            icon: <FaFile className="w-3 h-3" />,
-                            onClick: async () => {
-                              if (!selectedProject) return;
-                              
-                              // Create a timestamp-based file name
-                              const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                              const fileName = `file-${timestamp}.txt`;
-                              
-                              try {
-                                if (isInBrowserProject) {
-                                  // For in-browser project, create an empty file
-                                  await saveInBrowserFile(fileName, "");
-                                  await refreshInBrowserFiles();
-                                } else {
-                                  // For remote projects
-                                  // Create an empty blob
-                                  const emptyBlob = new Blob([""], { type: 'text/plain' });
-                                  const emptyFile = new File([emptyBlob], fileName, { type: 'text/plain' });
-                                  
-                                  // Upload the empty file
-                                  await uploadFile(selectedProject.id, emptyFile);
-                                  
-                                  // Refresh the files list
-                                  const files = await getProjectFiles(selectedProject.id);
-                                  setProjectFiles(files);
-                                  
-                                  // Update the tree
-                                  const treeData = convertProjectFilesToTreeNodes(files);
-                                  setFileTreeData(treeData);
-                                }
-                              } catch (error) {
-                                console.error("Error creating new file:", error);
+              {/* File Tree */}
+              <div className="border-t border-gray-100 pt-2 flex-1 overflow-hidden flex flex-col px-2">
+                <div className="flex-1 overflow-y-auto relative border border-gray-100 rounded-md">
+                  {fileTreeData && (
+                    <FileTree
+                      explorerData={fileTreeData}
+                      handleInsertNode={handleInsertNode}
+                      handleDeleteNode={handleDeleteNode}
+                      handleUpdateFolder={handleUpdateFolder}
+                      onFileDoubleClick={handleFileDoubleClick}
+                      showRoot={false}
+                      selectedFiles={selectedFileIds}
+                      onSelection={handleFileSelection}
+                      showControls={true}
+                      onRefresh={handleRefreshFiles}
+                      isLoading={isLoadingFiles}
+                      onOpenDirectory={handleOpenDirectory}
+                      rootActions={[
+                        {
+                          label: "New Chat",
+                          icon: <FaComment className="w-3 h-3" />,
+                          onClick: () => handleCreateNewChat(isInBrowserProject)
+                        },
+                        {
+                          label: "New File",
+                          icon: <FaFile className="w-3 h-3" />,
+                          onClick: async () => {
+                            if (!selectedProject) return;
+                            
+                            // Create a timestamp-based file name
+                            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                            const fileName = `file-${timestamp}.txt`;
+                            
+                            try {
+                              if (isInBrowserProject) {
+                                // For in-browser project, create an empty file
+                                await saveInBrowserFile(fileName, "");
+                                await refreshInBrowserFiles();
+                              } else {
+                                // For remote projects
+                                // Create an empty blob
+                                const emptyBlob = new Blob([""], { type: 'text/plain' });
+                                const emptyFile = new File([emptyBlob], fileName, { type: 'text/plain' });
+                                
+                                // Upload the empty file
+                                await uploadFile(selectedProject.id, emptyFile);
+                                
+                                // Refresh the files list
+                                const files = await getProjectFiles(selectedProject.id);
+                                setProjectFiles(files);
+                                
+                                // Update the tree
+                                const treeData = convertProjectFilesToTreeNodes(files);
+                                setFileTreeData(treeData);
                               }
-                            }
-                          },
-                          {
-                            label: "New Folder",
-                            icon: <FaFolder className="w-3 h-3" />,
-                            onClick: async () => {
-                              if (!selectedProject) return;
-                              
-                              // Prompt for folder name
-                              const folderName = prompt("Enter folder name:");
-                              if (!folderName) return;
-                              
-                              try {
-                                if (isInBrowserProject) {
-                                  // For in-browser project, we just need to create a file with the path structure
-                                  // We'll create an empty file with the folder path to represent the folder
-                                  await saveInBrowserFile(`${folderName}/.__dir__`, "");
-                                  await refreshInBrowserFiles();
-                                } else {
-                                  // For remote S3 projects, create a hidden marker file to represent the folder
-                                  const markerFileName = `${folderName}/.__dir__`;
-                                  const emptyBlob = new Blob([""], { type: 'text/plain' });
-                                  const markerFile = new File([emptyBlob], markerFileName, { type: 'text/plain' });
-                                  
-                                  // Upload the marker file
-                                  await uploadFile(selectedProject.id, markerFile);
-                                  
-                                  // Refresh the files list
-                                  const files = await getProjectFiles(selectedProject.id);
-                                  
-                                  // Filter out the .__dir__ files before display
-                                  const filteredFiles = filterHiddenFiles(files);
-                                  setProjectFiles(filteredFiles);
-                                  
-                                  // Update the tree, but filter out .__dir__ files
-                                  const treeData = convertProjectFilesToTreeNodes(filteredFiles);
-                                  setFileTreeData(treeData);
-                                }
-                              } catch (error) {
-                                console.error("Error creating new folder:", error);
-                              }
-                            }
-                          },
-                          {
-                            label: "Upload File",
-                            icon: <FaUpload className="w-3 h-3" />,
-                            onClick: () => {
-                              // Create a hidden file input and trigger it
-                              const input = document.createElement('input');
-                              input.type = 'file';
-                              input.multiple = true;
-                              input.onchange = (e) => {
-                                const target = e.target as HTMLInputElement;
-                                if (target.files) {
-                                  onDrop(Array.from(target.files));
-                                }
-                              };
-                              input.click();
+                            } catch (error) {
+                              console.error("Error creating new file:", error);
                             }
                           }
-                        ]}
-                      />
-                    )}
-                  </div>
+                        },
+                        {
+                          label: "New Folder",
+                          icon: <FaFolder className="w-3 h-3" />,
+                          onClick: async () => {
+                            if (!selectedProject) return;
+                            
+                            // Prompt for folder name
+                            const folderName = prompt("Enter folder name:");
+                            if (!folderName) return;
+                            
+                            try {
+                              if (isInBrowserProject) {
+                                // For in-browser project, we just need to create a file with the path structure
+                                // We'll create an empty file with the folder path to represent the folder
+                                await saveInBrowserFile(`${folderName}/.__dir__`, "");
+                                await refreshInBrowserFiles();
+                              } else {
+                                // For remote S3 projects, create a hidden marker file to represent the folder
+                                const markerFileName = `${folderName}/.__dir__`;
+                                const emptyBlob = new Blob([""], { type: 'text/plain' });
+                                const markerFile = new File([emptyBlob], markerFileName, { type: 'text/plain' });
+                                
+                                // Upload the marker file
+                                await uploadFile(selectedProject.id, markerFile);
+                                
+                                // Refresh the files list
+                                const files = await getProjectFiles(selectedProject.id);
+                                
+                                // Filter out the .__dir__ files before display
+                                const filteredFiles = filterHiddenFiles(files);
+                                setProjectFiles(filteredFiles);
+                                
+                                // Update the tree, but filter out .__dir__ files
+                                const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+                                setFileTreeData(treeData);
+                              }
+                            } catch (error) {
+                              console.error("Error creating new folder:", error);
+                            }
+                          }
+                        },
+                        {
+                          label: "Upload File",
+                          icon: <FaUpload className="w-3 h-3" />,
+                          onClick: () => {
+                            // Create a hidden file input and trigger it
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.multiple = true;
+                            input.onchange = (e) => {
+                              const target = e.target as HTMLInputElement;
+                              if (target.files) {
+                                onDrop(Array.from(target.files));
+                              }
+                            };
+                            input.click();
+                          }
+                        }
+                      ]}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -1178,11 +1164,17 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
         
         {/* Resize Handle - Only on desktop */}
-        {onResize && !isMobile && (
-          <div 
-            className="sidebar-resizer" 
-            onMouseDown={handleResize}
-            title="Resize sidebar"
+        {onResize && !isMobile && isOpen && (
+          <Splitter
+            onResize={onResize}
+            onResizeStart={() => setIsResizing(true)}
+            onResizeEnd={() => {
+              setIsResizing(false);
+              onResizeEnd?.();
+            }}
+            minWidth={240}
+            maxWidth={500}
+            position="right"
           />
         )}
 

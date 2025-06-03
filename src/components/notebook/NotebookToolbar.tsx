@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars } from 'react-icons/fa';
+import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaCircle, FaExclamationTriangle, FaStop } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -7,6 +7,115 @@ import { RiRobot2Line } from 'react-icons/ri';
 import { TbLayoutSidebarRightExpand } from 'react-icons/tb';
 import LoginButton from '../LoginButton';
 import { NotebookMetadata } from '../../types/notebook';
+
+// Kernel status type
+type KernelStatus = 'idle' | 'busy' | 'starting' | 'error';
+
+// Kernel Status Indicator Component
+interface KernelStatusIndicatorProps {
+  status: KernelStatus;
+  isReady: boolean;
+  compact?: boolean;
+  onRetry?: () => void;
+}
+
+const KernelStatusIndicator: React.FC<KernelStatusIndicatorProps> = ({ 
+  status, 
+  isReady, 
+  compact = false,
+  onRetry
+}) => {
+  const getStatusInfo = () => {
+    if (!isReady) {
+      return {
+        color: 'text-gray-800',
+        bgColor: 'bg-gray-100',
+        icon: <FaSpinner className="w-3 h-3 animate-spin" />,
+        text: 'Initializing...',
+        dot: 'bg-gray-600',
+        clickable: false
+      };
+    }
+    
+    switch (status) {
+      case 'busy':
+        return {
+          color: 'text-yellow-600',
+          bgColor: 'bg-yellow-50',
+          icon: <FaSpinner className="w-3 h-3 animate-spin" />,
+          text: 'Busy',
+          dot: 'bg-yellow-500',
+          clickable: false
+        };
+      case 'error':
+        return {
+          color: 'text-red-600',
+          bgColor: 'bg-red-50 hover:bg-red-100',
+          icon: <FaExclamationTriangle className="w-3 h-3" />,
+          text: 'Error - Click to retry',
+          dot: 'bg-red-500',
+          clickable: true
+        };
+      case 'starting':
+        return {
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-50',
+          icon: <FaSpinner className="w-3 h-3 animate-spin" />,
+          text: 'Restarting...',
+          dot: 'bg-blue-500',
+          clickable: false
+        };
+      case 'idle':
+      default:
+        return {
+          color: 'text-green-600',
+          bgColor: 'bg-green-50',
+          icon: <FaCircle className="w-2 h-2" />,
+          text: 'Ready',
+          dot: 'bg-green-500',
+          clickable: false
+        };
+    }
+  };
+
+  const { color, bgColor, icon, text, dot, clickable } = getStatusInfo();
+
+  const handleClick = () => {
+    if (clickable && onRetry) {
+      onRetry();
+    }
+  };
+
+  if (compact) {
+    return (
+      <div 
+        className={`flex items-center gap-1 px-2 py-1 rounded-full ${bgColor} ${color} text-xs ${clickable ? 'cursor-pointer transition-colors' : ''}`}
+        title={`Kernel ${text}`}
+        onClick={handleClick}
+      >
+        <div className={`w-2 h-2 rounded-full ${dot}`}></div>
+        <span className="hidden sm:inline">{status === 'error' ? 'Error' : text}</span>
+        {status === 'error' && (
+          <FaRedo className="w-2 h-2 ml-1 opacity-70" />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className={`flex items-center gap-1.5 px-2 py-1 rounded ${bgColor} ${color} text-xs ${clickable ? 'cursor-pointer transition-colors' : ''}`}
+      title={`Kernel ${text}`}
+      onClick={handleClick}
+    >
+      {icon}
+      <span className="hidden md:inline">{status === 'error' ? 'Error' : text}</span>
+      {status === 'error' && (
+        <FaRedo className="w-3 h-3 ml-1 opacity-70" />
+      )}
+    </div>
+  );
+};
 
 interface FileOperationsProps {
   onSave: () => void;
@@ -52,18 +161,31 @@ interface KernelControlsProps {
   onRunAll: () => void;
   onClearOutputs: () => void;
   onRestartKernel: () => void;
+  onInterruptKernel?: () => Promise<void>;
   isProcessing: boolean;
   isReady: boolean;
+  kernelStatus: KernelStatus;
+  onRetryKernel?: () => void;
 }
 
 export const KernelControls: React.FC<KernelControlsProps> = ({
   onRunAll,
   onClearOutputs,
   onRestartKernel,
+  onInterruptKernel,
   isProcessing,
-  isReady
+  isReady,
+  kernelStatus,
+  onRetryKernel
 }) => (
-  <div className="flex items-center">
+  <div className="flex items-center gap-1">
+    <KernelStatusIndicator 
+      status={kernelStatus} 
+      isReady={isReady} 
+      compact={true}
+      onRetry={onRetryKernel || onRestartKernel}
+    />
+    <div className="h-4 w-px bg-gray-200 mx-1"></div>
     <button
       onClick={onRunAll}
       className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
@@ -76,6 +198,15 @@ export const KernelControls: React.FC<KernelControlsProps> = ({
         <FaPlay className="w-3.5 h-3.5" />
       )}
     </button>
+    {onInterruptKernel && kernelStatus === 'busy' && (
+      <button
+        onClick={onInterruptKernel}
+        className="p-1.5 text-orange-600 hover:text-orange-800 hover:bg-orange-50 rounded transition"
+        title="Interrupt kernel execution"
+      >
+        <FaStop className="w-3.5 h-3.5" />
+      </button>
+    )}
     <button
       onClick={onClearOutputs}
       className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition"
@@ -88,9 +219,9 @@ export const KernelControls: React.FC<KernelControlsProps> = ({
       onClick={onRestartKernel}
       className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition group relative"
       title="Restart kernel and clear outputs"
-      disabled={!isReady || isProcessing}
+      disabled={isProcessing || (kernelStatus !== 'error' && !isReady)}
     >
-      <FaRedo className={`w-3.5 h-3.5 ${(!isReady || isProcessing) ? 'opacity-50' : ''}`} />
+      <FaRedo className={`w-3.5 h-3.5 ${(isProcessing || (kernelStatus !== 'error' && !isReady)) ? 'opacity-50' : ''}`} />
     </button>
   </div>
 );
@@ -178,6 +309,7 @@ export interface NotebookToolbarProps {
   onRunAll: () => void;
   onClearOutputs: () => void;
   onRestartKernel: () => void;
+  onInterruptKernel?: () => Promise<void>;
   onAddCodeCell: () => void;
   onAddMarkdownCell: () => void;
   onShowKeyboardShortcuts: () => void;
@@ -192,6 +324,8 @@ export interface NotebookToolbarProps {
   isSidebarOpen: boolean;
   onPublish?: () => void;
   isWelcomeScreen?: boolean;
+  kernelStatus: KernelStatus;
+  onRetryKernel?: () => void;
 }
 
 interface ToolbarDropdownProps extends Omit<NotebookToolbarProps, 'onPublish'> {
@@ -208,6 +342,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onRunAll,
   onClearOutputs,
   onRestartKernel,
+  onInterruptKernel,
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
@@ -222,7 +357,9 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   isSidebarOpen,
   isOpen,
   onClose,
-  isWelcomeScreen
+  isWelcomeScreen,
+  kernelStatus,
+  onRetryKernel
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(metadata.title || 'Untitled Chat');
@@ -373,6 +510,15 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
 
       <div className="border-t border-gray-200 mt-1 pt-1">
         <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Kernel</div>
+        <div className="px-3 py-2 flex items-center justify-between">
+          <span className="text-sm text-gray-700">Status:</span>
+          <KernelStatusIndicator 
+            status={kernelStatus} 
+            isReady={isKernelReady} 
+            compact={false}
+            onRetry={onRetryKernel || onRestartKernel}
+          />
+        </div>
         <button
           onClick={onRunAll}
           disabled={isProcessing}
@@ -385,6 +531,15 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
           )}
           Run All
         </button>
+        {onInterruptKernel && kernelStatus === 'busy' && (
+          <button
+            onClick={onInterruptKernel}
+            className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            <FaStop className="w-3.5 h-3.5 mr-2" />
+            Interrupt Kernel
+          </button>
+        )}
         <button
           onClick={onClearOutputs}
           disabled={isProcessing}
@@ -395,7 +550,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
         </button>
         <button
           onClick={onRestartKernel}
-          disabled={!isKernelReady || isProcessing}
+          disabled={isProcessing || (kernelStatus !== 'error' && !isKernelReady)}
           className="flex items-center w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
         >
           <FaRedo className="w-3.5 h-3.5 mr-2" />
@@ -426,6 +581,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onRunAll,
   onClearOutputs,
   onRestartKernel,
+  onInterruptKernel,
   onAddCodeCell,
   onAddMarkdownCell,
   onShowKeyboardShortcuts,
@@ -438,7 +594,9 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   isAIReady,
   onToggleSidebar,
   isSidebarOpen,
-  isWelcomeScreen = false
+  isWelcomeScreen = false,
+  kernelStatus,
+  onRetryKernel
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -452,19 +610,22 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   const renderStandardToolbar = () => (
     <div className="flex items-center">
       {!isWelcomeScreen && (
-        <>
-          <FileOperations 
-            onSave={onSave} 
-            onDownload={onDownload} 
-            onLoad={onLoad} 
-          />
-          <div className="h-5 w-px bg-gray-200 mx-1"></div>
+        <>          
           <KernelControls 
             onRunAll={onRunAll} 
             onClearOutputs={onClearOutputs} 
             onRestartKernel={onRestartKernel} 
+            onInterruptKernel={onInterruptKernel}
             isProcessing={isProcessing} 
             isReady={isKernelReady} 
+            kernelStatus={kernelStatus}
+            onRetryKernel={onRetryKernel}
+          />
+          <div className="h-5 w-px bg-gray-200 mx-1"></div>
+          <FileOperations 
+            onSave={onSave} 
+            onDownload={onDownload} 
+            onLoad={onLoad} 
           />
           <CellControls 
             onAddCodeCell={onAddCodeCell} 
@@ -503,6 +664,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onRunAll={onRunAll}
             onClearOutputs={onClearOutputs}
             onRestartKernel={onRestartKernel}
+            onInterruptKernel={onInterruptKernel}
             onAddCodeCell={onAddCodeCell}
             onAddMarkdownCell={onAddMarkdownCell}
             onShowKeyboardShortcuts={onShowKeyboardShortcuts}
@@ -518,6 +680,8 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             isOpen={isDropdownOpen}
             onClose={() => setIsDropdownOpen(false)}
             isWelcomeScreen={isWelcomeScreen}
+            kernelStatus={kernelStatus}
+            onRetryKernel={onRetryKernel}
           />
         </>
       ) : (
