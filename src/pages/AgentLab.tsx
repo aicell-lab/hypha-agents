@@ -181,7 +181,7 @@ const NotebookPage: React.FC = () => {
         executeCode: executeCode,
         agentSettings,
         abortSignal: currentSignal,
-        projectId: initialUrlParams?.projectId || IN_BROWSER_PROJECT.id,
+        projectId: selectedProject?.id || IN_BROWSER_PROJECT.id,
       });
       if (currentSignal.aborted) {
           console.log('[AgentLab] Hypha Core service setup aborted before completion.');
