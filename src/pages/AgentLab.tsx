@@ -11,7 +11,7 @@ import ModelSettingsCanvasContent from '../components/notebook/ModelSettingsCanv
 import EditAgentCanvasContent, { EditAgentFormData } from '../components/notebook/EditAgentCanvasContent';
 
 // Import utilities and types
-import { NotebookCell, NotebookMetadata, CellType, CellRole } from '../types/notebook';
+import { NotebookCell, NotebookMetadata, NotebookData, CellType, CellRole } from '../types/notebook';
 import { showToast, dismissToast } from '../utils/notebookUtils';
 import { SITE_ID } from '../utils/env';
 import { ChatMessage } from '../utils/chatCompletion';
@@ -103,6 +103,8 @@ const NotebookPage: React.FC = () => {
     selectedProject,
     setSelectedProject,
     getInBrowserProject,
+    uploadFile,
+    saveInBrowserFile,
     isLoading: isProjectsLoading,
     initialLoadComplete,
     projects,
@@ -112,6 +114,7 @@ const NotebookPage: React.FC = () => {
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
   const [parsedUrlParams, setParsedUrlParams] = useState<InitialUrlParams | null>(null);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [showEditAgentAfterLoad, setShowEditAgentAfterLoad] = useState(false);
   
   // Initialize the cell manager
   const cellManager = useRef<CellManager | null>(null);
@@ -580,27 +583,118 @@ const NotebookPage: React.FC = () => {
     agentSettings
   ]);
 
-  // Wrapper function to handle edit agent with the expected signature
-  const handleEditAgentWrapper = useCallback(async (workspace: string, agentId: string) => {
-    // Convert the workspace and agentId parameters to EditAgentFormData
-    const formData: EditAgentFormData = {
-      agentId: agentId,
-      name: agentId, // Use agentId as name for now
-      description: '', // Default empty description
-      version: '0.1.0', // Default version
-      license: 'CC-BY-4.0', // Default license
-      welcomeMessage: 'Hi, how can I help you today?', // Default welcome message
-      initialPrompt: '', // Default empty initial prompt
-      modelConfig: {
-        baseURL: agentSettings.baseURL,
-        apiKey: agentSettings.apiKey,
-        model: agentSettings.model,
-        temperature: agentSettings.temperature
+  // Proper implementation to handle editing agent from welcome screen
+  const handleEditAgentFromWelcomeScreen = useCallback(async (workspace: string, agentId: string) => {
+    if (!artifactManager || !isLoggedIn) {
+      showToast('You need to be logged in to edit an agent', 'error');
+      return;
+    }
+
+    if (!agentId.includes('/')) {
+      agentId = `${SITE_ID}/${agentId}`;
+    }
+
+    const loadingToastId = 'editing-agent';
+    showToast('Loading agent for editing...', 'loading', { id: loadingToastId });
+
+    try {
+      // Get the agent artifact
+      const agent = await artifactManager.read({ artifact_id: agentId, _rkwargs: true });
+      if (!agent || !agent.manifest) {
+        throw new Error('Agent not found or invalid manifest');
       }
-    };
-    
-    await agentOps.handleEditAgent(formData);
-  }, [agentOps, agentSettings]);
+
+      // Create a fixed filename for the notebook
+      const filePath = `chat-${agentId.split('/').pop()}.ipynb`;
+      const resolvedProjectId = IN_BROWSER_PROJECT.id;
+
+      // Get template from manifest or create minimal structure
+      const template = agent.manifest.chat_template || {};
+
+      // Create notebook data from template or create a new one
+      const notebookData: NotebookData = {
+        nbformat: 4,
+        nbformat_minor: 5,
+        metadata: {
+          ...defaultNotebookMetadata,
+          // Only include non-model settings from template metadata
+          ...(template.metadata ? {
+            title: template.metadata.title,
+            description: template.metadata.description,
+            // Exclude modelSettings
+          } : {}),
+          title: agent.manifest.name || 'Agent Chat',
+          modified: new Date().toISOString(),
+          created: new Date().toISOString(),
+          filePath: filePath,
+          projectId: resolvedProjectId,
+          agentArtifact: {
+            id: agent.id,
+            version: agent.version,
+            name: agent.manifest.name,
+            description: agent.manifest.description,
+            manifest: {
+              ...agent.manifest,
+              // Don't include modelConfig in the notebook metadata
+            }
+          }
+        },
+        cells: template.cells || []
+      };
+
+      // If no cells in template, create a system cell with the agent's startup script
+      if (notebookData.cells.length === 0 && agent.manifest.startup_script) {
+        const systemCellContent = agent.manifest.startup_script;
+        notebookData.cells.push({
+          id: uuidv4(),
+          type: 'code',
+          content: systemCellContent,
+          executionState: 'idle',
+          metadata: {
+            trusted: true,
+            role: 'system'
+          },
+          executionCount: undefined,
+          output: []
+        });
+      }
+
+      // Save the notebook
+      if (resolvedProjectId === IN_BROWSER_PROJECT.id) {
+        await saveInBrowserFile(filePath, notebookData);
+        setSelectedProject(getInBrowserProject());
+      } else {
+        const blob = new Blob([JSON.stringify(notebookData, null, 2)], { type: 'application/json' });
+        const file = new File([blob], filePath.split('/').pop() || 'notebook.ipynb', { type: 'application/json' });
+        await uploadFile(resolvedProjectId, file);
+      }
+
+      // Load the newly created notebook
+      await notebookOps.loadNotebookContent(resolvedProjectId, filePath);
+      
+      // Set flag to show edit dialog after notebookMetadata is updated
+      setShowEditAgentAfterLoad(true);
+      
+      showToast('Agent loaded for editing', 'success');
+      dismissToast(loadingToastId);
+
+    } catch (error) {
+      console.error('Error editing agent:', error);
+      showToast(`Failed to edit agent: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } finally {
+      dismissToast(loadingToastId);
+    }
+  }, [
+    artifactManager,
+    isLoggedIn,
+    saveInBrowserFile,
+    uploadFile,
+    notebookOps.loadNotebookContent,
+    setSelectedProject,
+    getInBrowserProject,
+    showToast,
+    dismissToast
+  ]);
 
   const handleShowModelSettingsInCanvas = useCallback(() => {
     const windowId = 'model-settings';
@@ -955,7 +1049,7 @@ const NotebookPage: React.FC = () => {
         onAddMarkdownCell={handleAddMarkdownCell}
       onCreateNewNotebook={notebookOps.handleCreateNewNotebook}
       onCreateAgentTemplate={agentOps.handleCreateAgent}
-      onEditAgent={handleEditAgentWrapper}
+      onEditAgent={handleEditAgentFromWelcomeScreen}
       onStartFromAgent={notebookOps.createNotebookFromAgentTemplate}
       onOpenFile={notebookOps.loadNotebookContent}
       
