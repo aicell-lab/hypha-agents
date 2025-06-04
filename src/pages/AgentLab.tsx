@@ -12,7 +12,8 @@ import EditAgentCanvasContent, { EditAgentFormData } from '../components/noteboo
 
 // Import utilities and types
 import { NotebookCell, NotebookMetadata, CellType, CellRole } from '../types/notebook';
-import { showToast } from '../utils/notebookUtils';
+import { showToast, dismissToast } from '../utils/notebookUtils';
+import { SITE_ID } from '../utils/env';
 import { ChatMessage } from '../utils/chatCompletion';
 
 // Import hooks
@@ -421,6 +422,164 @@ const NotebookPage: React.FC = () => {
     canvasPanel.setShowCanvasPanel(true);
   }, [canvasPanel, server, kernelManager]);
 
+  // Handler to save agent settings from canvas to notebook metadata
+  const handleSaveAgentSettingsToNotebook = useCallback((data: EditAgentFormData) => {
+    // Update or create agent artifact metadata
+    const agentArtifactMeta = notebookMetadata.agentArtifact ? {
+      ...notebookMetadata.agentArtifact,
+      id: data.agentId || notebookMetadata.agentArtifact.id || '', // Preserve existing ID if not provided
+      name: data.name,
+      description: data.description,
+      version: data.version,
+      manifest: {
+        ...(notebookMetadata.agentArtifact.manifest || {}),
+        name: data.name,
+        description: data.description,
+        version: data.version,
+        license: data.license,
+        welcomeMessage: data.welcomeMessage,
+        startup_script: data.initialPrompt,
+      }
+    } : {
+      // Create minimal structure if no artifact existed before
+      id: data.agentId || '',
+      name: data.name,
+      description: data.description,
+      version: data.version,
+      manifest: {
+        name: data.name,
+        description: data.description,
+        version: data.version,
+        license: data.license,
+        welcomeMessage: data.welcomeMessage,
+        startup_script: data.initialPrompt,
+      }
+    };
+
+    // Update notebook metadata with agent configuration
+    setNotebookMetadata(prev => ({
+      ...prev,
+      title: data.name, // Update notebook title too
+      agentArtifact: agentArtifactMeta,
+      modified: new Date().toISOString()
+    }));
+
+    // Save notebook and show success message
+    notebookOps.saveNotebook();
+    showToast('Agent settings saved to notebook', 'success');
+  }, [notebookMetadata, setNotebookMetadata, notebookOps.saveNotebook]);
+
+  // Handler to publish agent from canvas
+  const handlePublishAgentFromCanvas = useCallback(async (data: EditAgentFormData, isUpdating: boolean): Promise<string | null> => {
+    if (!artifactManager || !isLoggedIn) {
+      showToast('You need to be logged in to publish an agent', 'error');
+      return null;
+    }
+
+    const toastId = 'publishing-agent-canvas';
+    showToast('Publishing agent...', 'loading', { id: toastId });
+
+    // Ensure notebook is saved before publishing
+    await notebookOps.saveNotebook();
+
+    try {
+      // Get system cell content for the startup script
+      const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
+      const systemCellContent = systemCell ? systemCell.content : '';
+
+      // Create comprehensive agent manifest
+      const manifest = {
+        name: data.name,
+        description: data.description,
+        version: data.version,
+        license: data.license,
+        type: 'agent',
+        created_at: new Date().toISOString(),
+        startup_script: systemCellContent,
+        welcomeMessage: data.welcomeMessage,
+        modelConfig: agentSettings, // Include current model settings
+        // Preserve notebook state in chat template
+        chat_template: {
+          metadata: notebookMetadata,
+          cells: cellManager.current?.getCurrentCellsContent() || []
+        }
+      };
+
+      console.log('[AgentLab] Publishing agent:', {
+        isUpdating,
+        agentId: data.agentId,
+        manifest: { ...manifest, startup_script: '<<SCRIPT>>' } // Log without full script
+      });
+
+      let artifact;
+
+      if (isUpdating && data.agentId) {
+        // Update existing agent
+        console.log('[AgentLab] Updating existing agent:', data.agentId);
+        artifact = await artifactManager.edit({
+          artifact_id: data.agentId,
+          type: "agent",
+          manifest: manifest,
+          version: manifest.version,
+          _rkwargs: true
+        });
+        console.log('[AgentLab] Agent updated successfully:', artifact);
+        dismissToast(toastId);
+        showToast('Agent updated successfully!', 'success');
+      } else {
+        // Create new agent
+        console.log('[AgentLab] Creating new agent');
+        artifact = await artifactManager.create({
+          parent_id: `${SITE_ID}/agents`,
+          type: "agent",
+          manifest: manifest,
+          _rkwargs: true
+        });
+        console.log('[AgentLab] Agent created successfully:', artifact);
+        dismissToast(toastId);
+        showToast('Agent published successfully!', 'success');
+      }
+
+      // Update notebook metadata with published artifact info
+      const finalAgentArtifactMeta = {
+        id: artifact.id,
+        version: artifact.version,
+        name: manifest.name,
+        description: manifest.description,
+        manifest: manifest
+      };
+
+      setNotebookMetadata(prev => ({
+        ...prev,
+        title: manifest.name, // Ensure title matches published agent
+        agentArtifact: finalAgentArtifactMeta,
+        modified: new Date().toISOString()
+      }));
+
+      // Save notebook again to persist artifact ID and version
+      await notebookOps.saveNotebook();
+
+      return artifact.id; // Return ID on success
+
+    } catch (error) {
+      console.error('Error publishing agent from canvas:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      showToast(`Failed to publish agent: ${errorMessage}`, 'error', { id: toastId });
+      return null;
+    }
+  }, [
+    artifactManager, 
+    isLoggedIn, 
+    cells, 
+    notebookMetadata, 
+    notebookOps.saveNotebook,
+    setNotebookMetadata, 
+    cellManager, 
+    showToast, 
+    dismissToast, 
+    agentSettings
+  ]);
+
   // Wrapper function to handle edit agent with the expected signature
   const handleEditAgentWrapper = useCallback(async (workspace: string, agentId: string) => {
     // Convert the workspace and agentId parameters to EditAgentFormData
@@ -494,8 +653,8 @@ const NotebookPage: React.FC = () => {
             component: (
               <EditAgentCanvasContent
                 initialAgentData={initialAgentData}
-                onSaveSettingsToNotebook={() => {}}
-                onPublishAgent={async () => null}
+                onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
+                onPublishAgent={handlePublishAgentFromCanvas}
               />
             )
           };
@@ -509,8 +668,8 @@ const NotebookPage: React.FC = () => {
         component: (
           <EditAgentCanvasContent
             initialAgentData={initialAgentData}
-            onSaveSettingsToNotebook={() => {}}
-            onPublishAgent={async () => null}
+            onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
+            onPublishAgent={handlePublishAgentFromCanvas}
           />
         )
       };
