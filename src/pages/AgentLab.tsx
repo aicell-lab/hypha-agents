@@ -862,6 +862,24 @@ const NotebookPage: React.FC = () => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+  // Re-establish Hypha Core service connection when selectedProject changes
+  useEffect(() => {
+    if (kernelManager.isReady && initRefObject.current && selectedProject && !showWelcomeScreen && kernelManager.executeCode) {
+      console.log('[AgentLab] Selected project changed, re-establishing Hypha Core service connection with project:', selectedProject.id);
+      
+      // Abort any ongoing service setup
+      hyphaServiceAbortControllerRef.current.abort();
+      hyphaServiceAbortControllerRef.current = new AbortController();
+      
+      // Reset the service setup state
+      setIsSettingUpService(false);
+      setHyphaCoreApi(null);
+      
+      // Setup service with new project
+      setupServiceWithKernel(kernelManager.executeCode);
+    }
+  }, [selectedProject?.id, kernelManager.isReady, kernelManager.executeCode, setupServiceWithKernel, initRefObject.current, showWelcomeScreen]);
+
   useEffect(() => {
     if (isSmallScreen && canvasPanel.showCanvasPanel && canvasPanel.hyphaCoreWindows.length === 0) {
       canvasPanel.setShowCanvasPanel(false);
