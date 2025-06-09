@@ -193,17 +193,6 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
             {/* Version and License in a flex row */}
             <div className="flex space-x-4">
               <div className="flex-1">
-                <label htmlFor="agent-version" className="block text-sm font-medium text-gray-700 mb-1">
-                  Version
-                </label>
-                <input
-                  type="text"
-                  id="agent-version"
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0.1.0"
-                />
               </div>
               <div className="flex-1">
                 <label htmlFor="agent-license" className="block text-sm font-medium text-gray-700 mb-1">
