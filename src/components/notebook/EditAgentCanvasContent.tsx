@@ -242,38 +242,21 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="version" className="block text-sm font-medium text-gray-700">
-              Version
-            </label>
-            <input
-              type="text"
-              name="version"
-              id="version"
-              value={formData.version}
-              onChange={handleInputChange}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="e.g., 0.1.0"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="license" className="block text-sm font-medium text-gray-700">
-              License
-            </label>
-            <select
-              name="license"
-              id="license"
-              value={formData.license}
-              onChange={handleInputChange}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            >
-              {licenses.map((license) => (
-                <option key={license.value} value={license.value}>{license.label}</option>
-              ))}
-            </select>
-          </div>
+        <div>
+          <label htmlFor="license" className="block text-sm font-medium text-gray-700">
+            License
+          </label>
+          <select
+            name="license"
+            id="license"
+            value={formData.license}
+            onChange={handleInputChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            {licenses.map((license) => (
+              <option key={license.value} value={license.value}>{license.label}</option>
+            ))}
+          </select>
         </div>
 
         <div>
