@@ -523,7 +523,7 @@ const NotebookPage: React.FC = () => {
           artifact_id: data.agentId,
           type: "agent",
           manifest: manifest,
-          version: "new", // TODO: is this correct?
+          version: "new",
           _rkwargs: true
         });
         console.log('[AgentLab] Agent updated successfully:', artifact);
