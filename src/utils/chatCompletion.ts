@@ -21,6 +21,25 @@ export interface AgentSettings {
   temperature: number;
 }
 
+// Sanitized version of AgentSettings for publishing (without sensitive data)
+export interface PublicAgentSettings {
+  baseURL: string;
+  model: string;
+  temperature: number;
+}
+
+/**
+ * Sanitize agent settings for public publishing by removing sensitive information
+ * SECURITY: NEVER publish API keys or tokens when sharing agents
+ */
+export function sanitizeAgentSettingsForPublishing(settings: AgentSettings): PublicAgentSettings {
+  return {
+    baseURL: settings.baseURL,
+    model: settings.model,
+    temperature: settings.temperature,
+    // Explicitly exclude apiKey and any other sensitive fields
+  };
+}
 
 function generateId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substring(2);

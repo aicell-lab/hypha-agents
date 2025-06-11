@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import { NotebookCell, OutputItem, NotebookMetadata } from '../../types/notebook';
 import ModelConfigForm from '../shared/ModelConfigForm';
-import { AgentSettings, DefaultAgentConfig } from '../../utils/chatCompletion';
+import { AgentSettings, DefaultAgentConfig, sanitizeAgentSettingsForPublishing, PublicAgentSettings } from '../../utils/chatCompletion';
 
 interface PublishAgentDialogProps {
   isOpen: boolean;
@@ -24,7 +24,7 @@ export interface PublishAgentData {
   version: string;
   license: string;
   welcomeMessage: string;
-  modelConfig?: AgentSettings;
+  modelConfig?: PublicAgentSettings; // Use sanitized settings without API keys
 }
 
 const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
@@ -66,6 +66,9 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
   }, [isOpen, existingId, notebookTitle, existingVersion, defaultWelcomeMessage, notebookMetadata]);
   
   const handleSubmit = () => {
+    // SECURITY: Sanitize model config to remove API keys and other sensitive data
+    const sanitizedModelConfig = sanitizeAgentSettingsForPublishing(modelConfig);
+    
     onConfirm({
       id: isUpdatingExisting ? id.trim() : undefined, // Only include ID if updating existing agent
       name,
@@ -73,7 +76,7 @@ const PublishAgentDialog: React.FC<PublishAgentDialogProps> = ({
       version,
       license,
       welcomeMessage,
-      modelConfig
+      modelConfig: sanitizedModelConfig
     });
   };
 

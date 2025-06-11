@@ -14,7 +14,8 @@ import EditAgentCanvasContent, { EditAgentFormData } from '../components/noteboo
 import { NotebookCell, NotebookMetadata, NotebookData, CellType, CellRole } from '../types/notebook';
 import { showToast, dismissToast } from '../utils/notebookUtils';
 import { SITE_ID } from '../utils/env';
-import { ChatMessage } from '../utils/chatCompletion';
+import { ChatMessage, sanitizeAgentSettingsForPublishing } from '../utils/chatCompletion';
+import { createSafeAgentManifest, performPrePublishSecurityCheck, logSecurityWarning } from '../utils/security';
 
 // Import hooks
 import { useChatCompletion } from '../hooks/useChatCompletion';
@@ -491,7 +492,10 @@ const NotebookPage: React.FC = () => {
       const systemCellContent = systemCell ? systemCell.content : '';
 
       // Create comprehensive agent manifest
-      const manifest = {
+      // SECURITY: Sanitize agent settings to remove API keys and other sensitive data
+      const sanitizedModelConfig = sanitizeAgentSettingsForPublishing(agentSettings);
+      
+      const rawManifest = {
         name: data.name,
         description: data.description,
         version: data.version,
@@ -500,7 +504,7 @@ const NotebookPage: React.FC = () => {
         created_at: new Date().toISOString(),
         startup_script: systemCellContent,
         welcomeMessage: data.welcomeMessage,
-        modelConfig: agentSettings, // Include current model settings
+        modelConfig: sanitizedModelConfig, // Use sanitized settings without API keys
         // Preserve notebook state in chat template
         chat_template: {
           metadata: notebookMetadata,
@@ -508,10 +512,15 @@ const NotebookPage: React.FC = () => {
         }
       };
 
+      // SECURITY: Apply comprehensive security sanitization
+      logSecurityWarning('Agent Publishing');
+      performPrePublishSecurityCheck(rawManifest);
+      const manifest = createSafeAgentManifest(rawManifest);
+
       console.log('[AgentLab] Publishing agent:', {
         isUpdating,
         agentId: data.agentId,
-        manifest: { ...manifest, startup_script: '<<SCRIPT>>' } // Log without full script
+        manifest: { ...manifest, startup_script: '<<SCRIPT>>', _security: manifest._security } // Log security info
       });
 
       let artifact;

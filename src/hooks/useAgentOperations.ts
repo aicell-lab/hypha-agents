@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useProjects } from '../providers/ProjectsProvider';
 import { useHyphaStore } from '../store/hyphaStore';
 import { showToast } from '../utils/notebookUtils';
+import { performPrePublishSecurityCheck, logSecurityWarning } from '../utils/security';
 import { NotebookCell, NotebookMetadata } from '../types/notebook';
 import type { 
   AgentOperationsState, 
@@ -229,6 +230,10 @@ export function useAgentOperations(
         created_at: new Date().toISOString(),
         published_at: new Date().toISOString()
       };
+
+      // SECURITY: Check for sensitive data before publishing
+      logSecurityWarning('Legacy Agent Publishing');
+      performPrePublishSecurityCheck(agentPackage);
 
       // Upload to Hypha server (placeholder - implement actual upload logic)
       console.log('Agent package to publish:', agentPackage);
