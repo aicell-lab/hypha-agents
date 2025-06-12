@@ -108,24 +108,65 @@ export function sanitizeObjectForPublishing(obj: any): any {
 }
 
 /**
+ * Deeply sanitize nested agent artifacts and manifests
+ */
+function sanitizeNestedAgentData(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeNestedAgentData(item));
+  }
+  
+  const result: any = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    // Skip sensitive fields
+    if (isSensitiveFieldName(key)) {
+      continue;
+    }
+    
+    // Special handling for nested agent artifacts and manifests
+    if (key === 'agentArtifact' && typeof value === 'object' && value !== null) {
+      result[key] = sanitizeNestedAgentData(value);
+    } else if (key === 'manifest' && typeof value === 'object' && value !== null) {
+      result[key] = sanitizeNestedAgentData(value);
+    } else if (key === 'modelConfig' && typeof value === 'object' && value !== null) {
+      // Ensure modelConfig is always sanitized
+      const config = value as any;
+      result[key] = { 
+        baseURL: config.baseURL, 
+        model: config.model, 
+        temperature: config.temperature 
+      };
+    } else if (key === 'chat_template' && typeof value === 'object' && value !== null) {
+      result[key] = sanitizeNestedAgentData(value);
+    } else if (key === 'metadata' && typeof value === 'object' && value !== null) {
+      result[key] = sanitizeNestedAgentData(value);
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = sanitizeNestedAgentData(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  
+  return result;
+}
+
+/**
  * Create a safe manifest for agent publishing
  */
 export function createSafeAgentManifest(manifest: any): any {
-  // First, sanitize the entire manifest
-  const sanitized = sanitizeObjectForPublishing(manifest);
-  
-  // If there's a modelConfig, ensure it's using the sanitized version
-  if (sanitized.modelConfig && typeof sanitized.modelConfig === 'object') {
-    // Convert to public agent settings format
-    const { baseURL, model, temperature } = sanitized.modelConfig;
-    sanitized.modelConfig = { baseURL, model, temperature };
-  }
+  // Deep sanitization to handle nested structures
+  const sanitized = sanitizeNestedAgentData(manifest);
   
   // Add security metadata
   sanitized._security = {
     sanitized: true,
     sanitizedAt: new Date().toISOString(),
     version: '1.0',
+    note: 'All API keys and sensitive data have been automatically removed'
   };
   
   return sanitized;

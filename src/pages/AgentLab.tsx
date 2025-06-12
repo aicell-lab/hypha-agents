@@ -15,7 +15,7 @@ import { NotebookCell, NotebookMetadata, NotebookData, CellType, CellRole } from
 import { showToast, dismissToast } from '../utils/notebookUtils';
 import { SITE_ID } from '../utils/env';
 import { ChatMessage, sanitizeAgentSettingsForPublishing } from '../utils/chatCompletion';
-import { createSafeAgentManifest, performPrePublishSecurityCheck, logSecurityWarning } from '../utils/security';
+import { createSafeAgentManifest, logSecurityWarning } from '../utils/security';
 
 // Import hooks
 import { useChatCompletion } from '../hooks/useChatCompletion';
@@ -512,9 +512,8 @@ const NotebookPage: React.FC = () => {
         }
       };
 
-      // SECURITY: Apply comprehensive security sanitization
+      // SECURITY: Apply comprehensive security sanitization (automatically removes API keys)
       logSecurityWarning('Agent Publishing');
-      performPrePublishSecurityCheck(rawManifest);
       const manifest = createSafeAgentManifest(rawManifest);
 
       console.log('[AgentLab] Publishing agent:', {
