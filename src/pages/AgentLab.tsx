@@ -535,8 +535,6 @@ const NotebookPage: React.FC = () => {
           _rkwargs: true
         });
         console.log('[AgentLab] Agent updated successfully:', artifact);
-        dismissToast(toastId);
-        showToast('Agent updated successfully!', 'success');
       } else {
         // Create new agent
         console.log('[AgentLab] Creating new agent');
@@ -547,7 +545,21 @@ const NotebookPage: React.FC = () => {
           _rkwargs: true
         });
         console.log('[AgentLab] Agent created successfully:', artifact);
-        dismissToast(toastId);
+      }
+
+      // Commit the artifact to finalize changes
+      console.log('[AgentLab] Committing artifact:', artifact.id);
+      await artifactManager.commit({
+        artifact_id: artifact.id,
+        _rkwargs: true
+      });
+      console.log('[AgentLab] Artifact committed successfully');
+
+      // Show success message after commit
+      dismissToast(toastId);
+      if (isUpdating && data.agentId) {
+        showToast('Agent updated successfully!', 'success');
+      } else {
         showToast('Agent published successfully!', 'success');
       }
 
