@@ -532,6 +532,7 @@ const NotebookPage: React.FC = () => {
           type: "agent",
           manifest: manifest,
           version: "new",
+          stage: true,
           _rkwargs: true
         });
         console.log('[AgentLab] Agent updated successfully:', artifact);
@@ -542,6 +543,7 @@ const NotebookPage: React.FC = () => {
           parent_id: `${SITE_ID}/agents`,
           type: "agent",
           manifest: manifest,
+          stage: true,
           _rkwargs: true
         });
         console.log('[AgentLab] Agent created successfully:', artifact);
