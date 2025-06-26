@@ -667,10 +667,14 @@ export class CellManager {
     try {
       const outputs: OutputItem[] = [];
       let shortOutput = '';
+      let fullOutput = '';
+      const isSystemCell = cell.role === "system";
+      
       await this.executeCodeFn(currentCode, {
         onOutput: (output: OutputItem) => {
           outputs.push(output);
           shortOutput += output.short_content + '\n';
+          fullOutput += output.content + '\n';
           this.updateCellExecutionState(id, "running", outputs);
         },
         onStatus: (status: string) => {
@@ -686,7 +690,10 @@ export class CellManager {
       if (shouldMoveFocus) {
         this.moveToNextCell(id);
       }
-      return `[Cell Id: ${id}]\n${stripAnsi(shortOutput.trim()) || "Code executed successfully."}`;
+      
+      // For system cells, return full output; for regular cells, return short output
+      const outputToReturn = isSystemCell ? fullOutput : shortOutput;
+      return `[Cell Id: ${id}]\n${stripAnsi(outputToReturn.trim()) || "Code executed successfully."}`;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -1231,13 +1238,10 @@ export class CellManager {
               switch (output.type) {
                 case "stdout":
                 case "stderr":
-                  const shortContent = createShortContent(
-                    output.content,
-                    output.type
-                  );
+                  // For system cells, use full content without truncation
                   content += `${
                     output.type === "stderr" ? "Error: " : ""
-                  }${shortContent}\n`;
+                  }${output.content}\n`;
                   break;
                 case "html":
                   content += "[HTML Output]\n";
@@ -1250,11 +1254,8 @@ export class CellManager {
                   break;
                 default:
                   if (output.content) {
-                    const shortContent = createShortContent(
-                      output.content,
-                      "text"
-                    );
-                    content += `${shortContent}\n`;
+                    // For system cells, use full content without truncation
+                    content += `${output.content}\n`;
                   }
               }
             }
