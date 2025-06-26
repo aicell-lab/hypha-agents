@@ -64,7 +64,6 @@ interface NotebookCell {
     scrolled?: boolean;
     trusted?: boolean;
     isNew?: boolean;
-    role?: CellRole;
     isEditing?: boolean;
     isCodeVisible?: boolean;
     isOutputVisible?: boolean;
@@ -188,7 +187,6 @@ export class CellManager {
         collapsed: false,
         trusted: true,
         isNew: type === "code",
-        role: role,
         isEditing: false,
         isCodeVisible: true,
         isOutputVisible: true,
@@ -265,7 +263,6 @@ export class CellManager {
         collapsed: false,
         trusted: true,
         isNew: type === "code",
-        role: role,
         isEditing: false,
         isCodeVisible: true,
         isOutputVisible: true,
@@ -597,7 +594,6 @@ export class CellManager {
           ? {
               ...cell,
               role,
-              metadata: { ...cell.metadata, role },
             }
           : cell
       )
@@ -1166,7 +1162,6 @@ export class CellManager {
             collapsed: false,
             trusted: true,
             isNew: type === "code",
-            role: role,
             isEditing: false,
             isCodeVisible: true,
             isOutputVisible: true,

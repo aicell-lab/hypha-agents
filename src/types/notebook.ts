@@ -42,7 +42,6 @@ export interface NotebookCell {
     scrolled?: boolean;
     trusted?: boolean;
     isNew?: boolean;
-    role?: CellRole;
     isEditing?: boolean;
     isCodeVisible?: boolean;
     isOutputVisible?: boolean;

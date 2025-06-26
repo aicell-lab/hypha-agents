@@ -507,7 +507,7 @@ const NotebookPage: React.FC = () => {
       
       if (data.type === 'agent') {
         // For agents, get system cell content for the startup script
-        const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
+        const systemCell = cells.find(cell => cell.role === CELL_ROLES.SYSTEM && cell.type === 'code');
         startupScript = systemCell ? systemCell.content : '';
       } else {
         // For deno-apps, use the startup script from the form
@@ -520,6 +520,7 @@ const NotebookPage: React.FC = () => {
         description: data.description,
         version: data.version,
         license: data.license,
+        lang: data.lang,
         type: data.type,
         created_at: new Date().toISOString(),
         startup_script: startupScript,
@@ -701,9 +702,9 @@ const NotebookPage: React.FC = () => {
           type: 'code',
           content: systemCellContent,
           executionState: 'idle',
+          role: 'system',
           metadata: {
-            trusted: true,
-            role: 'system'
+            trusted: true
           },
           executionCount: undefined,
           output: []
@@ -774,7 +775,7 @@ const NotebookPage: React.FC = () => {
 
   const handleShowEditAgentInCanvas = useCallback(() => {
     const agentArtifact = notebookMetadata.agentArtifact;
-    const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
+    const systemCell = cells.find(cell => cell.role === CELL_ROLES.SYSTEM && cell.type === 'code');
     const systemCellContent = systemCell ? systemCell.content : '';
 
     const initialAgentData: Partial<EditAgentFormData> = {
@@ -784,12 +785,13 @@ const NotebookPage: React.FC = () => {
       description: agentArtifact?.description || '',
       version: agentArtifact?.version || '0.1.0',
       license: agentArtifact?.manifest?.license || 'CC-BY-4.0',
+      lang: agentArtifact?.manifest?.lang || 'python',
       // Agent-specific fields
       welcomeMessage: agentArtifact?.manifest?.welcome_message || '',
       initialPrompt: systemCellContent,
       modelConfig: agentArtifact?.manifest?.model_config ? {
         baseURL: agentArtifact.manifest.model_config.base_url || 'https://api.openai.com/v1/',
-        // apiKey: agentArtifact.manifest.model_config.api_key || '', // never publish api keys
+        apiKey: '', // never publish api keys
         model: agentArtifact.manifest.model_config.model || 'gpt-4o-mini',
         temperature: agentArtifact.manifest.model_config.temperature || 1.0
       } : undefined,
@@ -817,7 +819,7 @@ const NotebookPage: React.FC = () => {
                   const cellsToSearch = currentCells.length > 0 ? currentCells : cells;
                   
                   const latestSystemCell = cellsToSearch.find(cell => {
-                    const isSystemRole = cell.metadata?.role === CELL_ROLES.SYSTEM || cell.role === CELL_ROLES.SYSTEM;
+                    const isSystemRole = cell.role === CELL_ROLES.SYSTEM;
                     const isCodeType = cell.type === 'code';
                     return isSystemRole && isCodeType;
                   });
@@ -848,7 +850,7 @@ const NotebookPage: React.FC = () => {
               const cellsToSearch = currentCells.length > 0 ? currentCells : cells;
               
               const latestSystemCell = cellsToSearch.find(cell => {
-                const isSystemRole = cell.metadata?.role === CELL_ROLES.SYSTEM || cell.role === CELL_ROLES.SYSTEM;
+                const isSystemRole = cell.role === CELL_ROLES.SYSTEM;
                 const isCodeType = cell.type === 'code';
                 return isSystemRole && isCodeType;
               });
@@ -976,7 +978,7 @@ const NotebookPage: React.FC = () => {
         return;
       }
       
-      const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
+      const systemCell = cells.find(cell => cell.role === CELL_ROLES.SYSTEM && cell.type === 'code');
       if (!systemCell) {
         console.log('[AgentLab] No system cell found, marking as executed');
         systemCellsExecutedRef.current = true;

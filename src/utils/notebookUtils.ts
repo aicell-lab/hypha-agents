@@ -96,7 +96,6 @@ export function downloadNotebook(notebook: NotebookData, filename?: string): voi
       role: cell.role,
       metadata: {
         ...cell.metadata,
-        role: cell.role,
         collapsed: false,
         trusted: true,
         parent: cell.metadata?.parent // Explicitly preserve parent key

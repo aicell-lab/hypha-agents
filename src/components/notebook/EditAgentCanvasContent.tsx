@@ -152,6 +152,7 @@ export interface AgentFormData {
   description: string;
   version: string;
   license: string;
+  lang: string;
   welcomeMessage: string;
   initialPrompt?: string;
   modelConfig: ModelConfig;
@@ -162,6 +163,7 @@ export interface AppFormData {
   description: string;
   version: string;
   license: string;
+  lang: string;
   startupScript: string;
 }
 
@@ -176,6 +178,7 @@ export const DefaultAgentFormData: AgentFormData = {
   description: '',
   version: '0.1.0',
   license: 'MIT',
+  lang: 'python',
   welcomeMessage: 'Hello! How can I assist you today?',
   initialPrompt: '',
   modelConfig: DefaultModelConfig
@@ -186,6 +189,7 @@ export const DefaultAppFormData: AppFormData = {
   description: '',
   version: '0.1.0',
   license: 'MIT',
+  lang: 'python',
   startupScript: ''
 };
 
@@ -211,6 +215,7 @@ export interface EditAgentFormData {
   description: string;
   version: string;
   license: string;
+  lang: string;
   // Agent-only fields
   welcomeMessage?: string;
   initialPrompt?: string;
@@ -248,6 +253,7 @@ const AgentFormComponent: React.FC<AgentFormComponentProps> = ({
     description: initialData.description || '',
     version: initialData.version || '0.1.0',
     license: initialData.license || 'CC-BY-4.0',
+    lang: initialData.lang || 'python',
     welcomeMessage: initialData.welcomeMessage || 'Hi, how can I help you today?',
     initialPrompt: initialData.initialPrompt || systemCellContent
   }));
@@ -261,6 +267,7 @@ const AgentFormComponent: React.FC<AgentFormComponentProps> = ({
       description: formData.description,
       version: formData.version,
       license: formData.license,
+      lang: formData.lang,
       welcomeMessage: formData.welcomeMessage,
       initialPrompt: formData.initialPrompt,
       modelConfig: formData.modelConfig
@@ -271,6 +278,7 @@ const AgentFormComponent: React.FC<AgentFormComponentProps> = ({
     formData.description,
     formData.version,
     formData.license,
+    formData.lang,
     formData.welcomeMessage,
     formData.initialPrompt,
     formData.modelConfig,
@@ -350,6 +358,23 @@ const AgentFormComponent: React.FC<AgentFormComponentProps> = ({
         </div>
 
         <div>
+          <label htmlFor="agent-lang" className="block text-sm font-medium text-gray-700">
+            Language
+          </label>
+          <select
+            name="lang"
+            id="agent-lang"
+            value={formData.lang}
+            onChange={handleInputChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            <option value="python">Python</option>
+            <option value="typescript">TypeScript</option>
+            <option value="javascript">JavaScript</option>
+          </select>
+        </div>
+
+        <div>
           <label htmlFor="agent-welcomeMessage" className="block text-sm font-medium text-gray-700">
             Welcome Message
           </label>
@@ -421,6 +446,7 @@ const AppFormComponent: React.FC<AppFormComponentProps> = ({
     description: initialData.description || '',
     version: initialData.version || '0.1.0',
     license: initialData.license || 'MIT',
+    lang: initialData.lang || 'python',
     startupScript: initialData.startupScript || systemCellContent
   }));
 
@@ -433,6 +459,7 @@ const AppFormComponent: React.FC<AppFormComponentProps> = ({
       description: formData.description,
       version: formData.version,
       license: formData.license,
+      lang: formData.lang,
       startupScript: formData.startupScript
     };
     onFormChange(combinedData);
@@ -441,6 +468,7 @@ const AppFormComponent: React.FC<AppFormComponentProps> = ({
     formData.description,
     formData.version,
     formData.license,
+    formData.lang,
     formData.startupScript,
     initialData.agentId,
     onFormChange
@@ -508,6 +536,23 @@ const AppFormComponent: React.FC<AppFormComponentProps> = ({
         </div>
 
         <div>
+          <label htmlFor="app-lang" className="block text-sm font-medium text-gray-700">
+            Language
+          </label>
+          <select
+            name="lang"
+            id="app-lang"
+            value={formData.lang}
+            onChange={handleInputChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            <option value="python">Python</option>
+            <option value="typescript">TypeScript</option>
+            <option value="javascript">JavaScript</option>
+          </select>
+        </div>
+
+        <div>
           <label htmlFor="app-startupScript" className="block text-sm font-medium text-gray-700">
             Startup Script <span className="text-red-500">*</span>
             <span className="text-gray-400 font-normal"> (From the first system cell in the current chat)</span>
@@ -564,6 +609,7 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
     description: initialAgentData.description || '',
     version: initialAgentData.version || '0.1.0',
     license: initialAgentData.license || (initialAgentData.type === 'deno-app' ? 'MIT' : 'CC-BY-4.0'),
+    lang: initialAgentData.lang || 'python',
     welcomeMessage: initialAgentData.welcomeMessage,
     initialPrompt: initialAgentData.initialPrompt,
     modelConfig: initialAgentData.modelConfig,
@@ -583,6 +629,7 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
       description: initialAgentData.description || '',
       version: initialAgentData.version || '0.1.0',
       license: initialAgentData.license || (initialAgentData.type === 'deno-app' ? 'MIT' : 'CC-BY-4.0'),
+      lang: initialAgentData.lang || 'python',
       welcomeMessage: initialAgentData.welcomeMessage,
       initialPrompt: initialAgentData.initialPrompt,
       modelConfig: initialAgentData.modelConfig,
@@ -604,6 +651,7 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
       description: '',
       version: '0.1.0',
       license: newType === 'deno-app' ? 'MIT' : 'CC-BY-4.0',
+      lang: 'python',
       // Type-specific fields will be set by the individual form components
     });
   };

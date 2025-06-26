@@ -183,7 +183,7 @@ export const useNotebookOperations = ({
           }
         }));
 
-        const visibleCells = loadedCells.filter(cell => cell.metadata?.role !== CELL_ROLES.THINKING);
+        const visibleCells = loadedCells.filter(cell => cell.role !== CELL_ROLES.THINKING);
         setCells(visibleCells);
 
         let maxExecutionCount = 0;
@@ -259,7 +259,7 @@ export const useNotebookOperations = ({
           filePath: newFilePath
         };
         setNotebookMetadata(metadata);
-        const cellsToLoad = loadedNotebookData.cells?.filter((cell: NotebookCell) => cell.metadata?.role !== CELL_ROLES.THINKING) || [];
+        const cellsToLoad = loadedNotebookData.cells?.filter((cell: NotebookCell) => cell.role !== CELL_ROLES.THINKING) || [];
         setCells(cellsToLoad);
         let maxExecutionCount = 0;
         cellsToLoad.forEach((cell: NotebookCell) => {
@@ -350,9 +350,9 @@ export const useNotebookOperations = ({
           type: 'code',
           content: systemCellContent,
           executionState: 'idle',
+          role: 'system',
           metadata: {
-            trusted: true,
-            role: 'system'
+            trusted: true
           },
           executionCount: undefined,
           output: []
