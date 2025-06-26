@@ -735,26 +735,60 @@ print(f"{sys.version.split()[0]}")
   };
   // Function to create a short representation of output
   const createShortContent = (content: string, type: string): string => {
-    // content = stripAnsi(content);
-    const maxLength = 4096; // Adjust this value as needed
-    if (content.length <= maxLength) return content;
-    
     switch (type) {
       case 'stdout':
       case 'stderr':
       case 'execute_input':
-        const firstHalf = stripAnsi(content.substring(0, maxLength/2));
-        const secondHalf = stripAnsi(content.substring(content.length - maxLength/2));
+        // For text content, use 128k limit
+        const maxTextLength = 128 * 1024;
+        if (content.length <= maxTextLength) return content;
+        
+        const firstHalf = stripAnsi(content.substring(0, maxTextLength/2));
+        const secondHalf = stripAnsi(content.substring(content.length - maxTextLength/2));
         const key = storeOutput(content, type);
         return `${firstHalf}... [truncated] ...${secondHalf} [Full output stored with key: ${key}]`;
+      
       case 'html':
-        return `[HTML content stored with key: ${storeOutput(content, type)}]`;
+        // For HTML, show brief preview and store full content
+        const maxHtmlLength = 1024;
+        const htmlKey = storeOutput(content, type);
+        if (content.length <= maxHtmlLength) {
+          return `${content} [Stored with key: ${htmlKey}]`;
+        }
+        return `[HTML content (${content.length} chars): ${content.substring(0, 200)}... stored with key: ${htmlKey}]`;
+      
       case 'img':
-        return `[Image stored with key: ${storeOutput(content, type)}]`;
+        // For images, just show metadata and store
+        const imgKey = storeOutput(content, type);
+        if (content.startsWith('data:image/')) {
+          const mimeMatch = content.match(/data:(image\/[^;]+)/);
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image';
+          return `[Image: ${mimeType}, size: ${content.length} chars, stored with key: ${imgKey}]`;
+        }
+        return `[Image content, size: ${content.length} chars, stored with key: ${imgKey}]`;
+      
       case 'svg':
-        return `[SVG content stored with key: ${storeOutput(content, type)}]`;
+        // For SVG, show brief preview and store
+        const maxSvgLength = 512;
+        const svgKey = storeOutput(content, type);
+        if (content.length <= maxSvgLength) {
+          return `${content} [Stored with key: ${svgKey}]`;
+        }
+        return `[SVG content (${content.length} chars): ${content.substring(0, 200)}... stored with key: ${svgKey}]`;
+      
       default:
-        return `${content.substring(0, maxLength)}... [Full content stored with key: ${storeOutput(content, type)}]`;
+        // Check if it looks like base64 or binary content
+        if (content.match(/^[A-Za-z0-9+/]+=*$/) && content.length > 1000) {
+          const binaryKey = storeOutput(content, type);
+          return `[Binary/Base64 content, size: ${content.length} chars, stored with key: ${binaryKey}]`;
+        }
+        
+        // For regular text content, use 128k limit
+        const maxDefaultLength = 128 * 1024;
+        if (content.length <= maxDefaultLength) return content;
+        
+        const defaultKey = storeOutput(content, type);
+        return `${content.substring(0, maxDefaultLength)}... [Full content stored with key: ${defaultKey}]`;
     }
   };
 
