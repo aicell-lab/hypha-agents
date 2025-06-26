@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 export interface ModelConfig {
   baseURL: string;
@@ -146,6 +146,7 @@ const ModelConfigFields: React.FC<ModelConfigFieldsProps> = ({
     </div>
   );
 };
+
 export interface AgentFormData {
   name: string;
   description: string;
@@ -156,6 +157,20 @@ export interface AgentFormData {
   modelConfig: ModelConfig;
 }
 
+export interface AppFormData {
+  name: string;
+  description: string;
+  version: string;
+  license: string;
+  startupScript: string;
+}
+
+export interface BaseFormData {
+  type: 'agent' | 'deno-app';
+}
+
+export type ConfigFormData = BaseFormData & (AgentFormData | AppFormData);
+
 export const DefaultAgentFormData: AgentFormData = {
   name: '',
   description: '',
@@ -164,6 +179,14 @@ export const DefaultAgentFormData: AgentFormData = {
   welcomeMessage: 'Hello! How can I assist you today?',
   initialPrompt: '',
   modelConfig: DefaultModelConfig
+};
+
+export const DefaultAppFormData: AppFormData = {
+  name: '',
+  description: '',
+  version: '0.1.0',
+  license: 'MIT',
+  startupScript: ''
 };
 
 export const licenses = [
@@ -177,33 +200,100 @@ export const licenses = [
   { value: 'UNLICENSED', label: 'Unlicensed / Proprietary' },
 ];
 
-interface AgentConfigFormProps {
-  formData: AgentFormData;
-  onFormChange: (newFormData: AgentFormData) => void;
-  showModelConfig?: boolean;
+
+
+// Data structure for combined agent form data
+export interface EditAgentFormData {
+  agentId?: string;
+  type: 'agent' | 'deno-app';
+  // Agent-specific fields
+  name: string;
+  description: string;
+  version: string;
+  license: string;
+  // Agent-only fields
+  welcomeMessage?: string;
+  initialPrompt?: string;
+  modelConfig?: ModelConfig;
+  // App-only fields  
+  startupScript?: string;
 }
 
-const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
-  formData,
-  onFormChange,
-  showModelConfig = true
+// Define a simple wrapper component for the canvas panel content
+interface EditAgentCanvasContentProps {
+  initialAgentData: Partial<EditAgentFormData>; // Use combined type
+  systemCellContent?: string; // Add system cell content prop
+  getLatestSystemCellContent?: () => string; // Add function to get latest content
+  onSaveSettingsToNotebook: (data: EditAgentFormData) => void;
+  onPublishAgent: (data: EditAgentFormData, isUpdating: boolean) => Promise<string | null>;
+}
+
+// Separate form component for Agent configuration
+interface AgentFormComponentProps {
+  initialData: Partial<EditAgentFormData>;
+  systemCellContent: string;
+  getLatestSystemCellContent?: () => string;
+  onFormChange: (data: EditAgentFormData) => void;
+}
+
+const AgentFormComponent: React.FC<AgentFormComponentProps> = ({
+  initialData,
+  systemCellContent,
+  getLatestSystemCellContent,
+  onFormChange
 }) => {
+  const [formData, setFormData] = useState<AgentFormData>(() => ({
+    ...DefaultAgentFormData,
+    name: initialData.name || '',
+    description: initialData.description || '',
+    version: initialData.version || '0.1.0',
+    license: initialData.license || 'CC-BY-4.0',
+    welcomeMessage: initialData.welcomeMessage || 'Hi, how can I help you today?',
+    initialPrompt: initialData.initialPrompt || systemCellContent
+  }));
+
+  // Update parent when form data changes - memoize the callback data
+  useEffect(() => {
+    const combinedData: EditAgentFormData = {
+      agentId: initialData.agentId,
+      type: 'agent',
+      name: formData.name,
+      description: formData.description,
+      version: formData.version,
+      license: formData.license,
+      welcomeMessage: formData.welcomeMessage,
+      initialPrompt: formData.initialPrompt,
+      modelConfig: formData.modelConfig
+    };
+    onFormChange(combinedData);
+  }, [
+    formData.name,
+    formData.description,
+    formData.version,
+    formData.license,
+    formData.welcomeMessage,
+    formData.initialPrompt,
+    formData.modelConfig,
+    initialData.agentId,
+    onFormChange
+  ]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    onFormChange({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [name]: value
-    });
+    }));
   };
 
   const handleModelConfigChange = (fieldName: keyof ModelConfig, value: string | number) => {
-    onFormChange({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       modelConfig: {
-        ...formData.modelConfig,
+        ...prev.modelConfig,
         [fieldName]: value
       }
-    });
+    }));
   };
 
   return (
@@ -211,13 +301,13 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
       {/* Agent Basic Information */}
       <div className="space-y-4">
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="agent-name" className="block text-sm font-medium text-gray-700">
             Agent Name <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             name="name"
-            id="name"
+            id="agent-name"
             value={formData.name}
             onChange={handleInputChange}
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -227,12 +317,12 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
         </div>
 
         <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="agent-description" className="block text-sm font-medium text-gray-700">
             Description <span className="text-red-500">*</span>
           </label>
           <textarea
             name="description"
-            id="description"
+            id="agent-description"
             rows={3}
             value={formData.description}
             onChange={handleInputChange}
@@ -243,12 +333,12 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
         </div>
 
         <div>
-          <label htmlFor="license" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="agent-license" className="block text-sm font-medium text-gray-700">
             License
           </label>
           <select
             name="license"
-            id="license"
+            id="agent-license"
             value={formData.license}
             onChange={handleInputChange}
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -260,12 +350,12 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
         </div>
 
         <div>
-          <label htmlFor="welcomeMessage" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="agent-welcomeMessage" className="block text-sm font-medium text-gray-700">
             Welcome Message
           </label>
           <textarea
             name="welcomeMessage"
-            id="welcomeMessage"
+            id="agent-welcomeMessage"
             rows={2}
             value={formData.welcomeMessage}
             onChange={handleInputChange}
@@ -275,82 +365,247 @@ const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
         </div>
 
         <div>
-          <label htmlFor="initialPrompt" className="block text-sm font-medium text-gray-700">
-          System Configuration (From the first system cell in the current chat)
+          <label htmlFor="agent-initialPrompt" className="block text-sm font-medium text-gray-700">
+            System Configuration
+            <span className="text-gray-400 font-normal"> (From the first system cell in the current chat)</span>
           </label>
-          <textarea
-            name="initialPrompt"
-            id="initialPrompt"
-            rows={10}
-            value={formData.initialPrompt}
-            onChange={handleInputChange}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            placeholder="Optional: Provide instructions that define the agent's behavior and capabilities"
-          />
+          <div className="flex gap-2">
+            <textarea
+              name="initialPrompt"
+              id="agent-initialPrompt"
+              rows={10}
+              value={formData.initialPrompt}
+              readOnly
+              onChange={handleInputChange}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              placeholder="Optional: Provide instructions that define the agent's behavior and capabilities"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const latestContent = getLatestSystemCellContent?.() || systemCellContent;
+                setFormData(prev => ({
+                  ...prev,
+                  initialPrompt: latestContent
+                }));
+              }}
+              className="mt-1 px-3 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex-shrink-0 h-fit"
+              title="Refresh from system cell"
+            >
+              ↻
+            </button>
+          </div>
         </div>
       </div>
-
-      {/* Model Configuration */}
-      {showModelConfig && (
-        <div className="border-t pt-4">
-          <ModelConfigFields
-            config={formData.modelConfig}
-            onConfigChange={handleModelConfigChange}
-          />
-        </div>
-      )}
     </div>
   );
 };
 
-// Data structure for combined agent form data
-export interface EditAgentFormData extends AgentFormData {
-  agentId?: string;
+// Separate form component for App configuration
+interface AppFormComponentProps {
+  initialData: Partial<EditAgentFormData>;
+  systemCellContent: string;
+  getLatestSystemCellContent?: () => string;
+  onFormChange: (data: EditAgentFormData) => void;
 }
 
-// Define a simple wrapper component for the canvas panel content
-interface EditAgentCanvasContentProps {
-  initialAgentData: Partial<EditAgentFormData>; // Use combined type
-  onSaveSettingsToNotebook: (data: EditAgentFormData) => void;
-  onPublishAgent: (data: EditAgentFormData, isUpdating: boolean) => Promise<string | null>;
-}
+const AppFormComponent: React.FC<AppFormComponentProps> = ({
+  initialData,
+  systemCellContent,
+  getLatestSystemCellContent,
+  onFormChange
+}) => {
+  const [formData, setFormData] = useState<AppFormData>(() => ({
+    ...DefaultAppFormData,
+    name: initialData.name || '',
+    description: initialData.description || '',
+    version: initialData.version || '0.1.0',
+    license: initialData.license || 'MIT',
+    startupScript: initialData.startupScript || systemCellContent
+  }));
+
+  // Update parent when form data changes - memoize the callback data
+  useEffect(() => {
+    const combinedData: EditAgentFormData = {
+      agentId: initialData.agentId,
+      type: 'deno-app',
+      name: formData.name,
+      description: formData.description,
+      version: formData.version,
+      license: formData.license,
+      startupScript: formData.startupScript
+    };
+    onFormChange(combinedData);
+  }, [
+    formData.name,
+    formData.description,
+    formData.version,
+    formData.license,
+    formData.startupScript,
+    initialData.agentId,
+    onFormChange
+  ]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* App Basic Information */}
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="app-name" className="block text-sm font-medium text-gray-700">
+            App Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            name="name"
+            id="app-name"
+            value={formData.name}
+            onChange={handleInputChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="Give your Deno app a name"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="app-description" className="block text-sm font-medium text-gray-700">
+            Description <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            name="description"
+            id="app-description"
+            rows={3}
+            value={formData.description}
+            onChange={handleInputChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="What does this Deno app do?"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="app-license" className="block text-sm font-medium text-gray-700">
+            License
+          </label>
+          <select
+            name="license"
+            id="app-license"
+            value={formData.license}
+            onChange={handleInputChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            {licenses.map((license) => (
+              <option key={license.value} value={license.value}>{license.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="app-startupScript" className="block text-sm font-medium text-gray-700">
+            Startup Script <span className="text-red-500">*</span>
+            <span className="text-gray-400 font-normal"> (From the first system cell in the current chat)</span>
+          </label>
+          <div className="flex gap-2">
+            <textarea
+              name="startupScript"
+              id="app-startupScript"
+              rows={15}
+              value={formData.startupScript}
+              readOnly
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              placeholder=""
+              required
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const latestContent = getLatestSystemCellContent?.() || systemCellContent;
+                setFormData(prev => ({
+                  ...prev,
+                  startupScript: latestContent
+                }));
+              }}
+              className="mt-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex-shrink-0 h-fit"
+              title="Refresh from system cell"
+            >
+              ↻
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
   initialAgentData,
+  systemCellContent = '',
+  getLatestSystemCellContent,
   onSaveSettingsToNotebook,
   onPublishAgent
 }) => {
-  // State for all form fields including ID and model config
+  // State for all form fields including ID and type selection
   const [agentId, setAgentId] = useState(initialAgentData.agentId || '');
   const [isUpdatingExisting, setIsUpdatingExisting] = useState(!!initialAgentData.agentId);
-  const [agentData, setAgentData] = useState<AgentFormData>(() => ({
-    ...DefaultAgentFormData,
+  const [selectedType, setSelectedType] = useState<'agent' | 'deno-app'>(
+    initialAgentData.type || 'agent'
+  );
+  const [currentFormData, setCurrentFormData] = useState<EditAgentFormData>(() => ({
+    agentId: initialAgentData.agentId,
+    type: initialAgentData.type || 'agent',
     name: initialAgentData.name || '',
     description: initialAgentData.description || '',
     version: initialAgentData.version || '0.1.0',
-    license: initialAgentData.license || 'CC-BY-4.0',
-    welcomeMessage: initialAgentData.welcomeMessage || 'Hi, how can I help you today?',
-    initialPrompt: initialAgentData.initialPrompt || ''
+    license: initialAgentData.license || (initialAgentData.type === 'deno-app' ? 'MIT' : 'CC-BY-4.0'),
+    welcomeMessage: initialAgentData.welcomeMessage,
+    initialPrompt: initialAgentData.initialPrompt,
+    modelConfig: initialAgentData.modelConfig,
+    startupScript: initialAgentData.startupScript
   }));
 
-  // Update local state when initial props change (e.g., notebook metadata updates)
+  // Update local state when initial props change
   useEffect(() => {
     console.log('EditAgentCanvasContent: initialAgentData changed', initialAgentData);
     setAgentId(initialAgentData.agentId || '');
     setIsUpdatingExisting(!!initialAgentData.agentId);
-    setAgentData({
-      ...DefaultAgentFormData,
+    setSelectedType(initialAgentData.type || 'agent');
+    setCurrentFormData({
+      agentId: initialAgentData.agentId,
+      type: initialAgentData.type || 'agent',
       name: initialAgentData.name || '',
       description: initialAgentData.description || '',
       version: initialAgentData.version || '0.1.0',
-      license: initialAgentData.license || 'CC-BY-4.0',
-      welcomeMessage: initialAgentData.welcomeMessage || 'Hi, how can I help you today?',
-      initialPrompt: initialAgentData.initialPrompt || ''
+      license: initialAgentData.license || (initialAgentData.type === 'deno-app' ? 'MIT' : 'CC-BY-4.0'),
+      welcomeMessage: initialAgentData.welcomeMessage,
+      initialPrompt: initialAgentData.initialPrompt,
+      modelConfig: initialAgentData.modelConfig,
+      startupScript: initialAgentData.startupScript
     });
-  }, [initialAgentData]); // This will update when notebook metadata changes
+  }, [initialAgentData, systemCellContent]);
 
-  const handleAgentFormChange = (updatedData: AgentFormData) => {
-    setAgentData(updatedData);
+  const handleFormChange = useCallback((newFormData: EditAgentFormData) => {
+    setCurrentFormData(newFormData);
+  }, []);
+
+  const handleTypeChange = (newType: 'agent' | 'deno-app') => {
+    setSelectedType(newType);
+    // Reset form data when type changes to get proper defaults
+    setCurrentFormData({
+      agentId: agentId,
+      type: newType,
+      name: '',
+      description: '',
+      version: '0.1.0',
+      license: newType === 'deno-app' ? 'MIT' : 'CC-BY-4.0',
+      // Type-specific fields will be set by the individual form components
+    });
   };
 
   const handleCreateNew = () => {
@@ -359,16 +614,16 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
   };
 
   const handleSave = () => {
-    const combinedData: EditAgentFormData = {
-      ...agentData,
-      agentId: agentId.trim() || undefined // Only include ID if it has value
+    const dataToSave = {
+      ...currentFormData,
+      agentId: agentId.trim() || undefined
     };
-    onSaveSettingsToNotebook(combinedData);
+    onSaveSettingsToNotebook(dataToSave);
 
     // Show success message
     const messageDiv = document.createElement('div');
     messageDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 transition-opacity duration-500';
-    messageDiv.textContent = 'Agent settings saved to notebook';
+    messageDiv.textContent = `${selectedType === 'agent' ? 'Agent' : 'App'} settings saved to notebook`;
     document.body.appendChild(messageDiv);
     setTimeout(() => {
       messageDiv.style.opacity = '0';
@@ -377,11 +632,23 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
   };
 
   const handlePublish = async () => {
-    const combinedData: EditAgentFormData = {
-      ...agentData,
-      agentId: agentId.trim() || undefined // Only include ID if it has value
+    // Refresh content from system cell before publishing
+    const latestSystemContent = getLatestSystemCellContent?.() || systemCellContent;
+    
+    // Update the current form data with latest system content
+    const updatedFormData = {
+      ...currentFormData,
+      agentId: agentId.trim() || undefined
     };
-    const newAgentId = await onPublishAgent(combinedData, isUpdatingExisting);
+    
+    // Update the appropriate field based on type
+    if (selectedType === 'agent') {
+      updatedFormData.initialPrompt = latestSystemContent;
+    } else {
+      updatedFormData.startupScript = latestSystemContent;
+    }
+    
+    const newAgentId = await onPublishAgent(updatedFormData, isUpdatingExisting);
 
     if (newAgentId) {
       setAgentId(newAgentId);
@@ -394,12 +661,39 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
     <div className="flex flex-col h-full">
       {/* Scrollable form content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        <h2 className="text-xl font-semibold mb-4">Edit Agent Configuration</h2>
+        <h2 className="text-xl font-semibold mb-4">
+          Edit {selectedType === 'agent' ? 'Agent' : 'Deno App'} Configuration
+        </h2>
 
-        {/* Agent ID Field (similar to PublishAgentDialog) */}
+        {/* Type Selection */}
+        <div>
+          <label htmlFor="type-select" className="block text-sm font-medium text-gray-700 mb-2">
+            Type <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="type-select"
+            value={selectedType}
+            onChange={(e) => handleTypeChange(e.target.value as 'agent' | 'deno-app')}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="agent">AI Agent</option>
+            <option value="deno-app">Deno Application</option>
+          </select>
+          <p className="mt-1 text-sm text-gray-500">
+            {selectedType === 'agent' 
+              ? 'An AI agent that can chat and execute code to help users'
+              : 'A Deno/TypeScript application that runs continuously in the background'
+            }
+          </p>
+        </div>
+
+        {/* Agent ID Field */}
         <div>
           <label htmlFor="agent-id" className="block text-sm font-medium text-gray-700 mb-1">
-            Agent ID <span className="text-gray-400 font-normal">(Optional - Leave empty to publish as new agent)</span>
+            {selectedType === 'agent' ? 'Agent' : 'App'} ID{' '}
+            <span className="text-gray-400 font-normal">
+              (Optional - Leave empty to publish as new {selectedType === 'agent' ? 'agent' : 'app'})
+            </span>
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -408,8 +702,8 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter existing agent ID to update"
-              disabled={isUpdatingExisting} // Disable if updating
+              placeholder={`Enter existing ${selectedType === 'agent' ? 'agent' : 'app'} ID to update`}
+              disabled={isUpdatingExisting}
             />
             {isUpdatingExisting && (
               <button
@@ -423,18 +717,27 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
           </div>
           {isUpdatingExisting && (
             <p className="mt-1 text-xs text-green-600">
-              Publishing will update Agent ID: {agentId}
+              Publishing will update {selectedType === 'agent' ? 'Agent' : 'App'} ID: {agentId}
             </p>
           )}
         </div>
 
-        {/* Existing AgentConfigForm */}
-        <AgentConfigForm
-          formData={agentData}
-          onFormChange={handleAgentFormChange}
-          showModelConfig={false}
-        />
-        {/* Model settings are now handled in a separate canvas window */}
+        {/* Dynamic Form based on selected type */}
+        {selectedType === 'agent' ? (
+          <AgentFormComponent
+            initialData={currentFormData}
+            systemCellContent={systemCellContent}
+            getLatestSystemCellContent={getLatestSystemCellContent}
+            onFormChange={handleFormChange}
+          />
+        ) : (
+          <AppFormComponent
+            initialData={currentFormData}
+            systemCellContent={systemCellContent}
+            getLatestSystemCellContent={getLatestSystemCellContent}
+            onFormChange={handleFormChange}
+          />
+        )}
       </div>
 
       {/* Fixed bottom button area */}
@@ -449,14 +752,16 @@ const EditAgentCanvasContent: React.FC<EditAgentCanvasContentProps> = ({
         <button
           type="button"
           onClick={handlePublish}
-          disabled={!agentData.name.trim()} // Example disable condition
+          disabled={!currentFormData.name?.trim()}
           className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-            agentData.name.trim()
+            currentFormData.name?.trim()
               ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
               : 'bg-gray-400 cursor-not-allowed'
           }`}
         >
-          {isUpdatingExisting ? 'Update & Publish Agent' : 'Publish New Agent'}
+          {isUpdatingExisting 
+            ? `Update & Publish ${selectedType === 'agent' ? 'Agent' : 'App'}` 
+            : `Publish New ${selectedType === 'agent' ? 'Agent' : 'App'}`}
         </button>
       </div>
     </div>

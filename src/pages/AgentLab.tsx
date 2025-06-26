@@ -428,7 +428,7 @@ const NotebookPage: React.FC = () => {
 
   // Handler to save agent settings from canvas to notebook metadata
   const handleSaveAgentSettingsToNotebook = useCallback((data: EditAgentFormData) => {
-    // Update or create agent artifact metadata
+    // Update or create agent artifact metadata based on type
     const agentArtifactMeta = notebookMetadata.agentArtifact ? {
       ...notebookMetadata.agentArtifact,
       id: data.agentId || notebookMetadata.agentArtifact.id || '', // Preserve existing ID if not provided
@@ -441,8 +441,16 @@ const NotebookPage: React.FC = () => {
         description: data.description,
         version: data.version,
         license: data.license,
-        welcomeMessage: data.welcomeMessage,
-        startup_script: data.initialPrompt,
+        type: data.type,
+        // Agent-specific fields
+        ...(data.type === 'agent' && {
+          welcomeMessage: data.welcomeMessage,
+          startup_script: data.initialPrompt,
+        }),
+        // App-specific fields
+        ...(data.type === 'deno-app' && {
+          startup_script: data.startupScript,
+        })
       }
     } : {
       // Create minimal structure if no artifact existed before
@@ -455,12 +463,20 @@ const NotebookPage: React.FC = () => {
         description: data.description,
         version: data.version,
         license: data.license,
-        welcomeMessage: data.welcomeMessage,
-        startup_script: data.initialPrompt,
+        type: data.type,
+        // Agent-specific fields
+        ...(data.type === 'agent' && {
+          welcomeMessage: data.welcomeMessage,
+          startup_script: data.initialPrompt,
+        }),
+        // App-specific fields
+        ...(data.type === 'deno-app' && {
+          startup_script: data.startupScript,
+        })
       }
     };
 
-    // Update notebook metadata with agent configuration
+    // Update notebook metadata with agent/app configuration
     setNotebookMetadata(prev => ({
       ...prev,
       title: data.name, // Update notebook title too
@@ -470,53 +486,66 @@ const NotebookPage: React.FC = () => {
 
     // Save notebook and show success message
     notebookOps.saveNotebook();
-    showToast('Agent settings saved to notebook', 'success');
+    showToast(`${data.type === 'agent' ? 'Agent' : 'App'} settings saved to notebook`, 'success');
   }, [notebookMetadata, setNotebookMetadata, notebookOps.saveNotebook]);
 
   // Handler to publish agent from canvas
   const handlePublishAgentFromCanvas = useCallback(async (data: EditAgentFormData, isUpdating: boolean): Promise<string | null> => {
     if (!artifactManager || !isLoggedIn) {
-      showToast('You need to be logged in to publish an agent', 'error');
+      showToast(`You need to be logged in to publish ${data.type === 'agent' ? 'an agent' : 'a Deno app'}`, 'error');
       return null;
     }
 
     const toastId = 'publishing-agent-canvas';
-    showToast('Publishing agent...', 'loading', { id: toastId });
+    showToast(`Publishing ${data.type === 'agent' ? 'agent' : 'Deno app'}...`, 'loading', { id: toastId });
 
     // Ensure notebook is saved before publishing
     await notebookOps.saveNotebook();
 
     try {
-      // Get system cell content for the startup script
-      const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
-      const systemCellContent = systemCell ? systemCell.content : '';
-
-      // Create comprehensive agent manifest
-      // SECURITY: Sanitize agent settings to remove API keys and other sensitive data
-      const sanitizedModelConfig = sanitizeAgentSettingsForPublishing(agentSettings);
+      let startupScript = '';
       
-      const rawManifest = {
+      if (data.type === 'agent') {
+        // For agents, get system cell content for the startup script
+        const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
+        startupScript = systemCell ? systemCell.content : '';
+      } else {
+        // For deno-apps, use the startup script from the form
+        startupScript = data.startupScript || '';
+      }
+
+      // Create comprehensive manifest
+      let rawManifest: any = {
         name: data.name,
         description: data.description,
         version: data.version,
         license: data.license,
-        type: 'agent',
+        type: data.type,
         created_at: new Date().toISOString(),
-        startup_script: systemCellContent,
-        welcomeMessage: data.welcomeMessage,
-        modelConfig: sanitizedModelConfig, // Use sanitized settings without API keys
-        // Preserve notebook state in chat template
-        chat_template: {
-          metadata: notebookMetadata,
-          cells: cellManager.current?.getCurrentCellsContent() || []
-        }
+        startup_script: startupScript,
       };
 
+      if (data.type === 'agent') {
+        // SECURITY: Sanitize agent settings to remove API keys and other sensitive data
+        const sanitizedModelConfig = sanitizeAgentSettingsForPublishing(agentSettings);
+        
+        rawManifest = {
+          ...rawManifest,
+          welcomeMessage: data.welcomeMessage,
+          modelConfig: sanitizedModelConfig, // Use sanitized settings without API keys
+          // Preserve notebook state in chat template
+          chat_template: {
+            metadata: notebookMetadata,
+            cells: cellManager.current?.getCurrentCellsContent() || []
+          }
+        };
+      }
+
       // SECURITY: Apply comprehensive security sanitization (automatically removes API keys)
-      logSecurityWarning('Agent Publishing');
+      logSecurityWarning(`${data.type === 'agent' ? 'Agent' : 'Deno App'} Publishing`);
       const manifest = createSafeAgentManifest(rawManifest);
 
-      console.log('[AgentLab] Publishing agent:', {
+      console.log(`[AgentLab] Publishing ${data.type}:`, {
         isUpdating,
         agentId: data.agentId,
         manifest: { ...manifest, startup_script: '<<SCRIPT>>', _security: manifest._security } // Log security info
@@ -525,28 +554,28 @@ const NotebookPage: React.FC = () => {
       let artifact;
 
       if (isUpdating && data.agentId) {
-        // Update existing agent
-        console.log('[AgentLab] Updating existing agent:', data.agentId);
+        // Update existing artifact
+        console.log(`[AgentLab] Updating existing ${data.type}:`, data.agentId);
         artifact = await artifactManager.edit({
           artifact_id: data.agentId,
-          type: "agent",
+          type: data.type,
           manifest: manifest,
           version: "new",
           stage: true,
           _rkwargs: true
         });
-        console.log('[AgentLab] Agent updated successfully:', artifact);
+        console.log(`[AgentLab] ${data.type} updated successfully:`, artifact);
       } else {
-        // Create new agent
-        console.log('[AgentLab] Creating new agent');
+        // Create new artifact
+        console.log(`[AgentLab] Creating new ${data.type}`);
         artifact = await artifactManager.create({
           parent_id: `${SITE_ID}/agents`,
-          type: "agent",
+          type: data.type,
           manifest: manifest,
           stage: true,
           _rkwargs: true
         });
-        console.log('[AgentLab] Agent created successfully:', artifact);
+        console.log(`[AgentLab] ${data.type} created successfully:`, artifact);
       }
 
       // Commit the artifact to finalize changes
@@ -560,9 +589,9 @@ const NotebookPage: React.FC = () => {
       // Show success message after commit
       dismissToast(toastId);
       if (isUpdating && data.agentId) {
-        showToast('Agent updated successfully!', 'success');
+        showToast(`${data.type === 'agent' ? 'Agent' : 'Deno app'} updated successfully!`, 'success');
       } else {
-        showToast('Agent published successfully!', 'success');
+        showToast(`${data.type === 'agent' ? 'Agent' : 'Deno app'} published successfully!`, 'success');
       }
 
       // Update notebook metadata with published artifact info
@@ -576,7 +605,7 @@ const NotebookPage: React.FC = () => {
 
       setNotebookMetadata(prev => ({
         ...prev,
-        title: manifest.name, // Ensure title matches published agent
+        title: manifest.name, // Ensure title matches published artifact
         agentArtifact: finalAgentArtifactMeta,
         modified: new Date().toISOString()
       }));
@@ -587,9 +616,9 @@ const NotebookPage: React.FC = () => {
       return artifact.id; // Return ID on success
 
     } catch (error) {
-      console.error('Error publishing agent from canvas:', error);
+      console.error(`Error publishing ${data.type} from canvas:`, error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      showToast(`Failed to publish agent: ${errorMessage}`, 'error', { id: toastId });
+      showToast(`Failed to publish ${data.type === 'agent' ? 'agent' : 'Deno app'}: ${errorMessage}`, 'error', { id: toastId });
       return null;
     }
   }, [
@@ -746,21 +775,31 @@ const NotebookPage: React.FC = () => {
   const handleShowEditAgentInCanvas = useCallback(() => {
     const agentArtifact = notebookMetadata.agentArtifact;
     const systemCell = cells.find(cell => cell.metadata?.role === CELL_ROLES.SYSTEM && cell.type === 'code');
+    const systemCellContent = systemCell ? systemCell.content : '';
 
     const initialAgentData: Partial<EditAgentFormData> = {
       agentId: agentArtifact?.id || '',
+      type: (agentArtifact?.manifest?.type as 'agent' | 'deno-app') || 'agent',
       name: agentArtifact?.name || notebookMetadata.title || '',
       description: agentArtifact?.description || '',
       version: agentArtifact?.version || '0.1.0',
       license: agentArtifact?.manifest?.license || 'CC-BY-4.0',
-      welcomeMessage: agentArtifact?.manifest?.welcomeMessage || 'Hi, how can I help you today?',
-      initialPrompt: systemCell ? systemCell.content : ''
+      // Agent-specific fields
+      welcomeMessage: agentArtifact?.manifest?.welcome_message || '',
+      initialPrompt: systemCellContent,
+      modelConfig: agentArtifact?.manifest?.model_config ? {
+        baseURL: agentArtifact.manifest.model_config.base_url || 'https://api.openai.com/v1/',
+        // apiKey: agentArtifact.manifest.model_config.api_key || '', // never publish api keys
+        model: agentArtifact.manifest.model_config.model || 'gpt-4o-mini',
+        temperature: agentArtifact.manifest.model_config.temperature || 1.0
+      } : undefined,
+      // App-specific fields
+      startupScript: agentArtifact?.manifest?.startup_script || systemCellContent
     };
 
-    const windowId = 'edit-agent-config';
-    const windowExists = canvasPanel.hyphaCoreWindows.some(win => win.id === windowId);
+    const windowId = 'edit-agent-canvas';
 
-    if (windowExists) {
+    if (canvasPanel.hyphaCoreWindows.some(win => win.id === windowId)) {
       canvasPanel.setHyphaCoreWindows(prev => prev.map(win => {
         if (win.id === windowId) {
           return {
@@ -769,6 +808,22 @@ const NotebookPage: React.FC = () => {
             component: (
               <EditAgentCanvasContent
                 initialAgentData={initialAgentData}
+                systemCellContent={systemCellContent}
+                getLatestSystemCellContent={() => {
+                  // Access the current cells from cellManager
+                  const currentCells = cellManager.current?.cells || [];
+                  
+                  // Try both sources - prefer cellManager if available
+                  const cellsToSearch = currentCells.length > 0 ? currentCells : cells;
+                  
+                  const latestSystemCell = cellsToSearch.find(cell => {
+                    const isSystemRole = cell.metadata?.role === CELL_ROLES.SYSTEM || cell.role === CELL_ROLES.SYSTEM;
+                    const isCodeType = cell.type === 'code';
+                    return isSystemRole && isCodeType;
+                  });
+                  
+                  return latestSystemCell ? latestSystemCell.content : '';
+                }}
                 onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
                 onPublishAgent={handlePublishAgentFromCanvas}
               />
@@ -784,6 +839,22 @@ const NotebookPage: React.FC = () => {
         component: (
           <EditAgentCanvasContent
             initialAgentData={initialAgentData}
+            systemCellContent={systemCellContent}
+            getLatestSystemCellContent={() => {
+              // Access the current cells from cellManager
+              const currentCells = cellManager.current?.cells || [];
+              
+              // Try both sources - prefer cellManager if available
+              const cellsToSearch = currentCells.length > 0 ? currentCells : cells;
+              
+              const latestSystemCell = cellsToSearch.find(cell => {
+                const isSystemRole = cell.metadata?.role === CELL_ROLES.SYSTEM || cell.role === CELL_ROLES.SYSTEM;
+                const isCodeType = cell.type === 'code';
+                return isSystemRole && isCodeType;
+              });
+              
+              return latestSystemCell ? latestSystemCell.content : '';
+            }}
             onSaveSettingsToNotebook={handleSaveAgentSettingsToNotebook}
             onPublishAgent={handlePublishAgentFromCanvas}
           />
@@ -794,7 +865,7 @@ const NotebookPage: React.FC = () => {
 
     canvasPanel.setActiveCanvasTab(windowId);
     canvasPanel.setShowCanvasPanel(true);
-  }, [notebookMetadata, cells, canvasPanel]);
+  }, [notebookMetadata, cells, canvasPanel, handleSaveAgentSettingsToNotebook, handlePublishAgentFromCanvas, cellManager]);
 
   // Move cell handlers
   const handleMoveCellUp = useCallback(() => {
