@@ -25,6 +25,28 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
       }
     }
   }, [outputs]);
+
+  // Handle keyboard events to allow copying text from output without triggering parent cell copy
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Check for Ctrl+C (Windows/Linux) or Cmd+C (Mac)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      const selection = window.getSelection();
+      if (selection && selection.toString().length > 0) {
+        // If there's selected text within the output, stop propagation
+        // to prevent parent cell from handling the copy event
+        e.stopPropagation();
+      }
+    }
+  };
+
+  // Handle copy events to prevent parent cell from overriding
+  const handleCopy = (e: React.ClipboardEvent) => {
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) {
+      // If there's selected text, stop propagation to let default copy behavior work
+      e.stopPropagation();
+    }
+  };
   
   // Skip rendering if no outputs
   if (!outputs || outputs.length === 0) {
@@ -60,6 +82,9 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
     <div 
       ref={containerRef} 
       className={`jupyter-output-container output-area ${className} bg-gray-50 rounded-b-md`}
+      onKeyDown={handleKeyDown}
+      onCopy={handleCopy}
+      tabIndex={-1}
     >
       {/* Render all text and error outputs together - don't separate them */}
       <div className="output-text-group">
