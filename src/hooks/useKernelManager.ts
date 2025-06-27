@@ -171,7 +171,7 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
         
         // Get the Deno service with timeout
         const deno = await Promise.race([
-          server.getService('hypha-agents/deno-app-engine', { mode: 'random' }),
+          server.getService('hypha-agents/deno-app-engine', { mode: "select:min:getActiveKernelCount" }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Service connection timeout')), 15000)
           )
