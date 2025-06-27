@@ -13,14 +13,7 @@ type CellType = 'markdown' | 'code' | 'thinking';
 type ExecutionState = "idle" | "running" | "success" | "error";
 type CellRole = "user" | "assistant" | "system";
 
-// Create convert instance
-const convert = new Convert({
-  fg: '#000',
-  bg: '#fff',
-  newline: true,
-  escapeXML: true,
-  stream: false
-});
+
 
 
 const stripAnsi = (str: string) => {
@@ -475,10 +468,9 @@ export class CellManager {
     // Process stderr if exists
     if (stderrContent) {
       try {
-        const htmlContent = convert.toHtml(stderrContent);
         processedItems.push({
           type: 'stderr',
-          content: htmlContent,
+          content: stripAnsi(stderrContent),
           attrs: {
             className: 'output-area error-output',
             isProcessedAnsi: true,
@@ -727,8 +719,7 @@ export class CellManager {
       // Process ANSI codes in the error message
       if (errorMessage.includes("[0;") || errorMessage.includes("[1;")) {
         try {
-          const htmlContent = convert.toHtml(errorMessage);
-          content = htmlContent;
+          content = stripAnsi(errorMessage);
           isProcessedAnsi = true;
         } catch (e) {
           console.error("Error converting ANSI in error message:", e);

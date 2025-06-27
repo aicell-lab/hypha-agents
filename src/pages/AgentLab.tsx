@@ -199,7 +199,6 @@ const NotebookPage: React.FC = () => {
       if (error.name === 'AbortError') {
           console.log('[AgentLab] Hypha Core service setup explicitly aborted.');
       } else {
-          console.error('[AgentLab] Failed to set up notebook service:', error);
           showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
       }
       setHyphaCoreApi(null);

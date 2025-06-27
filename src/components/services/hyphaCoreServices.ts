@@ -210,7 +210,7 @@ export const setupNotebookService = async ({
     
     const token = await server.generateToken();
     await executeCode(`import micropip
-await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http', 'ipywidgets'])
+await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http'])
 import pyodide_http
 pyodide_http.patch_all()
 %matplotlib inline
@@ -233,16 +233,21 @@ os.environ['HYPHA_USER_ID'] = '${server.config.user.id}'
 print("Environment variables set successfully.")
     `, {
       onOutput: (output: any) => {
-        console.log(output);
+        if (output && output.type === 'stderr') {
+          console.error("[Notebook] Error:", output.content);
+        } else if (output && output.type === 'stdout') {
+          console.log("[Notebook] Stdout:", output.content);
+        } else {
+          console.log("[Notebook] Output:", output);
+        }
       },
       onStatus: (status: any) => {
-        console.log(status);
+        console.log("[Notebook] Status:", status);
       }
     });
 
     return api;
   } catch (error) {
-    console.error("Failed to register notebook service:", error);
     throw error;
   }
 };

@@ -112,7 +112,7 @@ export const createExecuteCodeFunction = (
           const errorText = errorData.traceback ? 
             errorData.traceback.join('\n') :
             `${errorData.ename || 'Error'}: ${errorData.evalue || 'Unknown error'}`;
-          
+          console.error("Failed to execute code:", code, errorData);
           addKernelLogEntry({ type: 'error', content: errorText, cellId });
           onOutput?.({
             type: 'stderr', 
@@ -145,9 +145,8 @@ export const createExecuteCodeFunction = (
     } catch (error) {
       // Handle errors during stream creation or processing
       if (!isTimedOut) {
-        console.error('[Deno Executor] Error executing code:', error);
         const errorMsg = error instanceof Error ? error.message : String(error);
-        
+        console.error('[Deno Executor] Error executing code:', errorMsg);
         addKernelLogEntry({ 
           type: 'error', 
           content: `Execution failed: ${errorMsg}`, 
@@ -222,7 +221,7 @@ const processKernelOutput = (
         content: errorText,
         short_content: errorText
       });
-      break;
+      throw new Error(errorText);
       
     case 'display_data':
     case 'update_display_data':

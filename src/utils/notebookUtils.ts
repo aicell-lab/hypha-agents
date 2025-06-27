@@ -1,14 +1,5 @@
 import { NotebookCell, NotebookData, defaultNotebookMetadata } from '../types/notebook';
-import Convert from 'ansi-to-html';
 
-// Create a converter for ANSI codes to HTML
-export const convert = new Convert({
-  fg: '#000',
-  bg: '#fff',
-  newline: true,
-  escapeXML: true,
-  stream: false
-});
 
 // Strip ANSI escape codes from a string
 export const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');

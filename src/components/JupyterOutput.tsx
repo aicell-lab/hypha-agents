@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { OutputItem } from '../types/notebook';
 import { executeScripts } from '../utils/script-utils';
-import { processAnsiInOutputElement } from '../utils/ansi-utils';
-
 
 interface JupyterOutputProps {
   outputs: OutputItem[];
@@ -21,11 +19,6 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
       // Execute any scripts and process ANSI codes
       try{
         executeScripts(containerRef.current);
-        // Only process ANSI codes for elements that haven't been pre-processed
-        const nonProcessedElements = containerRef.current.querySelectorAll('.output-item:not(.ansi-processed)');
-        nonProcessedElements.forEach(el => {
-          processAnsiInOutputElement(el as HTMLElement);
-        });
       }
       catch(e){
         console.error(e)
@@ -38,8 +31,8 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
     return null;
   }
   
-  // Group outputs by type for better organization
-  const textOutputs = outputs.filter(o => 
+  // Separate outputs by type, but ensure both normal and error outputs are always shown
+  const textAndErrorOutputs = outputs.filter(o => 
     o.type === 'stdout' || o.type === 'stderr' || o.type === 'text' || o.type === 'error'
   );
   
@@ -68,31 +61,20 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
       ref={containerRef} 
       className={`jupyter-output-container output-area ${className} bg-gray-50 rounded-b-md`}
     >
-      {/* Render text outputs first */}
-      {textOutputs.length > 0 && (
-        <div className="output-text-group">
-          {textOutputs.map((output, index) => {
-            // Check if this is ANSI pre-processed content
-            const hasAnsi = output.content.includes('<span style="color:') || 
-                          output.attrs?.isProcessedAnsi === true;
-            const outputId = `text-${index}`;
-            return (
-              <div 
-                key={outputId} 
-                className={`output-item ${hasAnsi ? 'ansi-processed' : ''}`}
-              >
-                {hasAnsi ? (
-                  <div dangerouslySetInnerHTML={{ __html: output.content }} 
-                       className={`text-${output.type === 'stderr' || output.type === 'error' ? 'red-600' : 'gray-700'} ${wrapClass} text-sm py-1 font-mono ${output.type === 'stderr' || output.type === 'error' ? 'error-output' : ''} output-area`} />
-                ) : (
-                  renderOutput(output, wrapLongLines, outputId, expandedOutputs[outputId], toggleOutputExpansion)
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      
+      {/* Render all text and error outputs together - don't separate them */}
+      <div className="output-text-group">
+        {textAndErrorOutputs.map((output, index) => {
+          const outputId = `text-${index}`;
+          return (
+            <div 
+              key={outputId} 
+              className={`output-item ${output.attrs?.isProcessedAnsi ? 'ansi-processed' : ''}`}
+            >
+              {renderOutput(output, wrapLongLines, outputId, expandedOutputs[outputId], toggleOutputExpansion)}
+            </div>
+          );
+        })}
+      </div>
       {/* Render HTML outputs next */}
       {htmlOutputs.length > 0 && (
         <div className="output-html-group">
@@ -165,7 +147,8 @@ const renderOutput = (
   const renderCollapsibleText = (
     content: string, 
     className: string, 
-    isHtml = false
+    isHtml = false,
+    isErrorType = false
   ) => {
     const lineCount = content.split('\n').length;
     const MAX_LINES = 16;
@@ -180,6 +163,9 @@ const renderOutput = (
     }
     
     // Content is too long, decide whether to collapse it
+    const buttonColorClass = isErrorType ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600';
+    const collapseButtonColorClass = isErrorType ? 'bg-red-400 hover:bg-red-500' : 'bg-gray-500 hover:bg-gray-600';
+    
     if (!isExpanded) {
       // Show only the first MAX_LINES lines
       const truncatedContent = content.split('\n').slice(0, MAX_LINES).join('\n');
@@ -192,7 +178,7 @@ const renderOutput = (
           )}
           <div className="text-center mt-2 mb-1">
             <button 
-              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
+              className={`${buttonColorClass} text-white px-3 py-1 rounded text-sm`}
               onClick={() => toggleExpansion && toggleExpansion(outputId)}
             >
               Show all outputs ({lineCount} lines)
@@ -211,7 +197,7 @@ const renderOutput = (
           )}
           <div className="text-center mt-2 mb-1">
             <button 
-              className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+              className={`${collapseButtonColorClass} text-white px-3 py-1 rounded text-sm`}
               onClick={() => toggleExpansion && toggleExpansion(outputId)}
             >
               Collapse ({lineCount} lines)
@@ -229,7 +215,8 @@ const renderOutput = (
       return renderCollapsibleText(
         processedStdout, 
         `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
-        processedStdout !== output.content
+        processedStdout !== output.content,
+        false
       );
     
     case 'stderr':
@@ -237,6 +224,7 @@ const renderOutput = (
         return renderCollapsibleText(
           output.content, 
           `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`,
+          true,
           true
         );
       } else {
@@ -245,7 +233,8 @@ const renderOutput = (
         return renderCollapsibleText(
           processedStderr, 
           `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`,
-          processedStderr !== output.content
+          processedStderr !== output.content,
+          true
         );
       }
     
@@ -254,6 +243,7 @@ const renderOutput = (
         return renderCollapsibleText(
           output.content, 
           `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`,
+          true,
           true
         );
       } else {
@@ -262,7 +252,8 @@ const renderOutput = (
         return renderCollapsibleText(
           processedError, 
           `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`,
-          processedError !== output.content
+          processedError !== output.content,
+          true
         );
       }
     
@@ -282,7 +273,8 @@ const renderOutput = (
         return renderCollapsibleText(
           output.content, 
           `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`,
-          true
+          true,
+          false
         );
       } else {
         // Process URLs in text content
@@ -290,7 +282,8 @@ const renderOutput = (
         return renderCollapsibleText(
           processedText, 
           `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
-          processedText !== output.content
+          processedText !== output.content,
+          false
         );
       }
     
@@ -302,7 +295,8 @@ const renderOutput = (
           return renderCollapsibleText(
             output.content, 
             `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`,
-            true
+            true,
+            false
           );
         } else {
           // Process URLs in default content
@@ -310,7 +304,8 @@ const renderOutput = (
           return renderCollapsibleText(
             processedDefault, 
             `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
-            processedDefault !== output.content
+            processedDefault !== output.content,
+            false
           );
         }
       }

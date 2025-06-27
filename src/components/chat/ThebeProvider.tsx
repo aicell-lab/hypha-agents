@@ -1,7 +1,7 @@
 import React, { useEffect, useState, createContext, useContext, useRef, useCallback } from 'react';
 import getSetupCode from './StartupCode';
 import { executeScripts } from '../../utils/script-utils';
-import { processTextOutput, processAnsiInOutputElement } from '../../utils/ansi-utils';
+import { processTextOutput } from '../../utils/ansi-utils';
 import { useHyphaStore } from '../../store/hyphaStore';
 
 // Define types for JupyterLab services
@@ -475,7 +475,7 @@ export const ThebeProvider: React.FC<ThebeProviderProps> = ({ children, lazy = f
         const installFuture = kernel.requestExecute({
           code: `
 import micropip
-await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http', 'ipywidgets'])
+await micropip.install(['numpy', 'nbformat', 'pandas', 'matplotlib', 'plotly', 'hypha-rpc', 'pyodide-http'])
 import pyodide_http
 pyodide_http.patch_all()
 %matplotlib inline
@@ -871,11 +871,14 @@ print(f"{sys.version.split()[0]}")
             break;
           case 'error':
             const errorText = msg.content.traceback.join('\n');
+            // Process ANSI codes in error text to HTML
+            const htmlWithAnsi = processTextOutput(errorText);
             logEntryData = { type: 'error', content: errorText, cellId };
             onOutput?.({
               type: 'stderr',
-              content: errorText,
-              short_content: createShortContent(errorText, 'stderr')
+              content: htmlWithAnsi,
+              short_content: createShortContent(errorText, 'stderr'),
+              attrs: { isProcessedAnsi: true }
             });
             onStatus?.('Error');
             break;
@@ -1034,8 +1037,9 @@ print(f"{sys.version.split()[0]}")
             logEntryData = { type: 'error', content: errorText, cellId };
             onOutput?.({
               type: 'stderr',
-              content: errorText,
-              short_content: createShortContent(errorText, 'stderr')
+              content: htmlWithAnsi,
+              short_content: createShortContent(errorText, 'stderr'),
+              attrs: { isProcessedAnsi: true }
             });
             onStatus?.('Error');
             break;
