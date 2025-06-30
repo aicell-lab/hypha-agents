@@ -1,10 +1,8 @@
 import React from "react";
 import { OutputItem } from "../types/notebook";
-import Convert from "ansi-to-html";
 import { v4 as uuidv4 } from 'uuid';
-import localforage from 'localforage';
-import { ChatMessage } from '../utils/chatCompletion';
 import { CellHistoryManager } from '../utils/CellHistoryManager';
+import { processTextOutput } from '../utils/ansi-utils';
 // REMOVE useProjects import
 // import { useProjects } from '../providers/ProjectsProvider';
 
@@ -470,7 +468,7 @@ export class CellManager {
       try {
         processedItems.push({
           type: 'stderr',
-          content: stripAnsi(stderrContent),
+          content: processTextOutput(stderrContent),
           attrs: {
             className: 'output-area error-output',
             isProcessedAnsi: true,
@@ -633,7 +631,7 @@ export class CellManager {
   }
 
   // Move to next cell
-  moveToNextCell(currentCellId: string): void {
+  moveToNextCell(currentCellId: string, shouldScroll: boolean = true): void {
     const currentIndex = this.cells.findIndex((c) => c.id === currentCellId);
     if (currentIndex === -1) return;
 
@@ -642,8 +640,10 @@ export class CellManager {
       const nextCell = this.cells[currentIndex + 1];
       this.setActiveCellId(nextCell.id);
 
-      // Focus the cell
-      this.focusCell(nextCell.id);
+      // Focus the cell (with optional scrolling)
+      if (shouldScroll) {
+        this.focusCell(nextCell.id);
+      }
 
       // If it's a markdown cell, ensure it's not in edit mode
       if (nextCell.type === "markdown") {
@@ -653,7 +653,9 @@ export class CellManager {
       // Create and focus new cell at the end
       const newCellId = this.addCell("code", "", "user");
       this.setActiveCellId(newCellId);
-      this.focusCell(newCellId);
+      if (shouldScroll) {
+        this.focusCell(newCellId);
+      }
     }
   }
 
@@ -666,7 +668,6 @@ export class CellManager {
     if (!cell || cell.type !== "code" || !this.executeCodeFn) {
         throw new Error("Error: Cell not found or not a code cell");
     }
-
     // Get the current code from the editor ref
     const editorRef = this.editorRefs.current[id]?.current;
     const currentCode = editorRef?.getValue?.() || cell.content;
@@ -677,8 +678,34 @@ export class CellManager {
     // set output to be visible
     this.showCellOutput(id);
 
+    // Scroll to the output area (execution counter) immediately when execution starts
+    setTimeout(() => {
+      const cellElement = document.querySelector(`[data-cell-id="${id}"]`);
+      if (cellElement) {
+        // Look for the execution counter that's next to the output area (not the one at the top)
+        // Try multiple selectors to find the execution counter near the output
+        const outputExecutionCounter = cellElement.querySelector('.output-container .execution-count, .jupyter-output .execution-count, .cell-output .execution-count, .output-area .execution-count') ||
+                                     cellElement.querySelector('.output-container + .execution-count, .jupyter-output + .execution-count') ||
+                                     cellElement.querySelector('.output-wrapper .execution-count, .execution-count:not(:first-child)') ||
+                                     cellElement.querySelector('.jupyter-output-container, .output-area-container') ||
+                                     cellElement.querySelector('.execution-count:last-of-type');
+        
+        if (outputExecutionCounter) {
+          outputExecutionCounter.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          // Fallback to cell top if no output execution counter found
+          cellElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }, 100);
+
     // Update to running state
     this.updateCellExecutionState(id, "running");
+
+    // If shouldMoveFocus is true, move to the next cell before execution starts
+    if (shouldMoveFocus) {
+      this.moveToNextCell(id, false); // Don't scroll when moving focus
+    }
 
     try {
       const outputs: OutputItem[] = [];
@@ -696,17 +723,14 @@ export class CellManager {
         onStatus: (status: string) => {
           if (status === "Completed") {
             this.updateCellExecutionState(id, "success", outputs);
+            // No scrolling after completion - removed this
           } else if (status === "Error") {
             this.updateCellExecutionState(id, "error", outputs);
+            // No scrolling after error - removed this
           }
         },
       });
 
-      // If shouldMoveFocus is true, move to the next cell immediately before execution
-      if (shouldMoveFocus) {
-        this.moveToNextCell(id);
-      }
-      
       // For system cells, return full output; for regular cells, return short output
       const outputToReturn = isSystemCell ? fullOutput : shortOutput;
       return `[Cell Id: ${id}]\n${stripAnsi(outputToReturn.trim()) || "Code executed successfully."}`;
@@ -716,26 +740,29 @@ export class CellManager {
       let content = errorMessage;
       let isProcessedAnsi = false;
 
-      // Process ANSI codes in the error message
-      if (errorMessage.includes("[0;") || errorMessage.includes("[1;")) {
-        try {
-          content = stripAnsi(errorMessage);
-          isProcessedAnsi = true;
-        } catch (e) {
-          console.error("Error converting ANSI in error message:", e);
-        }
+      // Process ANSI codes in the error message - use processTextOutput instead of stripAnsi
+      if (errorMessage.includes("[0;") || errorMessage.includes("[1;") || errorMessage.includes('\u001b[')) {
+        content = processTextOutput(errorMessage);
+        isProcessedAnsi = true;
       }
 
-      this.updateCellExecutionState(id, "error", [
-        {
-          type: "stderr",
-          content,
-          attrs: {
-            className: "output-area error-output",
-            isProcessedAnsi,
-          },
+      // Get current outputs and append error instead of replacing
+      const currentCell = this.cells.find((c) => c.id === id);
+      const currentOutputs = currentCell?.output || [];
+      const errorOutput: OutputItem = {
+        type: "stderr",
+        content,
+        short_content: stripAnsi(errorMessage),
+        attrs: {
+          className: "output-area error-output",
+          isProcessedAnsi,
         },
-      ]);
+      };
+
+      this.updateCellExecutionState(id, "error", [...currentOutputs, errorOutput]);
+      
+      // No scrolling after error - removed this
+      
       return `[Cell Id: ${id}]\nError executing code: ${errorMessage}`;
     }
   }
@@ -871,7 +898,24 @@ export class CellManager {
     setTimeout(() => {
       const cellElement = document.querySelector(`[data-cell-id="${cellId}"]`);
       if (cellElement) {
-        cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // For tall cells with output, scroll to show the output area
+        const outputElement = cellElement.querySelector('.jupyter-output-container, .output-area-container');
+        if (outputElement) {
+          // Check if the output is tall - if so, scroll to the bottom of the output
+          const outputHeight = outputElement.getBoundingClientRect().height;
+          const windowHeight = window.innerHeight;
+          
+          if (outputHeight > windowHeight * 0.5) {
+            // Output is tall, scroll to the bottom of the output to show results
+            outputElement.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          } else {
+            // Output is not too tall, scroll to center the cell
+            cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        } else {
+          // No output, scroll to center the cell
+          cellElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }
     }, timeout);
   }

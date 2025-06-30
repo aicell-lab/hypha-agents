@@ -248,7 +248,7 @@ const renderOutput = (
       if (isPreProcessed) {
         return renderCollapsibleText(
           output.content, 
-          `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`,
+          `${wrapClass} text-sm py-1 font-mono error-output output-area`,
           true,
           true
         );
@@ -267,7 +267,7 @@ const renderOutput = (
       if (isPreProcessed) {
         return renderCollapsibleText(
           output.content, 
-          `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area ansi-processed`,
+          `${wrapClass} text-sm py-1 font-mono error-output output-area`,
           true,
           true
         );
@@ -297,7 +297,7 @@ const renderOutput = (
       if (isPreProcessed) {
         return renderCollapsibleText(
           output.content, 
-          `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`,
+          `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
           true,
           false
         );
@@ -319,7 +319,7 @@ const renderOutput = (
         if (isPreProcessed) {
           return renderCollapsibleText(
             output.content, 
-            `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area ansi-processed`,
+            `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
             true,
             false
           );
