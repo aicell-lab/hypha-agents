@@ -168,48 +168,132 @@ You have access to Hypha services through the kernel environment. These services
 - Always print() the results to see outputs in observations
 
 ### API Access
-Access to internal APIs through the \`api\` object (both return streaming generators):
+Access to internal APIs through the \`api\` object (both return strings directly):
 
-**Response Types (Both APIs):**
-- \`text_chunk\` (streaming): Intermediate pieces as they arrive
-- \`text\` (complete): Final complete response
-
-**Vision API Examples:**
+**Vision API (inspectImages):**
 \`\`\`python
-# Stream processing with all chunks
-async for chunk in api.inspectImages({"images": [{"url": "data:image/..."}], "query": "Describe this"}):
-    if chunk["type"] == "text_chunk":
-        print(chunk["content"], end="")  # Stream piece by piece
-    elif chunk["type"] == "text":
-        print(f"\\nFinal: {chunk['content']}")  # Complete result
-        break
+# Basic image inspection
+result = await api.inspectImages({
+    "images": [{"url": "data:image/png;base64,iVBORw0KGgoAAAANS..."}],
+    "query": "Describe what you see in this image",
+    "contextDescription": "Medical scan analysis"
+})
+print(result)
 
-# Quick final result only
-async for chunk in api.inspectImages({"images": [...], "query": "..."}):
-    if chunk["type"] == "text":
-        result = chunk["content"]
-        break
+# With structured output using Pydantic models
+import micropip
+await micropip.install("pydantic")
+from pydantic import BaseModel, Field
+from typing import List
+import json
+
+class ImageAnalysis(BaseModel):
+    description: str = Field(description="Detailed description of the image")
+    confidence: float = Field(ge=0, le=1, description="Confidence score between 0 and 1")
+    objects: List[str] = Field(description="List of objects detected in the image")
+
+# Generate JSON schema from Pydantic model
+schema = ImageAnalysis.model_json_schema()
+
+result = await api.inspectImages({
+    "images": [{"url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABA..."}],
+    "query": "Identify objects in this image",
+    "contextDescription": "Object detection task",
+    "outputSchema": schema
+})
+
+# API returns parsed object directly when outputSchema is provided
+print(f"Description: {result['description']}")
+print(f"Confidence: {result['confidence']}")
+print(f"Objects: {result['objects']}")
+
+# Or validate with Pydantic for type safety
+analysis = ImageAnalysis.model_validate(result)
+print(f"Description: {analysis.description}")
+print(f"Confidence: {analysis.confidence}")
+print(f"Objects: {analysis.objects}")
 \`\`\`
 
-**Chat API Examples:**
+**Chat API (chatCompletion):**
 \`\`\`python
-# Stream processing
-full_response = ""
-async for chunk in api.chatCompletion(messages, {"max_steps": 5}):
-    if chunk["type"] == "text_chunk":
-        print(chunk["content"], end="")  # Stream smoothly
-    elif chunk["type"] == "text":
-        full_response = chunk["content"]  # Final complete response
-        break
+# Basic chat completion
+messages = [
+    {"role": "user", "content": "What is the capital of France?"}
+]
+result = await api.chatCompletion({"messages": messages})
+print(result)
 
-# Quick final result only
-async for chunk in api.chatCompletion(messages):
-    if chunk["type"] == "text":
-        result = chunk["content"]
-        break
+# With custom parameters
+result = await api.chatCompletion({
+    "messages": messages,
+    "max_tokens": 500
+})
+print(result)
+
+# With JSON object response format
+result = await api.chatCompletion({
+    "messages": [{"role": "user", "content": "Give me weather data for Paris in JSON format"}],
+    "response_format": {"type": "json_object"}
+})
+print(result)
+
+# With structured JSON schema response using Pydantic
+import micropip
+await micropip.install("pydantic")
+from pydantic import BaseModel, Field
+import json
+
+class WeatherResponse(BaseModel):
+    city: str = Field(description="Name of the city")
+    temperature: float = Field(description="Temperature in Celsius")
+    condition: str = Field(description="Weather condition description")
+
+# Create schema details for OpenAI API
+schema_details = {
+    "name": "weather_response",
+    "description": "Weather information response",
+    "schema": WeatherResponse.model_json_schema()
+}
+
+result = await api.chatCompletion({
+    "messages": [{"role": "user", "content": "Get weather for Paris"}],
+    "response_format": {
+        "type": "json_schema",
+        "json_schema": schema_details
+    }
+})
+
+# API returns parsed object directly when response_format is json_object or json_schema
+print(f"City: {result['city']}")
+print(f"Temperature: {result['temperature']}°C")
+print(f"Condition: {result['condition']}")
+
+# Or validate with Pydantic for type safety
+weather = WeatherResponse.model_validate(result)
+print(f"City: {weather.city}")
+print(f"Temperature: {weather.temperature}°C")
+print(f"Condition: {weather.condition}")
 \`\`\`
 
-- Use JSON schema for structured responses when needed
+**API Options:**
+
+**inspectImages Options:**
+- \`images\`: Array of image objects with \`url\` field (data URLs or regular URLs)
+- \`query\`: String describing what you want to analyze about the images
+- \`contextDescription\`: String providing context for the analysis
+- \`outputSchema\` (optional): JSONSchema object to structure the response
+  - **Tip**: Use Pydantic models with \`MyModel.model_json_schema()\` to generate schemas
+  - **Return Type**: Returns parsed object when \`outputSchema\` provided, otherwise string
+
+**chatCompletion Options:**
+- \`messages\`: Array of chat messages with \`role\` and \`content\` fields
+- \`max_tokens\` (optional): Maximum number of tokens in the response (default: 1024)
+- \`response_format\` (optional): Response format specification:
+  - \`{"type": "text"}\` - Plain text response (returns string)
+  - \`{"type": "json_object"}\` - Valid JSON object (returns parsed object)
+  - \`{"type": "json_schema", "json_schema": {...}}\` - Structured response (returns parsed object)
+    - **Tip**: Use Pydantic models with \`MyModel.model_json_schema()\` for the schema field
+  - **Return Type**: Returns parsed object when JSON format specified, otherwise string
 
 ### Data Visualization
 For plots and charts:
@@ -301,9 +385,39 @@ data_url = f"data:image/png;base64,{base64_encoded}"
 
 # --- Now you can use data_url with api.inspectImages ---
 # Example (will be executed by the system if api is available):
-# await api.inspectImages(images=[{'url': data_url}], query='Describe this generated image.')
-# Optionally, pass a JSON schema to force the output to follow a specific schema:
-# await api.inspectImages(images=[{'url': data_url}], query='find the bounding box of the image', outputSchema={...})
+# result = await api.inspectImages({
+#     "images": [{"url": data_url}], 
+#     "query": "Describe this generated image.",
+#     "contextDescription": "Generated numpy array image"
+# })
+# print(result)
+# 
+# With structured output using Pydantic:
+# from pydantic import BaseModel, Field
+# from typing import List
+# 
+# class ImageDescriptionResponse(BaseModel):
+#     description: str = Field(description="Description of the image content")
+#     colors: List[str] = Field(description="Dominant colors in the image")
+#     dimensions: str = Field(description="Image dimensions description")
+# 
+# result = await api.inspectImages({
+#     "images": [{"url": data_url}], 
+#     "query": "Analyze this generated image",
+#     "contextDescription": "Generated numpy array image for analysis",
+#     "outputSchema": ImageDescriptionResponse.model_json_schema()
+# })
+# 
+# # API returns parsed object directly when outputSchema is provided
+# print(f"Description: {result['description']}")
+# print(f"Colors: {result['colors']}")
+# print(f"Dimensions: {result['dimensions']}")
+# 
+# # Or validate with Pydantic for type safety
+# analysis = ImageDescriptionResponse.model_validate(result)
+# print(f"Description: {analysis.description}")
+# print(f"Colors: {analysis.colors}")
+# print(f"Dimensions: {analysis.dimensions}")
 
 # Print the data URL (or parts of it) if needed for observation
 print(f"Generated data URL (truncated): {data_url[:50]}...")

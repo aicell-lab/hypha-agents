@@ -31,7 +31,7 @@ interface HyphaCoreService {
     query: string;
     contextDescription: string;
     outputSchema?: JSONSchema;
-  }) => Promise<string>;
+  }) => Promise<string | any>;
   chatCompletion?: (options: {
     messages: ChatMessage[];
     max_tokens?: number;
@@ -39,7 +39,7 @@ interface HyphaCoreService {
       | { type: "text" }
       | { type: "json_object" }
       | { type: "json_schema"; json_schema: JsonSchemaDetails }; // Updated definition
-  }) => Promise<string>;
+  }) => Promise<string | any>;
 }
 
 interface SetupNotebookServiceProps {
@@ -63,7 +63,7 @@ declare global {
 
 // Function to check if a model is vision capable
 const isVisionModel = (modelName: string): boolean => {
-  return /gpt-4o|gpt-4-vision|llava/i.test(modelName);
+  return /gpt-[45]|llava/i.test(modelName);
 };
 
 // Setup notebook service
@@ -82,10 +82,9 @@ export const setupNotebookService = async ({
     window._hyphaCorePromise = { instance, api };
   }
 
-  // Remove existing event handler if any
-  window._hyphaCorePromise.instance.off("add_window");
-
   // Register the event handler on the instance
+  // Note: HyphaCore doesn't have an 'off' method, so we directly register the handler
+  // Multiple registrations will override the previous handler
   window._hyphaCorePromise.instance.on("add_window", onAddWindow);
 
   console.log("Setting up notebook service with agent settings:", agentSettings);
@@ -105,18 +104,34 @@ export const setupNotebookService = async ({
         query: string;
         contextDescription: string;
         outputSchema?: JSONSchema;
-      }): Promise<string> => {
+      }): Promise<string | any> => {
         if (!isVisionModel(agentSettings.model)) {
           return `Error: Model '${agentSettings.model}' does not support vision capabilities. Please use a vision-capable model like gpt-4o, gpt-4-vision, or llava.`;
         }
 
-        return await inspectImages({
-          ...options,
-          model: agentSettings.model,
-          baseURL: agentSettings.baseURL,
-          apiKey: agentSettings.apiKey,
-          outputSchema: options.outputSchema,
-        });
+        console.log("inspectImages called with outputSchema:", !!options.outputSchema);
+        if (options.outputSchema) {
+          console.log("outputSchema keys:", Object.keys(options.outputSchema));
+        }
+
+        try {
+          const result = await inspectImages({
+            ...options,
+            model: agentSettings.model,
+            baseURL: agentSettings.baseURL,
+            apiKey: agentSettings.apiKey,
+            outputSchema: options.outputSchema,
+          });
+          
+          console.log("inspectImages result type:", typeof result);
+          console.log("inspectImages result:", result);
+          
+          return result;
+        } catch (error) {
+          console.error("Error in inspectImages wrapper:", error);
+          // Re-throw the error instead of converting to string
+          throw error;
+        }
       },
       chatCompletion: async (options: {
         messages: ChatMessage[];
@@ -125,7 +140,7 @@ export const setupNotebookService = async ({
           | { type: "text" }
           | { type: "json_object" }
           | { type: "json_schema"; json_schema: JsonSchemaDetails }; // Updated definition
-      }): Promise<string> => {
+      }): Promise<string | any> => {
         const { messages, max_tokens = 1024, response_format } = options;
 
         const openai = new OpenAI({
@@ -160,7 +175,19 @@ export const setupNotebookService = async ({
           // Pass the constructed params object
           const response = await openai.chat.completions.create(completionParams);
 
-          return response.choices[0]?.message?.content || "No response generated";
+          const content = response.choices[0]?.message?.content || "No response generated";
+
+          // Parse JSON if response_format is json_object or json_schema
+          if (response_format && (response_format.type === 'json_object' || response_format.type === 'json_schema')) {
+            try {
+              return JSON.parse(content);
+            } catch (parseError) {
+              console.error("Failed to parse JSON response:", parseError);
+              throw new Error(`Error parsing JSON response: ${content}`);
+            }
+          }
+
+          return content;
         } catch (error) {
           console.error("Error in chat completion:", error);
           const errorMessage = error instanceof Error ? error.message : String(error);

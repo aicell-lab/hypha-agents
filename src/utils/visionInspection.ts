@@ -33,7 +33,7 @@ export async function inspectImages({
   baseURL,
   apiKey,
   outputSchema
-}: VisionInspectionOptions): Promise<string> {
+}: VisionInspectionOptions): Promise<string | any> {
 
   // Validate image URLs
   for (const image of images) {
@@ -87,15 +87,40 @@ export async function inspectImages({
 
     if (outputSchema && typeof outputSchema === 'object' && Object.keys(outputSchema).length > 0) {
       // Set response format to json_object. Schema enforcement relies on prompt instructions.
-      completionParams.response_format = { type: "json_schema", json_schema: { schema: outputSchema as Record<string, unknown>, name: "outputSchema", strict: true } };
+      const schema = { ...outputSchema as Record<string, unknown> };
+      if (!('additionalProperties' in schema)) {
+        schema.additionalProperties = false;
+      }
+      completionParams.response_format = { 
+        type: "json_schema", 
+        json_schema: { 
+          schema: schema,
+          name: "outputSchema", 
+          strict: true 
+        } 
+      };
     }
 
     const response = await openai.chat.completions.create(completionParams);
-    // if outputSchema is provided, parse the response using JSON.parse
+    
+    const content = response.choices[0].message.content || "No response generated";
+    
+    // if outputSchema is provided, parse the response using JSON.parse with error handling
     if (outputSchema && typeof outputSchema === 'object' && Object.keys(outputSchema).length > 0) {
-      return JSON.parse(response.choices[0].message.content || "{}");
+      console.log("visionInspection: outputSchema detected, attempting to parse JSON");
+      console.log("visionInspection: raw content:", content);
+      try {
+        const parsed = JSON.parse(content);
+        console.log("visionInspection: successfully parsed JSON:", typeof parsed, parsed);
+        return parsed;
+      } catch (parseError) {
+        console.error("Failed to parse JSON response from vision inspection:", parseError);
+        console.error("Raw response content:", content);
+        throw new Error(`Error parsing JSON response: ${content}`);
+      }
     }
-    return response.choices[0].message.content || "No response generated";
+    
+    return content;
   } catch (error) {
     console.error("Error in vision inspection:", error);
     throw error;
