@@ -254,18 +254,23 @@ export function useChatCompletion({
       // Find the cell's current index before deletion
       const currentIndex = cells.findIndex(cell => cell.id === cellId);
 
+      // Get conversation history BEFORE deleting the cell to avoid including it in the history
+      // Find the cell before the one we're about to delete
+      const cellBeforeId = currentIndex > 0 ? cells[currentIndex - 1]?.id : undefined;
+      const messages = getConversationHistory(cellBeforeId);
+
       // Delete the cell and its responses first
       cellManager.deleteCellWithChildren(cellId);
 
       // Wait a small tick to ensure deletion is complete
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      // Update references and process chat completion
-      const messages = getConversationHistory(cellId);
+      // Add the user message to the conversation history
       messages.push({
         role: 'user',
         content: messageContent,
       });
+
       // Add the new cell at the same position as the old one
       const newCellId = cellManager.addCell(
         'markdown',
@@ -275,7 +280,6 @@ export function useChatCompletion({
         undefined,
         currentIndex
       );
-
 
       await processChatCompletion({
         messages,
