@@ -77,11 +77,51 @@ module.exports = function override(config, env) {
     },
   };
 
+  // Ignore specific source map warnings
+  config.ignoreWarnings = [
+    // Ignore source map warnings for hypha-core
+    /Failed to parse source map.*hypha-core.*utf8\.mjs\.map/,
+    // Ignore source map warnings for monaco-editor marked
+    /Failed to parse source map.*monaco-editor.*marked.*\.js\.map/,
+  ];
+
   // Optimize module resolution
   config.resolve = {
     ...config.resolve,
     modules: ['node_modules'],
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+  };
+
+  // Configure source-map-loader to ignore warnings for problematic packages
+  config.module = {
+    ...config.module,
+    rules: [
+      ...config.module.rules,
+      {
+        test: /\.(js|mjs)$/,
+        enforce: 'pre',
+        use: [
+          {
+            loader: 'source-map-loader',
+            options: {
+              filterSourceMappingUrl: (url, resourcePath) => {
+                // Ignore source map warnings for hypha-core and monaco-editor
+                if (resourcePath.includes('hypha-core') || 
+                    resourcePath.includes('monaco-editor')) {
+                  return false;
+                }
+                return true;
+              },
+            },
+          },
+        ],
+        exclude: [
+          // Exclude problematic packages from source map processing
+          /node_modules\/hypha-core/,
+          /node_modules\/monaco-editor.*marked/,
+        ],
+      },
+    ],
   };
 
   // Add plugins
@@ -90,6 +130,18 @@ module.exports = function override(config, env) {
     // Define environment variables
     new webpack.DefinePlugin({
       'process.env.NODE_ENV': JSON.stringify(env),
+    }),
+    // Ignore missing source map warnings for specific modules
+    new webpack.IgnorePlugin({
+      checkResource(resource, context) {
+        // Ignore source map files for hypha-core and monaco-editor marked
+        if (resource.endsWith('.map') && 
+            (context.includes('hypha-core') || 
+             context.includes('monaco-editor') && context.includes('marked'))) {
+          return true;
+        }
+        return false;
+      },
     }),
   ];
 
