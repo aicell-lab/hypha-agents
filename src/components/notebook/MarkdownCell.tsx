@@ -351,7 +351,7 @@ const handleRegenerateResponse = useCallback(() => {
               </div>
             )}
           </div>
-          <div className={`editor-container w-full overflow-hidden ${staged ? 'border-l-2 border-slate-200 pl-2' : ''}`}>
+          <div className={`editor-container w-full overflow-hidden ${staged ? 'border-l-2 border-slate-200 pl-2' : 'mt-1'}`}>
             {/* Staged indicator for expanded cells */}
             {staged && (
               <div className="text-xs text-slate-500 mb-1 flex items-center gap-1">
