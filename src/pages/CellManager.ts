@@ -678,7 +678,7 @@ export class CellManager {
     // set output to be visible
     this.showCellOutput(id);
 
-    // Scroll to the output area (execution counter) immediately when execution starts
+    // Scroll to the output area only if it's not already visible
     setTimeout(() => {
       const cellElement = document.querySelector(`[data-cell-id="${id}"]`);
       if (cellElement) {
@@ -691,10 +691,21 @@ export class CellManager {
                                      cellElement.querySelector('.execution-count:last-of-type');
         
         if (outputExecutionCounter) {
-          outputExecutionCounter.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Check if the output area is already visible in the viewport
+          const rect = outputExecutionCounter.getBoundingClientRect();
+          const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+          
+          if (!isVisible) {
+            outputExecutionCounter.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         } else {
-          // Fallback to cell top if no output execution counter found
-          cellElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Fallback: check if the cell is visible, and scroll to cell top if not
+          const cellRect = cellElement.getBoundingClientRect();
+          const isCellVisible = cellRect.top >= 0 && cellRect.bottom <= window.innerHeight;
+          
+          if (!isCellVisible) {
+            cellElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         }
       }
     }, 100);

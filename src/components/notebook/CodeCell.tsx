@@ -633,7 +633,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               <div className="absolute left-1/2 -translate-x-1/2 -top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1">
                 <button
                   onClick={handleOutputVisibilityToggle}
-                  className="bg-white shadow-sm rounded text-xs flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-gray-50 border border-gray-200 text-gray-600 hover:text-gray-800"
+                  className="bg-white shadow-sm rounded text-xs flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-gray-50 border border-gray-200 text-gray-600 hover:text-gray-800 select-none"
                   title="Hide output"
                 >
                   <svg
@@ -657,7 +657,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                       e.stopPropagation();
                       onAbort();
                     }}
-                    className="bg-white shadow-sm rounded text-xs flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700"
+                    className="bg-white shadow-sm rounded text-xs flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700 select-none"
                     title="Stop execution"
                   >
                     <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
