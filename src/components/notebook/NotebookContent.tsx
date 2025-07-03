@@ -64,6 +64,11 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
     return editorRefs.current[cellId];
   }, []);
 
+  // Helper function to check if a cell has children (responses)
+  const hasChildrenCells = useCallback((cellId: string) => {
+    return cells.some(cell => cell.metadata?.parent === cellId);
+  }, [cells]);
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Main cell area - hidden on small screens when canvas is open */}
@@ -344,13 +349,17 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              const target = e.currentTarget.parentElement;
-                              if (target) {
-                                target.classList.toggle('expanded');
+                              if (hasChildrenCells(cell.id)) {
+                                const target = e.currentTarget.parentElement;
+                                if (target) {
+                                  target.classList.toggle('expanded');
+                                }
+                              } else {
+                                onDeleteCell(cell.id);
                               }
                             }}
                             className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1"
-                            title="Delete options"
+                            title={hasChildrenCells(cell.id) ? "Delete options" : "Delete cell"}
                           >
                             <FaTrash className="w-4 h-4" />
                             <span className="hidden md:inline text-xs">Delete</span>
@@ -367,15 +376,17 @@ const NotebookContent: React.FC<NotebookContentProps> = ({
                             >
                               <span className="hidden md:inline text-xs">This Cell</span>
                             </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteCellWithChildren(cell.id);
-                              }}
-                              className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
-                            >
-                              <span className="hidden md:inline text-xs">With Responses</span>
-                            </button>
+                            {hasChildrenCells(cell.id) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteCellWithChildren(cell.id);
+                                }}
+                                className="p-1 hover:bg-red-100 rounded text-red-500 flex items-center gap-1 whitespace-nowrap"
+                              >
+                                <span className="hidden md:inline text-xs">With Responses</span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -259,40 +259,88 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     const deno = denoServiceRef.current;
     const kernelId = kernelInfo.kernelId || kernelInfo.id;
     
-    if (!deno || !kernelId) {
-      showToast('No kernel service available for restart', 'error');
-      return;
-    }
-
     showToast('Restarting kernel...', 'loading');
     
     try {
       setKernelStatus('starting');
       stopKernelPing();
 
-      // Use the new service restartKernel function
-      const success = await deno.restartKernel({kernelId});
-      
-      if (success) {
-        console.log(`[Deno Kernel] Kernel restarted successfully: ${kernelId}`);
+      // If we don't have a service or kernel ID, create a fresh kernel
+      if (!deno || !kernelId) {
+        console.log('[Deno Kernel] No existing service or kernel, creating fresh connection...');
+        
+        // Get the Deno service
+        const newDeno = await server.getService('hypha-agents/deno-app-engine', { mode: "select:min:getEngineLoad" });
+        
+        // Create a new kernel
+        const newKernelInfo = await newDeno.createKernel({});
+        
+        console.log('[Deno Kernel] Created fresh kernel:', newKernelInfo);
+        
+        // Update state
+        setKernelInfo(newKernelInfo);
         setKernelStatus('idle');
         setIsReady(true);
+        
+        // Initialize the executeCode function
+        initializeExecuteCode(newDeno, newKernelInfo);
         
         // Clear any running cell states after successful restart
         if (clearRunningState) {
           clearRunningState();
-          console.log('[Deno Kernel] Cleared running cell states after restart');
+          console.log('[Deno Kernel] Cleared running cell states after fresh kernel creation');
         }
         
-        // Re-initialize executeCode function with the existing service and kernel info
-        initializeExecuteCode(deno, kernelInfo);
+        showToast('Kernel restarted successfully with fresh connection', 'success');
+        return;
+      }
+
+      // Try to restart the existing kernel
+      try {
+        const success = await deno.restartKernel({kernelId});
         
-        showToast('Kernel restarted successfully', 'success');
-      } else {
-        console.error('[Deno Kernel] Failed to restart kernel');
-        setKernelStatus('error');
-        setIsReady(false);
-        showToast('Failed to restart kernel', 'error');
+        if (success) {
+          console.log(`[Deno Kernel] Kernel restarted successfully: ${kernelId}`);
+          setKernelStatus('idle');
+          setIsReady(true);
+          
+          // Clear any running cell states after successful restart
+          if (clearRunningState) {
+            clearRunningState();
+            console.log('[Deno Kernel] Cleared running cell states after restart');
+          }
+          
+          // Re-initialize executeCode function with the existing service and kernel info
+          initializeExecuteCode(deno, kernelInfo);
+          
+          showToast('Kernel restarted successfully', 'success');
+        } else {
+          throw new Error('Kernel restart returned false');
+        }
+      } catch (restartError) {
+        console.warn('[Deno Kernel] Failed to restart kernel, creating fresh connection...', restartError);
+        
+        // If restart failed, try to create a fresh kernel
+        const newDeno = await server.getService('hypha-agents/deno-app-engine', { mode: "select:min:getEngineLoad" });
+        const newKernelInfo = await newDeno.createKernel({});
+        
+        console.log('[Deno Kernel] Created fresh kernel after restart failure:', newKernelInfo);
+        
+        // Update state
+        setKernelInfo(newKernelInfo);
+        setKernelStatus('idle');
+        setIsReady(true);
+        
+        // Initialize the executeCode function
+        initializeExecuteCode(newDeno, newKernelInfo);
+        
+        // Clear any running cell states
+        if (clearRunningState) {
+          clearRunningState();
+          console.log('[Deno Kernel] Cleared running cell states after fresh kernel creation');
+        }
+        
+        showToast('Kernel restarted with fresh connection', 'success');
       }
       
     } catch (error) {
@@ -301,7 +349,7 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
       setIsReady(false);
       showToast(`Failed to restart kernel: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
-  }, [kernelInfo, initializeExecuteCode, stopKernelPing, clearRunningState]);
+  }, [kernelInfo, initializeExecuteCode, stopKernelPing, clearRunningState, server]);
 
   const resetKernelState = useCallback(async () => {
     if (!isReady || !server) {

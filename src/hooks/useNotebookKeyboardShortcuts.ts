@@ -61,6 +61,12 @@ export const useNotebookKeyboardShortcuts = ({
 
         case 'c':
           // Ctrl/Cmd + C = Copy
+          // Only handle cell-level copy if there's no text selection
+          const selection = window.getSelection();
+          if (selection && selection.toString().length > 0) {
+            // There's text selected, allow normal copy
+            return;
+          }
           if (cellManager.activeCellId) {
             event.preventDefault();
             cellManager.copyCells([cellManager.activeCellId]);
