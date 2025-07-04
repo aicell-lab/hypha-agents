@@ -798,6 +798,7 @@ from hypha_rpc.utils.schema import schema_method
 class CalculatorService:
     @schema_method
     def add(
+       self,
        a: int = Field(..., description="first number"),
        b: int = Field(..., description="second number")
     ) -> int:
