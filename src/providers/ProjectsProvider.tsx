@@ -292,7 +292,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const projectsList = await artifactManager.list({
         parent_id: 'agent-lab-projects',
-        stage: 'all',
+        // stage: 'all',
         _rkwargs: true
       });
 
@@ -410,7 +410,6 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // Remove unsupported arguments: recursive, prefix
       const fileList = await artifactManager.list_files({
         artifact_id: projectId,
-        version: 'stage',
         dir_path: pathPrefix,
         _rkwargs: true
       });
@@ -463,6 +462,12 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       console.info('[ProjectsProvider] Uploading file:', { projectId, fileName: file.name });
+      await artifactManager.edit({
+          artifact_id: projectId,
+          stage: true,
+          _rkwargs: true
+      });
+
       const presignedUrl = await artifactManager.put_file({
         artifact_id: projectId,
         file_path: file.name,
@@ -481,6 +486,11 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!response.ok) {
         throw new Error(`Upload failed with status: ${response.status}`);
       }
+
+      await artifactManager.commit({
+        artifact_id: projectId,
+        _rkwargs: true
+      });
 
       console.info('[ProjectsProvider] File uploaded successfully:', file.name);
     } catch (err) {
@@ -504,9 +514,20 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       console.info('[ProjectsProvider] Deleting file:', { projectId, filePath });
+      await artifactManager.edit({
+        artifact_id: projectId,
+        stage: true,
+        _rkwargs: true
+      });
+
       await artifactManager.remove_file({
         artifact_id: projectId,
         file_path: filePath,
+        _rkwargs: true
+      });
+
+      await artifactManager.commit({
+        artifact_id: projectId,
         _rkwargs: true
       });
       console.info('[ProjectsProvider] File deleted successfully:', filePath);
@@ -554,7 +575,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // 1. Prepare for editing first to ensure we have a lock
       await artifactManager.edit({
         artifact_id: projectId,
-        version: "stage",
+        stage: true,
         _rkwargs: true
       });
       
@@ -562,7 +583,6 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const url = await artifactManager.get_file({
         artifact_id: projectId,
         file_path: oldPath,
-        version: 'stage',
         _rkwargs: true
       });
       console.info('[ProjectsProvider] Got URL for file content');
@@ -600,6 +620,7 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       console.info('[ProjectsProvider] Uploaded content to new location');
       
+
       // 7. Delete the old file
       await artifactManager.remove_file({
         artifact_id: projectId,
@@ -608,6 +629,11 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       console.info('[ProjectsProvider] Removed old file');
       
+      await artifactManager.commit({
+        artifact_id: projectId,
+        _rkwargs: true
+      });
+
       // 8. Add a small delay before returning to ensure server-side propagation
       await new Promise(resolve => setTimeout(resolve, 300));
       
@@ -645,7 +671,6 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const url = await artifactManager.get_file({
         artifact_id: projectId,
         file_path: filePath,
-        version: 'stage',
         _rkwargs: true
       });
 

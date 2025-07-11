@@ -689,13 +689,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         const project = getInBrowserProject();
         onLoadNotebook(project, newFile);
       } else if (selectedProject && artifactManager) {
-        // Save to remote project
-        await artifactManager.edit({
-          artifact_id: selectedProject.id,
-          version: "stage",
-          _rkwargs: true
-        });
-        
         const blob = new Blob([JSON.stringify(newNotebook, null, 2)], { type: 'application/json' });
         const file = new File([blob], fileName, { type: 'application/json' });
         await uploadFile(selectedProject.id, file);
