@@ -11,8 +11,7 @@ interface JupyterOutputProps {
 export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className = '', wrapLongLines = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [expandedOutputs, setExpandedOutputs] = useState<Record<string, boolean>>({});
-  const wrapClass = wrapLongLines ? 'whitespace-pre-wrap break-words' : 'whitespace-pre';
-  
+
   // Process outputs after rendering - handle scripts and ANSI codes
   useEffect(() => {
     if (containerRef.current) {
@@ -139,17 +138,6 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
   );
 };
 
-// Function to detect and wrap URLs in text content
-const processURLs = (content: string): string => {
-  // URL regex pattern that matches common URL formats
-  const urlPattern = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/gi;
-  
-  // Replace URLs with anchor tags
-  return content.replace(urlPattern, (url) => {
-    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${url}</a>`;
-  });
-};
-
 // Function to render different output types
 const renderOutput = (
   output: OutputItem, 
@@ -235,17 +223,17 @@ const renderOutput = (
   
   switch (output.type) {
     case 'stdout':
-      // Process URLs in stdout content
-      const processedStdout = processURLs(output.content);
+      // Render stdout as plain text
       return renderCollapsibleText(
-        processedStdout, 
+        output.content, 
         `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
-        processedStdout !== output.content,
+        false,
         false
       );
     
     case 'stderr':
       if (isPreProcessed) {
+        // Pre-processed ANSI content can be rendered as HTML
         return renderCollapsibleText(
           output.content, 
           `${wrapClass} text-sm py-1 font-mono error-output output-area`,
@@ -253,18 +241,18 @@ const renderOutput = (
           true
         );
       } else {
-        // Process URLs in stderr content
-        const processedStderr = processURLs(output.content);
+        // Render stderr as plain text
         return renderCollapsibleText(
-          processedStderr, 
+          output.content, 
           `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`,
-          processedStderr !== output.content,
+          false,
           true
         );
       }
     
     case 'error':
       if (isPreProcessed) {
+        // Pre-processed ANSI content can be rendered as HTML
         return renderCollapsibleText(
           output.content, 
           `${wrapClass} text-sm py-1 font-mono error-output output-area`,
@@ -272,12 +260,11 @@ const renderOutput = (
           true
         );
       } else {
-        // Process URLs in error content
-        const processedError = processURLs(output.content);
+        // Render error as plain text
         return renderCollapsibleText(
-          processedError, 
+          output.content, 
           `text-red-600 ${wrapClass} text-sm py-1 font-mono error-output output-area`,
-          processedError !== output.content,
+          false,
           true
         );
       }
@@ -286,6 +273,7 @@ const renderOutput = (
       return <img src={output.content} alt="Output" className="max-w-full my-2 rounded output-area" />;
     
     case 'html':
+      // Only html type outputs are rendered as HTML
       return (
         <div 
           className={`py-1 overflow-auto output-area ${output.attrs?.isFinalOutput ? 'final-output' : ''}`}
@@ -295,6 +283,7 @@ const renderOutput = (
     
     case 'text':
       if (isPreProcessed) {
+        // Pre-processed ANSI content can be rendered as HTML
         return renderCollapsibleText(
           output.content, 
           `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
@@ -302,12 +291,11 @@ const renderOutput = (
           false
         );
       } else {
-        // Process URLs in text content
-        const processedText = processURLs(output.content);
+        // Render text as plain text
         return renderCollapsibleText(
-          processedText, 
+          output.content, 
           `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
-          processedText !== output.content,
+          false,
           false
         );
       }
@@ -317,6 +305,7 @@ const renderOutput = (
     default:
       if (typeof output.content === 'string') {
         if (isPreProcessed) {
+          // Pre-processed ANSI content can be rendered as HTML
           return renderCollapsibleText(
             output.content, 
             `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
@@ -324,12 +313,11 @@ const renderOutput = (
             false
           );
         } else {
-          // Process URLs in default content
-          const processedDefault = processURLs(output.content);
+          // Render default content as plain text
           return renderCollapsibleText(
-            processedDefault, 
+            output.content, 
             `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
-            processedDefault !== output.content,
+            false,
             false
           );
         }
