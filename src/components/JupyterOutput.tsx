@@ -53,8 +53,8 @@ export const JupyterOutput: React.FC<JupyterOutputProps> = ({ outputs, className
   }
   
   // Separate outputs by type, but ensure both normal and error outputs are always shown
-  const textAndErrorOutputs = outputs.filter(o => 
-    o.type === 'stdout' || o.type === 'stderr' || o.type === 'text' || o.type === 'error'
+  const textAndErrorOutputs = outputs.filter(o =>
+    o.type === 'stdout' || o.type === 'stderr' || o.type === 'text' || o.type === 'error' || o.type === 'result'
   );
   
   const htmlOutputs = outputs.filter(o => 
@@ -285,7 +285,7 @@ const renderOutput = (
       if (isPreProcessed) {
         // Pre-processed ANSI content can be rendered as HTML
         return renderCollapsibleText(
-          output.content, 
+          output.content,
           `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
           true,
           false
@@ -293,15 +293,25 @@ const renderOutput = (
       } else {
         // Render text as plain text
         return renderCollapsibleText(
-          output.content, 
+          output.content,
           `text-gray-700 ${wrapClass} text-sm py-1 font-mono output-area`,
           false,
           false
         );
       }
-    
+
+    case 'result':
+      // Render execute_result outputs (last expression in a cell)
+      // Typically shown in a distinct color like teal/cyan in Jupyter
+      return renderCollapsibleText(
+        output.content,
+        `text-teal-700 ${wrapClass} text-sm py-1 font-mono output-area`,
+        false,
+        false
+      );
+
     // Additional output types can be handled here
-    
+
     default:
       if (typeof output.content === 'string') {
         if (isPreProcessed) {

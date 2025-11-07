@@ -24,7 +24,18 @@
     <link rel="mask-icon" href="%PUBLIC_URL%/icons/safari-pinned-tab.svg" color="#5bbad5" />
     
     <link rel="manifest" href="%PUBLIC_URL%/site.webmanifest" />
-    
+
+    <!-- Web Python Kernel -->
+    <script type="module" crossorigin>
+      // Load web-python-kernel from local file and expose it globally
+      import('%PUBLIC_URL%/web-python-kernel.mjs')
+        .then(module => {
+          window.WebPythonKernel = module;
+          window.dispatchEvent(new Event('web-python-kernel-loaded'));
+        })
+        .catch(err => console.error('Failed to load web-python-kernel:', err));
+    </script>
+
     <title>Hypha Agents</title>
   </head>
   <body>

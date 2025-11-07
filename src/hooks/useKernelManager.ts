@@ -1,32 +1,30 @@
 /**
- * Hook for managing kernel state and operations
+ * Hook for managing kernel state and operations using web-python-kernel
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { KernelManager, KernelInfo, KernelExecutionLog, ExecuteCodeCallbacks } from '../utils/agentLabTypes';
-import { createExecuteCodeFunction, createKernelResetCode } from '../utils/kernelUtils';
+import { KernelManager as KernelManagerType, KernelInfo, KernelExecutionLog, ExecuteCodeCallbacks } from '../utils/agentLabTypes';
+import { createKernelResetCode } from '../utils/kernelUtils';
 import { showToast } from '../utils/notebookUtils';
 
 interface UseKernelManagerProps {
-  server: any;
+  server?: any; // Keep for API compatibility but won't be used
   clearRunningState?: () => void;
   onKernelReady?: (executeCode: (code: string, callbacks?: ExecuteCodeCallbacks, timeout?: number) => Promise<void>) => void;
 }
 
-export const useKernelManager = ({ server, clearRunningState, onKernelReady }: UseKernelManagerProps): KernelManager => {
+export const useKernelManager = ({ server, clearRunningState, onKernelReady }: UseKernelManagerProps): KernelManagerType => {
   const [isReady, setIsReady] = useState(false);
   const [kernelStatus, setKernelStatus] = useState<'idle' | 'busy' | 'starting' | 'error'>('starting');
   const [executeCode, setExecuteCode] = useState<((code: string, callbacks?: ExecuteCodeCallbacks, timeout?: number) => Promise<void>) | null>(null);
   const [kernelInfo, setKernelInfo] = useState<KernelInfo>({});
   const [kernelExecutionLog, setKernelExecutionLog] = useState<KernelExecutionLog[]>([]);
-  const [isKernelStuck, setIsKernelStuck] = useState(false);
-  
+
   // Add ref to store executeCode function to avoid circular dependencies
   const executeCodeRef = useRef<any>(null);
-  // Add ref to store the Deno service instance
-  const denoServiceRef = useRef<any>(null);
-  // Add ref for ping interval
-  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Add ref to store the web-python-kernel manager and kernel ID
+  const kernelManagerRef = useRef<any>(null);
+  const currentKernelIdRef = useRef<string | null>(null);
   // Add ref to prevent multiple initializations
   const isInitializingRef = useRef(false);
   // Add ref to store onKernelReady callback to prevent dependency issues
@@ -46,313 +44,413 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     setKernelExecutionLog(prevLog => [...prevLog, newEntry]);
   }, []);
 
-  // Function to ping kernel periodically
-  const startKernelPing = useCallback((kernelInfoParam: KernelInfo) => {
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
+  // Function to load web-python-kernel from window global
+  const loadWebPythonKernel = useCallback(async () => {
+    if (kernelManagerRef.current) {
+      return kernelManagerRef.current;
     }
 
-    const deno = denoServiceRef.current;
-    const kernelId = kernelInfoParam.kernelId || kernelInfoParam.id;
-    
-    if (!deno || !kernelId) return;
+    try {
+      // Wait for web-python-kernel to be loaded if it hasn't been yet
+      if (!(window as any).WebPythonKernel) {
+        console.log('[Web Python Kernel] Waiting for kernel module to load...');
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Timeout waiting for web-python-kernel to load'));
+          }, 30000); // 30 second timeout
 
-    // Ping every 30 seconds to keep kernel alive
-    pingIntervalRef.current = setInterval(async () => {
-      try {
-        const success = await deno.pingKernel({kernelId});
-        if (!success) {
-          console.warn('[Deno Kernel] Failed to ping kernel, it may have been destroyed');
-          // Optionally set kernel status to error or try to reconnect
-        }
-      } catch (error) {
-        console.error('[Deno Kernel] Error pinging kernel:', error);
+          window.addEventListener('web-python-kernel-loaded', () => {
+            clearTimeout(timeout);
+            resolve(null);
+          }, { once: true });
+
+          // Check if it loaded already
+          if ((window as any).WebPythonKernel) {
+            clearTimeout(timeout);
+            resolve(null);
+          }
+        });
       }
-    }, 30000); // 30 seconds
-  }, []); // No dependencies since we pass kernelInfo as parameter
 
-  // Function to stop kernel ping
-  const stopKernelPing = useCallback(() => {
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
+      const { KernelManager, KernelMode, KernelLanguage, KernelEvents } = (window as any).WebPythonKernel;
+
+      // Create kernel manager with local worker URL
+      const workerUrl = `${process.env.PUBLIC_URL || ''}/kernel.worker.js`;
+
+      const manager = new KernelManager({
+        allowedKernelTypes: [
+          { mode: KernelMode.WORKER, language: KernelLanguage.PYTHON }
+        ],
+        interruptionMode: 'auto',
+        workerUrl, // Use local worker file to avoid CORS issues
+        pool: {
+          enabled: false,
+          poolSize: 0,
+          autoRefill: false
+        }
+      });
+
+      kernelManagerRef.current = { manager, KernelMode, KernelLanguage, KernelEvents };
+      return kernelManagerRef.current;
+    } catch (error) {
+      console.error('[Web Python Kernel] Failed to load kernel module:', error);
+      throw error;
     }
   }, []);
 
-  // Function to destroy current kernel
-  const destroyCurrentKernel = useCallback(async () => {
-    const deno = denoServiceRef.current;
-    const kernelId = kernelInfo.kernelId || kernelInfo.id;
-    
-    if (!deno || !kernelId) return;
+  // Create executeCode function that wraps the kernel execution
+  const createExecuteCodeFunction = useCallback((manager: any, kernelId: string) => {
+    return async (code: string, callbacks?: ExecuteCodeCallbacks, _timeout?: number) => {
+      let hasError = false;
 
-    try {
-      console.log('[Deno Kernel] Destroying current kernel:', kernelId);
-      await deno.destroyKernel({ kernelId });
-      stopKernelPing();
-    } catch (error) {
-      console.warn('[Deno Kernel] Error destroying kernel:', error);
-    }
-  }, [kernelInfo, stopKernelPing]);
+      try {
+        setKernelStatus('busy');
 
-  // Function to interrupt kernel execution
-  const interruptKernel = useCallback(async () => {
-    const deno = denoServiceRef.current;
-    const kernelId = kernelInfo.kernelId || kernelInfo.id;
-    
-    if (!deno || !kernelId) {
-      showToast('No active kernel to interrupt', 'warning');
-      return false;
-    }
+        const stream = manager.executeStream(kernelId, code);
 
-    try {
-      showToast('Interrupting kernel execution...', 'loading');
-      console.log('[Deno Kernel] Interrupting kernel:', kernelId);
-      const result = await deno.interruptKernel({kernelId});
-      
-      if (result.success) {
-        showToast('Kernel execution interrupted', 'success');
-      } else {
-        showToast('Failed to interrupt kernel execution', 'error');
+        for await (const event of stream) {
+          // Handle different event types
+          switch (event.type) {
+            case 'stream':
+              if (event.data.name === 'stdout' && callbacks?.onOutput) {
+                callbacks.onOutput({
+                  type: 'stdout',
+                  content: event.data.text,
+                  short_content: event.data.text
+                });
+              } else if (event.data.name === 'stderr' && callbacks?.onOutput) {
+                callbacks.onOutput({
+                  type: 'stderr',
+                  content: event.data.text,
+                  short_content: event.data.text
+                });
+              }
+              break;
+
+            case 'execute_result':
+              if (event.data && event.data.data) {
+                const textPlain = event.data.data['text/plain'];
+
+                // Don't display None results (standard Jupyter behavior)
+                if (textPlain && textPlain !== 'None' && callbacks?.onOutput) {
+                  callbacks.onOutput({
+                    type: 'result',
+                    content: textPlain,
+                    short_content: textPlain
+                  });
+                } else if (!textPlain && callbacks?.onOutput) {
+                  // Fallback to JSON stringify if text/plain is missing
+                  const result = JSON.stringify(event.data.data);
+                  callbacks.onOutput({
+                    type: 'result',
+                    content: result,
+                    short_content: result
+                  });
+                }
+              }
+              break;
+
+            case 'display_data':
+              if (event.data && event.data.data && callbacks?.onOutput) {
+                if (event.data.data['image/png']) {
+                  callbacks.onOutput({
+                    type: 'image',
+                    content: `data:image/png;base64,${event.data.data['image/png']}`,
+                    short_content: '[Image]'
+                  });
+                } else if (event.data.data['text/html']) {
+                  callbacks.onOutput({
+                    type: 'html',
+                    content: event.data.data['text/html'],
+                    short_content: '[HTML]'
+                  });
+                } else if (event.data.data['text/plain']) {
+                  const plainText = event.data.data['text/plain'];
+                  callbacks.onOutput({
+                    type: 'result',
+                    content: plainText,
+                    short_content: plainText
+                  });
+                }
+              }
+              break;
+
+            case 'execute_error':
+            case 'error':
+              hasError = true;
+              // Output error messages using onOutput callback
+              if (callbacks?.onOutput) {
+                const errorMsg = event.data
+                  ? `${event.data.ename || 'Error'}: ${event.data.evalue || 'Unknown error'}`
+                  : 'Execution failed';
+                callbacks.onOutput({
+                  type: 'error',
+                  content: errorMsg,
+                  short_content: errorMsg
+                });
+              }
+              if (event.data?.traceback && callbacks?.onOutput) {
+                event.data.traceback.forEach((line: string) => {
+                  callbacks.onOutput?.({
+                    type: 'stderr',
+                    content: line,
+                    short_content: line
+                  });
+                });
+              }
+              break;
+          }
+        }
+
+        setKernelStatus('idle');
+
+        // Signal completion via onStatus callback
+        if (callbacks?.onStatus) {
+          if (hasError) {
+            callbacks.onStatus('Error');
+          } else {
+            callbacks.onStatus('Completed');
+          }
+        }
+
+      } catch (error) {
+        setKernelStatus('idle');
+        console.error('[Web Python Kernel] Execution error:', error);
+
+        if (callbacks?.onOutput) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          callbacks.onOutput({
+            type: 'error',
+            content: errorMsg,
+            short_content: errorMsg
+          });
+        }
+
+        // Signal error via onStatus callback
+        if (callbacks?.onStatus) {
+          callbacks.onStatus('Error');
+        }
       }
-      
-      return result.success;
-    } catch (error) {
-      console.error('[Deno Kernel] Error interrupting kernel:', error);
-      showToast('Error interrupting kernel execution', 'error');
-      return false;
-    }
-  }, [kernelInfo]);
+    };
+  }, []);
 
   // Function to initialize the executeCode function
-  const initializeExecuteCode = useCallback((deno: any, kernelInfo: KernelInfo) => {
-    if (!deno || !kernelInfo) return;
-    
-    // Store deno service reference
-    denoServiceRef.current = deno;
-    
-    const executeCodeFn = createExecuteCodeFunction(deno, kernelInfo, setKernelStatus, addKernelLogEntry);
-    
+  const initializeExecuteCode = useCallback((manager: any, kernelInfo: KernelInfo) => {
+    const kernelId = kernelInfo.kernelId || kernelInfo.id;
+    if (!kernelId) {
+      console.error('[Web Python Kernel] Cannot initialize executeCode: no kernel ID');
+      return;
+    }
+
+    const executeCodeFn = createExecuteCodeFunction(manager, kernelId);
+
     setExecuteCode(() => executeCodeFn);
     executeCodeRef.current = executeCodeFn;
-    
-    // Start ping interval
-    startKernelPing(kernelInfo);
-    
-    // Re-initialize services (call setupService but don't include it in dependencies to avoid circular dependency)
-    onKernelReadyRef.current?.((executeCodeFn));
-  }, [addKernelLogEntry, setKernelStatus]); // Removed onKernelReadyRef from dependency array since refs are stable
+
+    // Call onKernelReady callback
+    onKernelReadyRef.current?.(executeCodeFn);
+  }, [createExecuteCodeFunction]);
 
   // Kernel initialization
   useEffect(() => {
     async function initializeKernel() {
-      if (!server) return;
-      
       // Prevent multiple concurrent initializations
       if (isInitializingRef.current) {
-        console.log('[Deno Kernel] Initialization already in progress, skipping...');
+        console.log('[Web Python Kernel] Initialization already in progress, skipping...');
         return;
       }
-      
+
       // Mark as initializing
       isInitializingRef.current = true;
-      
+
       const initTimeout = setTimeout(() => {
-        console.error('[Deno Kernel] Initialization timeout after 30 seconds');
+        console.error('[Web Python Kernel] Initialization timeout after 180 seconds');
         setKernelStatus('error');
         setIsReady(false);
         showToast('Kernel initialization timed out. Please try restarting.', 'error');
-        isInitializingRef.current = false; // Reset flag on timeout
-      }, 180000); // 60 second timeout
-      
+        isInitializingRef.current = false;
+      }, 180000); // 180 second timeout
+
       try {
         setKernelStatus('starting');
-        console.log('[Deno Kernel] Initializing Deno kernel...');
-        
-        // Get the Deno service with timeout
-        const deno = await Promise.race([
-          server.getService('hypha-agents/deno-app-engine', { mode: "select:min:getEngineLoad" }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Service connection timeout')), 15000)
-          )
-        ]);
-        
-        console.log('[Deno Kernel] Got Deno service, creating kernel...');
-        
-        // Create a new kernel with timeout
-        const newKernelInfo = await Promise.race([
-          deno.createKernel({}),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Kernel creation timeout')), 15000)
-          )
-        ]);
+        console.log('[Web Python Kernel] Initializing web-python-kernel...');
 
-        console.log('[Deno Kernel] Created kernel:', newKernelInfo);
-        
+        // Load the kernel module
+        const { manager, KernelMode, KernelLanguage, KernelEvents } = await loadWebPythonKernel();
+
+        console.log('[Web Python Kernel] Creating kernel...');
+
+        // Create a new kernel
+        const kernelId = await manager.createKernel({
+          mode: KernelMode.WORKER,
+          lang: KernelLanguage.PYTHON,
+          autoSyncFs: true,
+        });
+
+        console.log('[Web Python Kernel] Created kernel:', kernelId);
+
+        // Store kernel ID
+        currentKernelIdRef.current = kernelId;
+
+        // Set up event listeners
+        manager.onKernelEvent(kernelId, KernelEvents.KERNEL_BUSY, () => {
+          setKernelStatus('busy');
+        });
+
+        manager.onKernelEvent(kernelId, KernelEvents.KERNEL_IDLE, () => {
+          setKernelStatus('idle');
+        });
+
         // Clear the timeout since we succeeded
         clearTimeout(initTimeout);
-        
+
         // Update state
+        const newKernelInfo = { kernelId, id: kernelId };
         setKernelInfo(newKernelInfo);
         setKernelStatus('idle');
         setIsReady(true);
-        
+
         // Initialize the executeCode function
-        initializeExecuteCode(deno, newKernelInfo);
-        
-        console.log('[Deno Kernel] Kernel initialization completed successfully');
-        
+        initializeExecuteCode(manager, newKernelInfo);
+
+        console.log('[Web Python Kernel] Kernel initialization completed successfully');
+
         // Reset initialization flag
         isInitializingRef.current = false;
       } catch (error) {
         clearTimeout(initTimeout);
-        console.error('[Deno Kernel] Initialization error:', error);
+        console.error('[Web Python Kernel] Initialization error:', error);
         setKernelStatus('error');
         setIsReady(false);
-        
+
         const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('timeout')) {
-          showToast('Kernel initialization timed out. Please check your connection and try restarting.', 'error');
-        } else {
-          showToast(`Kernel initialization failed: ${errorMessage}`, 'error');
-        }
-        
+        showToast(`Kernel initialization failed: ${errorMessage}`, 'error');
+
         // Reset initialization flag on error
         isInitializingRef.current = false;
       }
     }
 
     initializeKernel();
-  }, [server, initializeExecuteCode]); // Removed onKernelReady from dependency array
+  }, [loadWebPythonKernel, initializeExecuteCode]);
 
-  // Monitor kernel status for stuck states
-  useEffect(() => {
-    let stuckTimer: NodeJS.Timeout;
-    
-    if (kernelStatus === 'starting') {
-      // Set a timer to detect if kernel is stuck in starting state
-      stuckTimer = setTimeout(() => {
-        console.warn('[AgentLab] Kernel appears to be stuck in starting state');
-        setIsKernelStuck(true);
-        showToast('Kernel initialization is taking longer than expected. You may need to restart.', 'warning');
-      }, 180000); // 45 seconds
-    } else {
-      // Reset stuck state when kernel status changes
-      setIsKernelStuck(false);
+  // Function to destroy current kernel
+  const destroyCurrentKernel = useCallback(async () => {
+    const manager = kernelManagerRef.current?.manager;
+    const kernelId = currentKernelIdRef.current;
+
+    if (!manager || !kernelId) return;
+
+    try {
+      console.log('[Web Python Kernel] Destroying current kernel:', kernelId);
+      await manager.destroyKernel(kernelId);
+      currentKernelIdRef.current = null;
+    } catch (error) {
+      console.warn('[Web Python Kernel] Error destroying kernel:', error);
     }
-    
-    return () => {
-      if (stuckTimer) {
-        clearTimeout(stuckTimer);
-      }
-    };
-  }, [kernelStatus]);
+  }, []);
 
-  // Cleanup ping interval on unmount
-  useEffect(() => {
-    return () => {
-      stopKernelPing();
-    };
-  }, [stopKernelPing]);
+  // Function to interrupt kernel execution
+  const interruptKernel = useCallback(async () => {
+    const manager = kernelManagerRef.current?.manager;
+    const kernelId = currentKernelIdRef.current;
+
+    if (!manager || !kernelId) {
+      showToast('No active kernel to interrupt', 'warning');
+      return false;
+    }
+
+    try {
+      showToast('Interrupting kernel execution...', 'loading');
+      console.log('[Web Python Kernel] Interrupting kernel:', kernelId);
+      const success = await manager.interruptKernel(kernelId);
+
+      if (success) {
+        showToast('Kernel execution interrupted', 'success');
+      } else {
+        showToast('Failed to interrupt kernel execution', 'error');
+      }
+
+      return success;
+    } catch (error) {
+      console.error('[Web Python Kernel] Error interrupting kernel:', error);
+      showToast('Error interrupting kernel execution', 'error');
+      return false;
+    }
+  }, []);
 
   const restartKernel = useCallback(async () => {
-    const deno = denoServiceRef.current;
-    const kernelId = kernelInfo.kernelId || kernelInfo.id;
-    
+    const manager = kernelManagerRef.current?.manager;
+    const { KernelMode, KernelLanguage, KernelEvents } = kernelManagerRef.current || {};
+    const kernelId = currentKernelIdRef.current;
+
+    if (!manager || !KernelMode || !KernelLanguage) {
+      showToast('Kernel manager not initialized', 'error');
+      return;
+    }
+
     showToast('Restarting kernel...', 'loading');
-    
+
     try {
       setKernelStatus('starting');
-      stopKernelPing();
 
-      // If we don't have a service or kernel ID, create a fresh kernel
-      if (!deno || !kernelId) {
-        console.log('[Deno Kernel] No existing service or kernel, creating fresh connection...');
-        
-        // Get the Deno service
-        const newDeno = await server.getService('hypha-agents/deno-app-engine', { mode: "select:min:getEngineLoad" });
-        
-        // Create a new kernel
-        const newKernelInfo = await newDeno.createKernel({});
-        
-        console.log('[Deno Kernel] Created fresh kernel:', newKernelInfo);
-        
-        // Update state
-        setKernelInfo(newKernelInfo);
-        setKernelStatus('idle');
-        setIsReady(true);
-        
-        // Initialize the executeCode function
-        initializeExecuteCode(newDeno, newKernelInfo);
-        
-        // Clear any running cell states after successful restart
-        if (clearRunningState) {
-          clearRunningState();
-          console.log('[Deno Kernel] Cleared running cell states after fresh kernel creation');
+      // Destroy current kernel if it exists
+      if (kernelId) {
+        try {
+          await manager.destroyKernel(kernelId);
+        } catch (error) {
+          console.warn('[Web Python Kernel] Error destroying old kernel:', error);
         }
-        
-        showToast('Kernel restarted successfully with fresh connection', 'success');
-        return;
       }
 
-      // Try to restart the existing kernel
-      try {
-        const success = await deno.restartKernel({kernelId});
-        
-        if (success) {
-          console.log(`[Deno Kernel] Kernel restarted successfully: ${kernelId}`);
-          setKernelStatus('idle');
-          setIsReady(true);
-          
-          // Clear any running cell states after successful restart
-          if (clearRunningState) {
-            clearRunningState();
-            console.log('[Deno Kernel] Cleared running cell states after restart');
-          }
-          
-          // Re-initialize executeCode function with the existing service and kernel info
-          initializeExecuteCode(deno, kernelInfo);
-          
-          showToast('Kernel restarted successfully', 'success');
-        } else {
-          throw new Error('Kernel restart returned false');
-        }
-      } catch (restartError) {
-        console.warn('[Deno Kernel] Failed to restart kernel, creating fresh connection...', restartError);
-        
-        // If restart failed, try to create a fresh kernel
-        const newDeno = await server.getService('hypha-agents/deno-app-engine', { mode: "select:min:getEngineLoad" });
-        const newKernelInfo = await newDeno.createKernel({});
-        
-        console.log('[Deno Kernel] Created fresh kernel after restart failure:', newKernelInfo);
-        
-        // Update state
-        setKernelInfo(newKernelInfo);
+      // Create a new kernel
+      const newKernelId = await manager.createKernel({
+        mode: KernelMode.WORKER,
+        lang: KernelLanguage.PYTHON,
+        autoSyncFs: true,
+      });
+
+      console.log('[Web Python Kernel] Created new kernel:', newKernelId);
+
+      // Store kernel ID
+      currentKernelIdRef.current = newKernelId;
+
+      // Re-setup event listeners
+      manager.onKernelEvent(newKernelId, KernelEvents.KERNEL_BUSY, () => {
+        setKernelStatus('busy');
+      });
+
+      manager.onKernelEvent(newKernelId, KernelEvents.KERNEL_IDLE, () => {
         setKernelStatus('idle');
-        setIsReady(true);
-        
-        // Initialize the executeCode function
-        initializeExecuteCode(newDeno, newKernelInfo);
-        
-        // Clear any running cell states
-        if (clearRunningState) {
-          clearRunningState();
-          console.log('[Deno Kernel] Cleared running cell states after fresh kernel creation');
-        }
-        
-        showToast('Kernel restarted with fresh connection', 'success');
+      });
+
+      // Update state
+      const newKernelInfo = { kernelId: newKernelId, id: newKernelId };
+      setKernelInfo(newKernelInfo);
+      setKernelStatus('idle');
+      setIsReady(true);
+
+      // Initialize the executeCode function
+      initializeExecuteCode(manager, newKernelInfo);
+
+      // Clear any running cell states after successful restart
+      if (clearRunningState) {
+        clearRunningState();
+        console.log('[Web Python Kernel] Cleared running cell states after restart');
       }
-      
+
+      showToast('Kernel restarted successfully', 'success');
+
     } catch (error) {
       console.error('Failed to restart kernel:', error);
       setKernelStatus('error');
       setIsReady(false);
       showToast(`Failed to restart kernel: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
-  }, [kernelInfo, initializeExecuteCode, stopKernelPing, clearRunningState, server]);
+  }, [initializeExecuteCode, clearRunningState]);
 
   const resetKernelState = useCallback(async () => {
-    if (!isReady || !server) {
+    if (!isReady) {
       // If kernel isn't ready, perform a full restart
       console.warn('Kernel not ready, performing full restart instead of reset.');
       await restartKernel();
@@ -361,36 +459,33 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
 
     showToast('Resetting kernel state...', 'loading');
     try {
-      // Execute a simple reset command to clear variables
-      if (kernelInfo.kernelId || kernelInfo.id) {
-        setKernelStatus('busy');
-        
-        const resetCode = createKernelResetCode();
-        
-        // Use our executeCode function from ref to run the reset command
-        const currentExecuteCode = executeCodeRef.current;
-        if (currentExecuteCode) {
-          await currentExecuteCode(resetCode, {
-            onOutput: (output: any) => {
-              console.log('[Deno Kernel Reset]', output);
-            },
-            onStatus: (status: any) => {
-              console.log('[Deno Kernel Reset] Status:', status);
-            }
-          });
-        }
+      setKernelStatus('busy');
+
+      const resetCode = createKernelResetCode();
+
+      // Use our executeCode function from ref to run the reset command
+      const currentExecuteCode = executeCodeRef.current;
+      if (currentExecuteCode) {
+        await currentExecuteCode(resetCode, {
+          onOutput: (output: any) => {
+            console.log('[Web Python Kernel Reset]', output);
+          },
+          onStatus: (status: any) => {
+            console.log('[Web Python Kernel Reset] Status:', status);
+          }
+        });
       }
 
       // Update status
       setKernelStatus('idle');
-      
+
       showToast('Kernel state reset successfully', 'success');
     } catch (error) {
       console.error('Failed to reset kernel state:', error);
       setKernelStatus('error');
       showToast('Failed to reset kernel state', 'error');
     }
-  }, [isReady, server, restartKernel, kernelInfo]);
+  }, [isReady, restartKernel]);
 
   return {
     isReady,
@@ -405,4 +500,4 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     interruptKernel,
     destroyCurrentKernel
   };
-}; 
+};
