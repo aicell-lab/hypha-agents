@@ -136,6 +136,7 @@
     ]
   },
   "resolutions": {
-    "eslint-config-react-app": "^7.0.1"
+    "eslint-config-react-app": "^7.0.1",
+    "rollup": "4.26.0"
   }
 }
