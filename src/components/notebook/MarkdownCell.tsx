@@ -159,6 +159,7 @@ const handleRegenerateResponse = useCallback(() => {
 
   // Function to handle editor mounting
   const handleEditorDidMount: OnMount = (editor) => {
+    console.log('[MarkdownCell] Monaco editor mounted successfully', { hasEditor: !!editor });
     internalEditorRef.current = editor as unknown as MonacoEditor;
     if (editorRef) {
       (editorRef as any).current = {
@@ -393,8 +394,14 @@ const handleRegenerateResponse = useCallback(() => {
               </div>
             )}
             
-            {(!hideContent || isEditing) && (
-              isEditing ? (
+            {(!hideContent || isEditing) && (() => {
+              console.log('[MarkdownCell] Rendering editor', {
+                isEditing,
+                hideContent,
+                editorHeight,
+                contentLength: content.length
+              });
+              return isEditing ? (
                 <Editor
                   height={editorHeight}
                   defaultLanguage="markdown"
@@ -402,6 +409,7 @@ const handleRegenerateResponse = useCallback(() => {
                   onChange={handleEditorChange}
                   onMount={handleEditorDidMount}
                   beforeMount={handleBeforeMount}
+                  loading={<div className="p-4 text-gray-500">Loading Monaco editor...</div>}
                   options={{
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,
@@ -471,8 +479,8 @@ const handleRegenerateResponse = useCallback(() => {
                     </ReactMarkdown>
                   </div>
                 </div>
-              )
-            )}
+              );
+            })()}
           </div>
         </div>
       )}

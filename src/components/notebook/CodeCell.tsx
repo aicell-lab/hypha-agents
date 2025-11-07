@@ -245,9 +245,10 @@ export const CodeCell: React.FC<CodeCellProps> = ({
 
   // Function to handle editor mounting
   const handleEditorDidMount: OnMount = (editor, monaco) => {
+    console.log('[CodeCell] Monaco editor mounted successfully', { hasEditor: !!editor, hasMonaco: !!monaco });
     internalEditorRef.current = editor;
     monacoRef.current = monaco;
-    
+
     // Force editor to update its layout
     editor.layout();
     
@@ -548,7 +549,15 @@ export const CodeCell: React.FC<CodeCellProps> = ({
             )}
 
             {/* Expandable Code Editor */}
-            {!hideCode && (
+            {!hideCode && (() => {
+              console.log('[CodeCell] Rendering Monaco Editor', {
+                editorHeight,
+                language,
+                codeLength: codeValue.length,
+                hideCode,
+                isReady
+              });
+              return (
               <div className="relative">
                 <Editor
                   height={editorHeight}
@@ -561,6 +570,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                     setTimeout(updateEditorHeight, 10);
                   }}
                   onMount={handleEditorDidMount}
+                  loading={<div className="p-4 text-gray-500">Loading Monaco editor...</div>}
                   options={{
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,
@@ -605,7 +615,8 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                   className="jupyter-editor w-full max-w-full overflow-x-hidden"
                 />
               </div>
-            )}
+              );
+            })()}
           </div>
         </div>
       )}
