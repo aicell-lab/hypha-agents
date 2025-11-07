@@ -698,6 +698,8 @@ export const ProjectsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       refreshProjects();
     } else {
       console.warn('[ProjectsProvider] Skipping initial projects load - no artifactManager or user.');
+      // Set initialLoadComplete to true even without authentication to prevent blocking the UI
+      setInitialLoadComplete(true);
     }
   }, [artifactManager, user, refreshProjects]);
 
