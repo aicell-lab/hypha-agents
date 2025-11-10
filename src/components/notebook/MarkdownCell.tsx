@@ -57,10 +57,17 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
 }) => {
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
-  const [editorHeight, setEditorHeight] = useState<number>(0);
   const lineHeightPx = 20;
   const minLines = 3;
   const paddingHeight = 16;
+
+  // Calculate initial editor height - MUST be > 0 for Monaco to render
+  const calculateHeight = (text: string) => {
+    const lineCount = Math.max(text.split('\n').length, minLines);
+    return Math.max(lineCount * lineHeightPx + (paddingHeight * 2), 92); // Minimum 92px
+  };
+
+  const [editorHeight, setEditorHeight] = useState<number>(() => calculateHeight(content));
   const monacoRef = useRef<any>(null);
   const [isFocused, setIsFocused] = useState(false);
   

@@ -89,10 +89,17 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const outputRef = useRef<HTMLDivElement>(null);
   const internalEditorRef = useRef<MonacoEditor | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
-  const [editorHeight, setEditorHeight] = useState<number>(0);
   const lineHeightPx = 20;
   const minLines = 2;
   const paddingHeight = 16;
+
+  // Calculate initial editor height - MUST be > 0 for Monaco to render
+  const calculateHeight = (content: string) => {
+    const lineCount = Math.max(content.split('\n').length, minLines);
+    return Math.max(lineCount * lineHeightPx + (paddingHeight * 2), 72); // Minimum 72px
+  };
+
+  const [editorHeight, setEditorHeight] = useState<number>(() => calculateHeight(code));
   const monacoRef = useRef<any>(null);
   const hasFinalDomOutput = useRef<boolean>(false);
   const styleTagRef = useRef<HTMLStyleElement | null>(null);
