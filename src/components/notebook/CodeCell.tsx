@@ -4,7 +4,7 @@ import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
-import Editor, { OnMount } from '@monaco-editor/react';
+import Editor, { OnMount, loader } from '@monaco-editor/react';
 import { RoleSelector } from './RoleSelector';
 import { VscCode } from 'react-icons/vsc';
 import { FaSpinner } from 'react-icons/fa';
@@ -12,6 +12,15 @@ import { JupyterOutput } from '../JupyterOutput';
 import { OutputItem } from '../../types/notebook';
 import { RiRobot2Line } from 'react-icons/ri';
 import { outputAreaStyles } from '../../utils/ansi-utils';
+
+// Configure Monaco loader immediately when this module loads
+console.log('[CodeCell] Configuring Monaco loader inline...');
+loader.config({
+  paths: {
+    vs: '/monaco-editor/vs'
+  }
+});
+console.log('[CodeCell] Monaco loader configured with path: /monaco-editor/vs');
 
 
 // Register languages
