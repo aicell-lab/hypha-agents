@@ -586,9 +586,18 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                   loading={<div style={{ padding: '20px', textAlign: 'center' }}>
                     <div>Loading Monaco Editor...</div>
                     <div style={{ fontSize: '12px', marginTop: '10px' }}>
-                      If this persists, check console for errors
+                      Height: {editorHeight}px | Language: {language}
                     </div>
                   </div>}
+                  beforeMount={(monaco: any) => {
+                    console.log('[CodeCell] Monaco beforeMount called!', {
+                      hasMonaco: !!monaco,
+                      monacoVersion: monaco?.version
+                    });
+                  }}
+                  onValidate={(markers: any) => {
+                    console.log('[CodeCell] Monaco validation', { markerCount: markers?.length || 0 });
+                  }}
                   onChange={(value) => {
                     const newValue = value || '';
                     setCodeValue(newValue);
