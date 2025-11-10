@@ -44,35 +44,25 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     setKernelExecutionLog(prevLog => [...prevLog, newEntry]);
   }, []);
 
-  // Function to load web-python-kernel from window global
+  // Function to dynamically load web-python-kernel module
   const loadWebPythonKernel = useCallback(async () => {
     if (kernelManagerRef.current) {
       return kernelManagerRef.current;
     }
 
     try {
-      // Wait for web-python-kernel to be loaded if it hasn't been yet
-      if (!(window as any).WebPythonKernel) {
-        console.log('[Web Python Kernel] Waiting for kernel module to load...');
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Timeout waiting for web-python-kernel to load'));
-          }, 30000); // 30 second timeout
+      // Dynamically import the web-python-kernel module
+      console.log('[Web Python Kernel] Loading kernel module...');
+      const baseUrl = process.env.PUBLIC_URL || '';
+      const WebPythonKernel = await import(/* webpackIgnore: true */ `${baseUrl}/web-python-kernel.mjs`);
 
-          window.addEventListener('web-python-kernel-loaded', () => {
-            clearTimeout(timeout);
-            resolve(null);
-          }, { once: true });
+      // Store in window for compatibility with other code that might check for it
+      (window as any).WebPythonKernel = WebPythonKernel;
+      window.dispatchEvent(new Event('web-python-kernel-loaded'));
 
-          // Check if it loaded already
-          if ((window as any).WebPythonKernel) {
-            clearTimeout(timeout);
-            resolve(null);
-          }
-        });
-      }
+      console.log('[Web Python Kernel] Module loaded successfully');
 
-      const { KernelManager, KernelMode, KernelLanguage, KernelEvents } = (window as any).WebPythonKernel;
+      const { KernelManager, KernelMode, KernelLanguage, KernelEvents } = WebPythonKernel;
 
       // Create kernel manager with local worker URL
       const workerUrl = `${process.env.PUBLIC_URL || ''}/kernel.worker.js`;
