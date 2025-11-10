@@ -24,4 +24,7 @@ loader.config({
   }
 });
 
-console.log('[Monaco Config] Configuration applied. Monaco will load from:', monacoPath); 
+console.log('[Monaco Config] Configuration applied. Monaco will load from:', monacoPath);
+
+// Export something to prevent tree-shaking
+export const monacoConfigured = true; 

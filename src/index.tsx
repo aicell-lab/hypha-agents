@@ -3,7 +3,12 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
-import './config/monaco';  // Import Monaco configuration
+import { monacoConfigured } from './config/monaco';  // Import Monaco configuration
+
+// Verify Monaco configuration was loaded
+if (monacoConfigured) {
+  console.log('[Index] Monaco configuration loaded successfully');
+}
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
