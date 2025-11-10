@@ -4,7 +4,7 @@ import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
-import Editor, { OnMount, loader } from '@monaco-editor/react';
+import Editor, { OnMount } from '@monaco-editor/react';
 import { RoleSelector } from './RoleSelector';
 import { VscCode } from 'react-icons/vsc';
 import { FaSpinner } from 'react-icons/fa';
@@ -12,8 +12,6 @@ import { JupyterOutput } from '../JupyterOutput';
 import { OutputItem } from '../../types/notebook';
 import { RiRobot2Line } from 'react-icons/ri';
 import { outputAreaStyles } from '../../utils/ansi-utils';
-
-// Monaco loader will be configured in beforeMount to ensure proper timing in production builds
 
 
 // Register languages
@@ -587,15 +585,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
                       hasMonaco: !!monaco,
                       monacoVersion: monaco?.version
                     });
-
-                    // Configure Monaco loader here to ensure proper timing in production
-                    console.log('[CodeCell] Configuring Monaco loader...');
-                    loader.config({
-                      paths: {
-                        vs: '/monaco-editor/vs'
-                      }
-                    });
-                    console.log('[CodeCell] Monaco loader configured with path: /monaco-editor/vs');
                   }}
                   onValidate={(markers: any) => {
                     console.log('[CodeCell] Monaco validation', { markerCount: markers?.length || 0 });

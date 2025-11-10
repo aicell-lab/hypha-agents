@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Editor, loader } from '@monaco-editor/react';
+import { Editor } from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
 import { RoleSelector, CellRole } from './RoleSelector';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -209,15 +209,6 @@ const handleRegenerateResponse = useCallback(() => {
   // Handle Monaco instance before mounting the editor
   const handleBeforeMount = (monaco: any) => {
     monacoRef.current = monaco;
-
-    // Configure Monaco loader here to ensure proper timing in production
-    console.log('[MarkdownCell] Configuring Monaco loader...');
-    loader.config({
-      paths: {
-        vs: '/monaco-editor/vs'
-      }
-    });
-    console.log('[MarkdownCell] Monaco loader configured with path: /monaco-editor/vs');
   };
 
   // Function to handle editor changes

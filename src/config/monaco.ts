@@ -1,6 +1,13 @@
 import { loader } from '@monaco-editor/react';
 import { getBaseUrl } from '../utils/urlHelpers';
 
+// Extend Window interface to include monaco
+declare global {
+  interface Window {
+    monaco?: any;
+  }
+}
+
 // Configure Monaco to use local files
 const monacoPath = `${getBaseUrl()}/monaco-editor/vs`;
 const baseUrl = getBaseUrl();
@@ -13,14 +20,10 @@ console.log('[Monaco Config] Full loader path:', window.location.origin + monaco
 console.log('[Monaco Config] PUBLIC_URL:', process.env.PUBLIC_URL);
 console.log('[Monaco Config] ============================================');
 
+// Critical configuration: Set the Monaco paths
 loader.config({
   paths: {
     vs: monacoPath
-  },
-  'vs/nls': {
-    availableLanguages: {
-      '*': ''
-    }
   }
 });
 
