@@ -47,15 +47,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      - name: Setup build cache
+      # Removed build cache to prevent serving stale builds
+      # Only cache node_modules/.cache for webpack cache
+      - name: Setup webpack cache
         uses: actions/cache@v3
         with:
-          path: |
-            build
-            node_modules/.cache
-          key: ${{ runner.os }}-build-${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: node_modules/.cache
+          key: ${{ runner.os }}-webpack-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-build-
+            ${{ runner.os }}-webpack-${{ hashFiles('**/pnpm-lock.yaml') }}-
+            ${{ runner.os }}-webpack-
 
       - name: Configure swap space
         run: |
