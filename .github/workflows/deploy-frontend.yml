@@ -53,7 +53,7 @@ jobs:
         env:
           CI: false # This prevents treating warnings as errors
           NODE_OPTIONS: "--max-old-space-size=16384" # Increase heap size to 16GB
-          GENERATE_SOURCEMAP: "false" # Disable source maps to reduce memory usage
+          GENERATE_SOURCEMAP: "true" # Enable source maps for debugging
 
       - name: Ensure .nojekyll file exists
         run: touch build/.nojekyll
