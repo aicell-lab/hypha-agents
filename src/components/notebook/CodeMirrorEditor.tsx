@@ -106,7 +106,19 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     }
   }, [language]);
 
-  // Create editor
+  // Store callbacks in refs to avoid recreating editor
+  const onChangeRef = useRef(onChange);
+  const onExecuteRef = useRef(onExecute);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    onExecuteRef.current = onExecute;
+  }, [onExecute]);
+
+  // Create editor (only once)
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -115,7 +127,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       {
         key: 'Shift-Enter',
         run: () => {
-          onExecute?.();
+          onExecuteRef.current?.();
           return true;
         }
       },
@@ -141,9 +153,14 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       EditorView.lineWrapping,
       EditorState.tabSize.of(4),
       EditorView.updateListener.of((update: ViewUpdate) => {
-        if (update.docChanged && onChange) {
-          const newValue = update.state.doc.toString();
-          onChange(newValue);
+        if (update.docChanged) {
+          // Mark that user is typing
+          isUserTypingRef.current = true;
+
+          if (onChangeRef.current) {
+            const newValue = update.state.doc.toString();
+            onChangeRef.current(newValue);
+          }
         }
       })
     ];
@@ -195,22 +212,32 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         editorRef.current = null;
       }
     };
-  }, [getLanguageExtension, onChange, onExecute, readOnly, autoFocus, editorRef]);
+    // Only recreate editor if language, readOnly, or autoFocus changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getLanguageExtension, readOnly, autoFocus]);
 
-  // Update content when value prop changes externally
+  // Update content when value prop changes externally (but not when user is typing)
+  const isUserTypingRef = useRef(false);
+
   useEffect(() => {
-    if (viewRef.current) {
+    if (viewRef.current && !isUserTypingRef.current) {
       const currentValue = viewRef.current.state.doc.toString();
       if (currentValue !== value) {
+        // Store cursor position
+        const selection = viewRef.current.state.selection.main;
+
         viewRef.current.dispatch({
           changes: {
             from: 0,
             to: viewRef.current.state.doc.length,
             insert: value
-          }
+          },
+          selection: { anchor: Math.min(selection.anchor, value.length) }
         });
       }
     }
+    // Reset the typing flag after external updates
+    isUserTypingRef.current = false;
   }, [value]);
 
   return (
