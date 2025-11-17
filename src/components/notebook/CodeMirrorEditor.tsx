@@ -27,7 +27,7 @@ const jupyterHighlightStyle = HighlightStyle.define([
   { tag: tags.comment, color: '#408080', fontStyle: 'italic' },  // gray-blue for comments
   { tag: tags.number, color: '#666666' },  // gray for numbers
   { tag: tags.operator, color: '#AA22FF' },  // purple for operators
-  { tag: tags.function(tags.variableName), color: '#0000FF' },  // blue for function names
+  { tag: tags.function, color: '#0000FF' },  // blue for function names
   { tag: tags.className, color: '#0000FF', fontWeight: 'bold' },  // blue for class names
   { tag: tags.variableName, color: '#000000' },  // black for variables
   { tag: tags.propertyName, color: '#000000' },
