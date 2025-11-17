@@ -167,8 +167,8 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     const extensions: Extension[] = [
       getLanguageExtension(),
       lineNumbers(),
-      jupyterTheme,
       syntaxHighlighting(jupyterHighlightStyle),
+      jupyterTheme,
       bracketMatching(),
       closeBrackets(),
       autocompletion(),
