@@ -560,9 +560,9 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               </div>
             )}
 
-            {/* Expandable Code Editor */}
+            {/* Expandable Code Editor - Using Textarea as fallback */}
             {!hideCode && (() => {
-              console.log('[CodeCell] Rendering Editor', {
+              console.log('[CodeCell] Rendering Textarea Editor (Monaco disabled for debugging)', {
                 editorHeight,
                 language,
                 codeLength: codeValue.length,
@@ -570,75 +570,67 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               });
               return (
               <div className="relative">
-                <Editor
-                  height={editorHeight}
-                  language={language}
+                <textarea
+                  ref={(el) => {
+                    if (el && !internalEditorRef.current) {
+                      // Create a mock editor interface for compatibility
+                      internalEditorRef.current = {
+                        getValue: () => el.value,
+                        getModel: () => null,
+                        getVisibleRanges: () => [],
+                        hasTextFocus: () => document.activeElement === el,
+                        focus: () => el.focus(),
+                        getContainerDomNode: () => el,
+                        onDidContentSizeChange: () => {},
+                        updateOptions: () => {},
+                        addCommand: () => {},
+                        setValue: (value: string) => { el.value = value; },
+                        layout: () => {},
+                        onDidChangeModelContent: () => ({ dispose: () => {} }),
+                        deltaDecorations: () => []
+                      };
+                    }
+                  }}
                   value={codeValue}
-                  loading={<div style={{ padding: '20px', textAlign: 'center' }}>
-                    <div>Loading Monaco Editor...</div>
-                    <div style={{ fontSize: '12px', marginTop: '10px' }}>
-                      Height: {editorHeight}px | Language: {language}
-                    </div>
-                  </div>}
-                  beforeMount={(monaco: any) => {
-                    console.log('[CodeCell] Monaco beforeMount called!', {
-                      hasMonaco: !!monaco,
-                      monacoVersion: monaco?.version
-                    });
-                  }}
-                  onValidate={(markers: any) => {
-                    console.log('[CodeCell] Monaco validation', { markerCount: markers?.length || 0 });
-                  }}
-                  onChange={(value) => {
-                    const newValue = value || '';
+                  onChange={(e) => {
+                    const newValue = e.target.value;
                     setCodeValue(newValue);
                     onChange?.(newValue);
-                    setTimeout(updateEditorHeight, 10);
                   }}
-                  onMount={handleEditorDidMount}
-                  options={{
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'off',
-                    lineNumbers: 'on',
-                    renderWhitespace: 'selection',
-                    folding: true,
-                    fontSize: 13,
+                  onKeyDown={(e) => {
+                    // Handle Shift+Enter for execution
+                    if (e.shiftKey && e.key === 'Enter') {
+                      e.preventDefault();
+                      handleExecute();
+                    }
+                    // Handle Tab key for indentation
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      const start = e.currentTarget.selectionStart;
+                      const end = e.currentTarget.selectionEnd;
+                      const newValue = codeValue.substring(0, start) + '    ' + codeValue.substring(end);
+                      setCodeValue(newValue);
+                      onChange?.(newValue);
+                      // Set cursor position after the tab
+                      setTimeout(() => {
+                        e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 4;
+                      }, 0);
+                    }
+                  }}
+                  className="w-full border border-gray-300 rounded p-2 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{
+                    height: `${editorHeight}px`,
                     fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-                    lineHeight: 1.5,
-                    padding: { top: 8, bottom: 8 },
-                    glyphMargin: false,
-                    lineDecorationsWidth: 0,
-                    lineNumbersMinChars: 2,
-                    renderLineHighlight: 'none',
-                    overviewRulerBorder: false,
-                    scrollbar: {
-                      vertical: 'auto',
-                      horizontalSliderSize: 4,
-                      verticalSliderSize: 4,
-                      horizontal: 'auto',
-                      useShadows: false,
-                      verticalHasArrows: false,
-                      horizontalHasArrows: false,
-                      alwaysConsumeMouseWheel: false
-                    },
-                    overviewRulerLanes: 0,
-                    hideCursorInOverviewRuler: true,
-                    contextmenu: false,
-                    fixedOverflowWidgets: true,
-                    automaticLayout: true,
-                    // Disable error highlighting and suggestions
-                    formatOnType: false,
-                    formatOnPaste: false,
-                    quickSuggestions: true,
-                    suggestOnTriggerCharacters: false,
-                    acceptSuggestionOnEnter: "off",
-                    parameterHints: { enabled: false },
-                    hover: { enabled: true },
-                    renderValidationDecorations: "off"
+                    fontSize: '13px',
+                    lineHeight: '1.5',
+                    tabSize: 4
                   }}
-                  className="jupyter-editor w-full max-w-full overflow-x-hidden"
+                  placeholder={`Enter ${language} code here...`}
+                  spellCheck={false}
                 />
+                <div className="text-xs text-gray-500 mt-1 px-2">
+                  Using textarea fallback (Monaco disabled) • Press Shift+Enter to execute
+                </div>
               </div>
               );
             })()}

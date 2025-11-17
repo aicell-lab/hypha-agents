@@ -402,47 +402,68 @@ const handleRegenerateResponse = useCallback(() => {
             
             {(!hideContent || isEditing) && (
               isEditing ? (
-                <Editor
-                  height={editorHeight}
-                  defaultLanguage="markdown"
-                  value={content}
-                  onChange={handleEditorChange}
-                  onMount={handleEditorDidMount}
-                  beforeMount={handleBeforeMount}
-                  options={{
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'off',
-                    lineNumbers: 'off',
-                    renderWhitespace: 'selection',
-                    folding: true,
-                    fontSize: 13,
-                    fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-                    lineHeight: 1.5,
-                    padding: { top: 8, bottom: 8 },
-                    glyphMargin: false,
-                    lineDecorationsWidth: 0,
-                    lineNumbersMinChars: 3,
-                    renderLineHighlight: 'none',
-                    overviewRulerBorder: false,
-                    scrollbar: {
-                      vertical: 'auto',
-                      horizontalSliderSize: 4,
-                      verticalSliderSize: 4,
-                      horizontal: 'auto',
-                      useShadows: false,
-                      verticalHasArrows: false,
-                      horizontalHasArrows: false,
-                      alwaysConsumeMouseWheel: false
-                    },
-                    overviewRulerLanes: 0,
-                    hideCursorInOverviewRuler: true,
-                    contextmenu: false,
-                    fixedOverflowWidgets: true,
-                    automaticLayout: true
-                  }}
-                  className="jupyter-editor w-full"
-                />
+                <div className="relative">
+                  <textarea
+                    ref={(el) => {
+                      if (el && !internalEditorRef.current) {
+                        // Create a mock editor interface for compatibility
+                        internalEditorRef.current = {
+                          getValue: () => el.value,
+                          getModel: () => null,
+                          getVisibleRanges: () => [],
+                          hasTextFocus: () => document.activeElement === el,
+                          focus: () => el.focus(),
+                          getContainerDomNode: () => el,
+                          onDidContentSizeChange: () => {},
+                          updateOptions: () => {},
+                          addCommand: () => {},
+                          setValue: (value: string) => { el.value = value; },
+                          layout: () => {}
+                        };
+                        if (editorRef) {
+                          (editorRef as any).current = internalEditorRef.current;
+                        }
+                      }
+                    }}
+                    value={content}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      onChange(newValue);
+                    }}
+                    onKeyDown={(e) => {
+                      // Handle Shift+Enter to render markdown
+                      if (e.shiftKey && e.key === 'Enter') {
+                        e.preventDefault();
+                        handleRun();
+                      }
+                      // Handle Tab key for indentation
+                      if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const start = e.currentTarget.selectionStart;
+                        const end = e.currentTarget.selectionEnd;
+                        const newValue = content.substring(0, start) + '    ' + content.substring(end);
+                        onChange(newValue);
+                        // Set cursor position after the tab
+                        setTimeout(() => {
+                          e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 4;
+                        }, 0);
+                      }
+                    }}
+                    className="w-full border border-gray-300 rounded p-2 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={{
+                      height: `${editorHeight}px`,
+                      fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+                      fontSize: '13px',
+                      lineHeight: '1.5',
+                      tabSize: 4
+                    }}
+                    placeholder="Enter markdown here..."
+                    spellCheck={false}
+                  />
+                  <div className="text-xs text-gray-500 mt-1 px-2">
+                    Using textarea fallback (Monaco disabled) • Press Shift+Enter to render
+                  </div>
+                </div>
               ) : (
                 <div 
                   className="markdown-preview group relative overflow-x-auto w-[calc(100%-24px)] pt-2"
