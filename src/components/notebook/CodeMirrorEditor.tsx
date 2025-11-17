@@ -7,14 +7,33 @@ import { markdown } from '@codemirror/lang-markdown';
 import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirror/commands';
 import {
   syntaxHighlighting,
-  defaultHighlightStyle,
+  HighlightStyle,
   bracketMatching,
   foldGutter,
   indentOnInput
 } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { search, searchKeymap } from '@codemirror/search';
 import { EditorView as EditorViewType } from '@codemirror/view';
+
+// Syntax highlighting colors (similar to Jupyter/Python)
+const jupyterHighlightStyle = HighlightStyle.define([
+  { tag: tags.keyword, color: '#008000', fontWeight: 'bold' },  // green for keywords (def, class, if, etc.)
+  { tag: tags.definitionKeyword, color: '#008000', fontWeight: 'bold' },
+  { tag: tags.modifier, color: '#AA22FF' },  // purple for modifiers
+  { tag: tags.string, color: '#BA2121' },  // red for strings
+  { tag: tags.comment, color: '#408080', fontStyle: 'italic' },  // gray-blue for comments
+  { tag: tags.number, color: '#666666' },  // gray for numbers
+  { tag: tags.operator, color: '#AA22FF' },  // purple for operators
+  { tag: tags.function(tags.variableName), color: '#0000FF' },  // blue for function names
+  { tag: tags.className, color: '#0000FF', fontWeight: 'bold' },  // blue for class names
+  { tag: tags.variableName, color: '#000000' },  // black for variables
+  { tag: tags.propertyName, color: '#000000' },
+  { tag: tags.bool, color: '#008000' },  // green for True/False
+  { tag: tags.null, color: '#008000' },  // green for None
+  { tag: tags.self, color: '#AA22FF', fontStyle: 'italic' },  // purple italic for self
+]);
 
 // Jupyter notebook theme for CodeMirror
 const jupyterTheme = EditorView.theme({
@@ -23,12 +42,18 @@ const jupyterTheme = EditorView.theme({
     fontFamily: 'Monaco, Menlo, Consolas, "Liberation Mono", "Courier New", monospace',
     backgroundColor: '#f7f7f7',
     border: '1px solid #cfcfcf',
-    borderRadius: '2px'
+    borderRadius: '2px',
+    height: '100%'
+  },
+  '.cm-scroller': {
+    overflow: 'auto',
+    height: '100%'
   },
   '.cm-content': {
     caretColor: '#000',
     padding: '4px 0',
-    lineHeight: '1.21429em'
+    lineHeight: '1.21429em',
+    minHeight: '100%'
   },
   '.cm-line': {
     padding: '0 10px'
@@ -141,7 +166,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     const extensions: Extension[] = [
       getLanguageExtension(),
       jupyterTheme,
-      syntaxHighlighting(defaultHighlightStyle),
+      syntaxHighlighting(jupyterHighlightStyle),
       bracketMatching(),
       closeBrackets(),
       autocompletion(),
@@ -245,8 +270,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       ref={containerRef}
       style={{
         height: typeof height === 'number' ? `${height}px` : height,
-        minHeight: '72px',
-        overflow: 'auto'
+        minHeight: '72px'
       }}
       className="codemirror-container"
     />
