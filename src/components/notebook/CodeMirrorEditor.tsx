@@ -8,6 +8,7 @@ import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirro
 import {
   syntaxHighlighting,
   HighlightStyle,
+  defaultHighlightStyle,
   bracketMatching,
   foldGutter,
   indentOnInput
@@ -167,6 +168,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     const extensions: Extension[] = [
       getLanguageExtension(),
       lineNumbers(),
+      defaultHighlightStyle,
       syntaxHighlighting(jupyterHighlightStyle),
       jupyterTheme,
       bracketMatching(),
