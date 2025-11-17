@@ -4,7 +4,7 @@ import python from 'react-syntax-highlighter/dist/cjs/languages/prism/python';
 import typescript from 'react-syntax-highlighter/dist/cjs/languages/prism/typescript';
 import bash from 'react-syntax-highlighter/dist/cjs/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/cjs/languages/prism/json';
-import Editor, { OnMount } from '@monaco-editor/react';
+import { CodeMirrorEditor } from './CodeMirrorEditor';
 import { RoleSelector } from './RoleSelector';
 import { VscCode } from 'react-icons/vsc';
 import { FaSpinner } from 'react-icons/fa';
@@ -20,20 +20,12 @@ SyntaxHighlighter.registerLanguage('typescript', typescript);
 SyntaxHighlighter.registerLanguage('bash', bash);
 SyntaxHighlighter.registerLanguage('json', json);
 
-interface MonacoEditor {
+interface EditorAPI {
   getValue: () => string;
-  getModel: () => any;
-  getVisibleRanges: () => any;
-  hasTextFocus: () => boolean;
+  setValue: (value: string) => void;
   focus: () => void;
   getContainerDomNode: () => HTMLElement | null;
-  onDidContentSizeChange: (callback: () => void) => void;
-  updateOptions: (options: any) => void;
-  addCommand: (keybinding: number, handler: () => void) => void;
-  setValue: (value: string) => void;
-  layout: () => void;
-  onDidChangeModelContent: (callback: () => void) => { dispose: () => void };
-  deltaDecorations: (oldDecorations: string[], newDecorations: any[]) => string[];
+  hasTextFocus: () => boolean;
 }
 
 type CellRole = 'user' | 'assistant' | 'system';
@@ -86,64 +78,30 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   isReady = false
 }) => {
   const [codeValue, setCodeValue] = useState(code);
-  const outputRef = useRef<HTMLDivElement>(null);
-  const internalEditorRef = useRef<MonacoEditor | null>(null);
+  const internalEditorRef = useRef<EditorAPI | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
   const lineHeightPx = 20;
   const minLines = 2;
   const paddingHeight = 16;
 
-  // Calculate initial editor height - MUST be > 0 for Monaco to render
+  // Calculate initial editor height
   const calculateHeight = (content: string) => {
     const lineCount = Math.max(content.split('\n').length, minLines);
     return Math.max(lineCount * lineHeightPx + (paddingHeight * 2), 72); // Minimum 72px
   };
 
   const [editorHeight, setEditorHeight] = useState<number>(() => calculateHeight(code));
-  const monacoRef = useRef<any>(null);
-  const hasFinalDomOutput = useRef<boolean>(false);
   const styleTagRef = useRef<HTMLStyleElement | null>(null);
-  const [isFocused, setIsFocused] = useState(false);
 
   // Add a check for staged cells
   const isStagedCell = staged && parent;
   const isFullyCollapsed = (role === 'system' && hideCode) || (isStagedCell && hideCode);
 
-  // Calculate initial height based on content
-  const calculateInitialHeight = useCallback((content: string) => {
-    const lineCount = content.split('\n').length;
-    return Math.max(
-      lineCount * lineHeightPx + (paddingHeight * 2), // Double padding (top and bottom)
-      minLines * lineHeightPx + (paddingHeight * 2)
-    );
-  }, []);
-
   // Update editor height when content changes
-  const updateEditorHeight = useCallback(() => {
-    if (internalEditorRef.current) {
-      const model = internalEditorRef.current.getModel();
-      if (model) {
-        const lineCount = model.getLineCount();
-        // Add extra padding to ensure all content is visible
-        const newHeight = Math.max(
-          lineCount * lineHeightPx + (paddingHeight * 2), // Double padding (top and bottom)
-          minLines * lineHeightPx + (paddingHeight * 2)
-        );
-        setEditorHeight(newHeight);
-        
-        // Force editor to update its layout
-        setTimeout(() => {
-          internalEditorRef.current?.layout?.();
-        }, 0);
-      }
-    }
-  }, []);
-
-  // Set initial height when component mounts
   useEffect(() => {
-    const initialHeight = calculateInitialHeight(code);
-    setEditorHeight(initialHeight);
-  }, [code, calculateInitialHeight]);
+    const newHeight = calculateHeight(codeValue);
+    setEditorHeight(newHeight);
+  }, [codeValue]);
 
   // Expose methods through ref
   React.useImperativeHandle(blockRef, () => ({
@@ -180,42 +138,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     };
   }, []);
 
-  // Handle wheel events to prevent editor from capturing page scrolls
-  useEffect(() => {
-    if (!editorDivRef.current) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      // Get the editor element
-      const editor = internalEditorRef.current;
-      if (!editor) return;
-
-      const model = editor.getModel();
-      if (!model) return;
-      
-      const lineCount = model.getLineCount();
-      const visibleRanges = editor.getVisibleRanges();
-      
-      // Check if we're at the top or bottom of the editor content
-      const isAtTop = visibleRanges.length > 0 && visibleRanges[0].startLineNumber <= 1;
-      const isAtBottom = visibleRanges.length > 0 && 
-                         visibleRanges[visibleRanges.length - 1].endLineNumber >= lineCount;
-      
-      // If scrolling up at the top or down at the bottom, let the page scroll
-      if ((e.deltaY < 0 && isAtTop) || (e.deltaY > 0 && isAtBottom)) {
-        // Don't prevent default - let the page scroll
-        return;
-      }
-      
-      // Otherwise, we're within the editor's content, handle normally
-      // but don't prevent the event from propagating
-    };
-    
-    editorDivRef.current.addEventListener('wheel', handleWheel, { passive: true });
-    
-    return () => {
-      editorDivRef.current?.removeEventListener('wheel', handleWheel);
-    };
-  }, []);
 
   // Handle code execution
   const handleExecute = useCallback(async () => {
@@ -229,98 +151,6 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     }
   }, [isReady, isExecuting, codeValue, onExecute]);
 
-  // Handle keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Check if the editor or its container has focus
-      const isEditorFocused = internalEditorRef.current?.hasTextFocus?.() || 
-                             editorDivRef.current?.contains(document.activeElement);
-
-      if (!isEditorFocused) return;
-
-      // Shift + Enter to execute
-      if (e.key === 'Enter' && e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation(); // Stop event from bubbling to other handlers
-        handleExecute();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [handleExecute]);
-
-  // Function to handle editor mounting
-  const handleEditorDidMount: OnMount = (editor, monaco) => {
-    console.log('[CodeCell] Monaco editor mounted!', {
-      hasEditor: !!editor,
-      hasMonaco: !!monaco,
-      editorHeight,
-      language
-    });
-    internalEditorRef.current = editor;
-    monacoRef.current = monaco;
-
-    // Force editor to update its layout
-    editor.layout();
-    
-    // Update editor height on content change
-    editor.onDidContentSizeChange(() => {
-      updateEditorHeight();
-    });
-
-    // Configure Python indentation
-    const model = editor.getModel();
-    if (model && language === 'python') {
-      // Make sure Python indentation works properly
-      editor.updateOptions({
-        tabSize: 4,
-        insertSpaces: true,
-        detectIndentation: true,
-        autoIndent: 'full'
-      });
-    }
-    
-    // Add keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-      if (onExecute) onExecute();
-    });
-
-    // Configure specific languages
-    if (language === 'python') {
-      monaco.languages.setLanguageConfiguration('python', {
-        onEnterRules: [
-          {
-            // Indent after lines ending with :
-            beforeText: /^\s*[\w\.\(\)\[\]]+.*:(?:.*)?$/,
-            action: { indentAction: monaco.languages.IndentAction.Indent }
-          },
-          {
-            // Keep indentation on empty lines
-            beforeText: /^\s+$/,
-            action: { indentAction: monaco.languages.IndentAction.None }
-          }
-        ],
-        // Ensure proper indentation detection for Python
-        autoClosingPairs: [
-          { open: '{', close: '}' },
-          { open: '[', close: ']' },
-          { open: '(', close: ')' },
-          { open: '"', close: '"', notIn: ['string'] },
-          { open: "'", close: "'", notIn: ['string', 'comment'] },
-          { open: '"""', close: '"""', notIn: ['string', 'comment'] },
-          { open: "'''", close: "'''", notIn: ['string', 'comment'] }
-        ],
-        indentationRules: {
-          increaseIndentPattern: /^\s*[\w\.]+.*:\s*$/,
-          decreaseIndentPattern: /^\s+$/
-        }
-      });
-    }
-    
-    // Update the initial height
-    updateEditorHeight();
-  };
 
   // Handle click on the editor container
   const handleEditorClick = useCallback((e: React.MouseEvent) => {
@@ -560,80 +390,20 @@ export const CodeCell: React.FC<CodeCellProps> = ({
               </div>
             )}
 
-            {/* Expandable Code Editor - Using Textarea as fallback */}
-            {!hideCode && (() => {
-              console.log('[CodeCell] Rendering Textarea Editor (Monaco disabled for debugging)', {
-                editorHeight,
-                language,
-                codeLength: codeValue.length,
-                hideCode
-              });
-              return (
-              <div className="relative">
-                <textarea
-                  ref={(el) => {
-                    if (el && !internalEditorRef.current) {
-                      // Create a mock editor interface for compatibility
-                      internalEditorRef.current = {
-                        getValue: () => el.value,
-                        getModel: () => null,
-                        getVisibleRanges: () => [],
-                        hasTextFocus: () => document.activeElement === el,
-                        focus: () => el.focus(),
-                        getContainerDomNode: () => el,
-                        onDidContentSizeChange: () => {},
-                        updateOptions: () => {},
-                        addCommand: () => {},
-                        setValue: (value: string) => { el.value = value; },
-                        layout: () => {},
-                        onDidChangeModelContent: () => ({ dispose: () => {} }),
-                        deltaDecorations: () => []
-                      };
-                    }
-                  }}
-                  value={codeValue}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    setCodeValue(newValue);
-                    onChange?.(newValue);
-                  }}
-                  onKeyDown={(e) => {
-                    // Handle Shift+Enter for execution
-                    if (e.shiftKey && e.key === 'Enter') {
-                      e.preventDefault();
-                      handleExecute();
-                    }
-                    // Handle Tab key for indentation
-                    if (e.key === 'Tab') {
-                      e.preventDefault();
-                      const start = e.currentTarget.selectionStart;
-                      const end = e.currentTarget.selectionEnd;
-                      const newValue = codeValue.substring(0, start) + '    ' + codeValue.substring(end);
-                      setCodeValue(newValue);
-                      onChange?.(newValue);
-                      // Set cursor position after the tab
-                      setTimeout(() => {
-                        e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 4;
-                      }, 0);
-                    }
-                  }}
-                  className="w-full border border-gray-300 rounded p-2 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  style={{
-                    height: `${editorHeight}px`,
-                    fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-                    fontSize: '13px',
-                    lineHeight: '1.5',
-                    tabSize: 4
-                  }}
-                  placeholder={`Enter ${language} code here...`}
-                  spellCheck={false}
-                />
-                <div className="text-xs text-gray-500 mt-1 px-2">
-                  Using textarea fallback (Monaco disabled) • Press Shift+Enter to execute
-                </div>
-              </div>
-              );
-            })()}
+            {/* Expandable Code Editor - Using CodeMirror */}
+            {!hideCode && (
+              <CodeMirrorEditor
+                value={codeValue}
+                language={language as 'python' | 'javascript' | 'markdown'}
+                onChange={(value) => {
+                  setCodeValue(value);
+                  onChange?.(value);
+                }}
+                onExecute={handleExecute}
+                height={editorHeight}
+                editorRef={internalEditorRef}
+              />
+            )}
           </div>
         </div>
       )}

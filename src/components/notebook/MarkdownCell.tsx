@@ -3,23 +3,16 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Editor } from '@monaco-editor/react';
-import type { OnMount } from '@monaco-editor/react';
+import { CodeMirrorEditor } from './CodeMirrorEditor';
 import { RoleSelector, CellRole } from './RoleSelector';
 import { MdOutlineTextFields } from 'react-icons/md';
 
-interface MonacoEditor {
+interface EditorAPI {
   getValue: () => string;
-  getModel: () => any;
-  getVisibleRanges: () => any;
-  hasTextFocus: () => boolean;
+  setValue: (value: string) => void;
   focus: () => void;
   getContainerDomNode: () => HTMLElement | null;
-  onDidContentSizeChange: (callback: () => void) => void;
-  updateOptions: (options: any) => void;
-  addCommand: (keybinding: number, handler: () => void) => void;
-  setValue: (value: string) => void;
-  layout: () => void;
+  hasTextFocus: () => boolean;
 }
 
 interface MarkdownCellProps {
@@ -55,20 +48,19 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
   hideContent = false,
   onVisibilityChange
 }) => {
-  const internalEditorRef = useRef<MonacoEditor | null>(null);
+  const internalEditorRef = useRef<EditorAPI | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
   const lineHeightPx = 20;
   const minLines = 3;
   const paddingHeight = 16;
 
-  // Calculate initial editor height - MUST be > 0 for Monaco to render
+  // Calculate initial editor height
   const calculateHeight = (text: string) => {
     const lineCount = Math.max(text.split('\n').length, minLines);
     return Math.max(lineCount * lineHeightPx + (paddingHeight * 2), 92); // Minimum 92px
   };
 
   const [editorHeight, setEditorHeight] = useState<number>(() => calculateHeight(content));
-  const monacoRef = useRef<any>(null);
   const [isFocused, setIsFocused] = useState(false);
   
   // Add a check for staged cells
@@ -402,68 +394,15 @@ const handleRegenerateResponse = useCallback(() => {
             
             {(!hideContent || isEditing) && (
               isEditing ? (
-                <div className="relative">
-                  <textarea
-                    ref={(el) => {
-                      if (el && !internalEditorRef.current) {
-                        // Create a mock editor interface for compatibility
-                        internalEditorRef.current = {
-                          getValue: () => el.value,
-                          getModel: () => null,
-                          getVisibleRanges: () => [],
-                          hasTextFocus: () => document.activeElement === el,
-                          focus: () => el.focus(),
-                          getContainerDomNode: () => el,
-                          onDidContentSizeChange: () => {},
-                          updateOptions: () => {},
-                          addCommand: () => {},
-                          setValue: (value: string) => { el.value = value; },
-                          layout: () => {}
-                        };
-                        if (editorRef) {
-                          (editorRef as any).current = internalEditorRef.current;
-                        }
-                      }
-                    }}
-                    value={content}
-                    onChange={(e) => {
-                      const newValue = e.target.value;
-                      onChange(newValue);
-                    }}
-                    onKeyDown={(e) => {
-                      // Handle Shift+Enter to render markdown
-                      if (e.shiftKey && e.key === 'Enter') {
-                        e.preventDefault();
-                        handleRun();
-                      }
-                      // Handle Tab key for indentation
-                      if (e.key === 'Tab') {
-                        e.preventDefault();
-                        const start = e.currentTarget.selectionStart;
-                        const end = e.currentTarget.selectionEnd;
-                        const newValue = content.substring(0, start) + '    ' + content.substring(end);
-                        onChange(newValue);
-                        // Set cursor position after the tab
-                        setTimeout(() => {
-                          e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 4;
-                        }, 0);
-                      }
-                    }}
-                    className="w-full border border-gray-300 rounded p-2 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    style={{
-                      height: `${editorHeight}px`,
-                      fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-                      fontSize: '13px',
-                      lineHeight: '1.5',
-                      tabSize: 4
-                    }}
-                    placeholder="Enter markdown here..."
-                    spellCheck={false}
-                  />
-                  <div className="text-xs text-gray-500 mt-1 px-2">
-                    Using textarea fallback (Monaco disabled) • Press Shift+Enter to render
-                  </div>
-                </div>
+                <CodeMirrorEditor
+                  value={content}
+                  language="markdown"
+                  onChange={onChange}
+                  onExecute={handleRun}
+                  height={editorHeight}
+                  autoFocus
+                  editorRef={internalEditorRef}
+                />
               ) : (
                 <div 
                   className="markdown-preview group relative overflow-x-auto w-[calc(100%-24px)] pt-2"
