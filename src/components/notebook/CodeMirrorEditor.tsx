@@ -15,6 +15,7 @@ import {
 import { tags } from '@lezer/highlight';
 import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { search, searchKeymap } from '@codemirror/search';
+import { lineNumbers } from '@codemirror/view';
 import { EditorView as EditorViewType } from '@codemirror/view';
 
 // Syntax highlighting colors (similar to Jupyter/Python)
@@ -165,6 +166,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
 
     const extensions: Extension[] = [
       getLanguageExtension(),
+      lineNumbers(),
       jupyterTheme,
       syntaxHighlighting(jupyterHighlightStyle),
       bracketMatching(),
