@@ -142,7 +142,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   // Handle code execution
   const handleExecute = useCallback(async () => {
     if (!isReady || isExecuting) return;
-    
+
     if (onExecute) {
       onExecute();
     } else {
@@ -151,6 +151,26 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     }
   }, [isReady, isExecuting, codeValue, onExecute]);
 
+  // Window-level keyboard handler for Shift+Enter (iPad compatibility)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if editor is focused
+      const isEditorFocused = internalEditorRef.current?.hasTextFocus?.() ||
+                             editorDivRef.current?.contains(document.activeElement);
+
+      if (!isEditorFocused) return;
+
+      // Handle Shift+Enter or Cmd/Ctrl+Enter for execution
+      if (e.key === 'Enter' && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleExecute();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [handleExecute]);
 
   // Handle click on the editor container
   const handleEditorClick = useCallback((e: React.MouseEvent) => {
