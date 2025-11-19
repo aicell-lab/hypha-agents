@@ -50,17 +50,6 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
 }) => {
   const internalEditorRef = useRef<EditorAPI | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
-  const lineHeightPx = 20;
-  const minLines = 3;
-  const paddingHeight = 16;
-
-  // Calculate initial editor height
-  const calculateHeight = (text: string) => {
-    const lineCount = Math.max(text.split('\n').length, minLines);
-    return Math.max(lineCount * lineHeightPx + (paddingHeight * 2), 92); // Minimum 92px
-  };
-
-  const [editorHeight, setEditorHeight] = useState<number>(() => calculateHeight(content));
   const [isFocused, setIsFocused] = useState(false);
   
   // Add a check for staged cells
@@ -97,41 +86,6 @@ const handleRegenerateResponse = useCallback(() => {
     }
   }, [isActive, initialEditMode]); // Only depend on active state and initial mode
 
-  // Update editor height when content changes
-  const updateEditorHeight = useCallback(() => {
-    if (internalEditorRef.current) {
-      const model = internalEditorRef.current.getModel();
-      if (model) {
-        const lineCount = model.getLineCount();
-        // Add extra padding to ensure all content is visible
-        const newHeight = Math.max(
-          lineCount * lineHeightPx + (paddingHeight * 2), // Double padding (top and bottom)
-          minLines * lineHeightPx + (paddingHeight * 2)
-        );
-        setEditorHeight(newHeight);
-        
-        // Force editor to update its layout
-        setTimeout(() => {
-          internalEditorRef.current?.layout?.();
-        }, 0);
-      }
-    }
-  }, []);
-
-  // Calculate initial height based on content
-  const calculateInitialHeight = useCallback((content: string) => {
-    const lineCount = content.split('\n').length;
-    return Math.max(
-      lineCount * lineHeightPx + (paddingHeight * 2),
-      minLines * lineHeightPx + (paddingHeight * 2)
-    );
-  }, []);
-
-  // Update height when content changes
-  useEffect(() => {
-    updateEditorHeight();
-  }, [content, updateEditorHeight]);
-
   // Function to handle running/rendering markdown
   const handleRun = useCallback(() => {
     if (isEditing && internalEditorRef.current) {
@@ -155,61 +109,6 @@ const handleRegenerateResponse = useCallback(() => {
     },
     getContainerDomNode: () => internalEditorRef.current?.getContainerDomNode()
   }), [content]);
-
-  // Function to handle editor mounting
-  const handleEditorDidMount: OnMount = (editor) => {
-    internalEditorRef.current = editor as unknown as MonacoEditor;
-    if (editorRef) {
-      (editorRef as any).current = {
-        getValue: () => editor.getValue(),
-        focus: () => {
-          if (typeof editor.focus === 'function') {
-            editor.focus();
-          } else if (editor.getContainerDomNode) {
-            editor.getContainerDomNode()?.focus();
-          }
-        },
-        getContainerDomNode: () => editor.getContainerDomNode()
-      };
-    }
-    editor.setValue(content);
-    updateEditorHeight();
-    editor.onDidContentSizeChange(() => {
-      updateEditorHeight();
-    });
-    editor.updateOptions({
-      padding: { top: 8, bottom: 8 }
-    });
-
-    // Add keyboard shortcut handler for Shift+Enter
-    if (monacoRef.current) {
-      editor.addCommand(monacoRef.current.KeyMod.Shift | monacoRef.current.KeyCode.Enter, () => {
-        handleRun();
-      });
-      
-      // Add keyboard shortcut for Ctrl+Enter and Command+Enter to regenerate response
-      const ctrlCmdKey = monacoRef.current.KeyMod.CtrlCmd;
-      editor.addCommand(ctrlCmdKey | monacoRef.current.KeyCode.Enter, () => {
-        handleRegenerateResponse();
-      });
-    }
-
-    // Remove automatic focus when cell becomes active
-    // The editor will only be focused when clicked directly
-  };
-
-  // Handle Monaco instance before mounting the editor
-  const handleBeforeMount = (monaco: any) => {
-    monacoRef.current = monaco;
-  };
-
-  // Function to handle editor changes
-  const handleEditorChange = (value: string | undefined) => {
-    if (value !== undefined) {
-      onChange(value);
-      setTimeout(updateEditorHeight, 0);
-    }
-  };
 
   // Update effect to handle keyboard shortcuts
   useEffect(() => {
@@ -250,18 +149,22 @@ const handleRegenerateResponse = useCallback(() => {
   // Handle focus and blur events
   useEffect(() => {
     const handleFocusOut = (e: FocusEvent) => {
-      // Check if the focus is still within our cell
-      const isInternalFocus = editorDivRef.current?.contains(e.relatedTarget as Node);
-      if (!isInternalFocus && isEditing) {
-        // Save content before exiting edit mode
-        if (internalEditorRef.current) {
-          const latestContent = internalEditorRef.current.getValue();
-          onChange(latestContent);
+      // Add a small delay to allow the CodeMirror editor to mount and receive focus
+      // This prevents the editor from immediately closing when switching from preview to edit mode
+      setTimeout(() => {
+        // Check if the focus is still within our cell
+        const isInternalFocus = editorDivRef.current?.contains(document.activeElement);
+        if (!isInternalFocus && isEditing) {
+          // Save content before exiting edit mode
+          if (internalEditorRef.current) {
+            const latestContent = internalEditorRef.current.getValue();
+            onChange(latestContent);
+          }
+          // Exit edit mode
+          onEditingChange?.(false);
+          setIsFocused(false);
         }
-        // Exit edit mode
-        onEditingChange?.(false);
-        setIsFocused(false);
-      }
+      }, 100);
     };
 
     const currentEditorDiv = editorDivRef.current;
@@ -303,7 +206,7 @@ const handleRegenerateResponse = useCallback(() => {
       }}
       onClick={(e) => {
         // Only focus the editor if clicking directly in the editor area
-        const isEditorClick = (e.target as HTMLElement)?.closest('.monaco-editor');
+        const isEditorClick = (e.target as HTMLElement)?.closest('.cm-editor');
         if (isEditorClick && internalEditorRef.current) {
           internalEditorRef.current.focus();
         }
@@ -399,7 +302,7 @@ const handleRegenerateResponse = useCallback(() => {
                   language="markdown"
                   onChange={onChange}
                   onExecute={handleRun}
-                  height={editorHeight}
+                  height="auto"
                   autoFocus
                   editorRef={internalEditorRef}
                 />

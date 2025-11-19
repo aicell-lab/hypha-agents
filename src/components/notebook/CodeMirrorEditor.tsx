@@ -38,8 +38,8 @@ const jupyterHighlightStyle = HighlightStyle.define([
 
 // Jupyter notebook theme for CodeMirror
 const jupyterTheme = EditorView.theme({
-  '&': {
-    fontSize: '13px',
+  '&.cm-editor': {
+    fontSize: '14px',
     fontFamily: 'Monaco, Menlo, Consolas, "Liberation Mono", "Courier New", monospace',
     backgroundColor: '#f7f7f7',
     border: '1px solid #cfcfcf',
@@ -66,7 +66,7 @@ const jupyterTheme = EditorView.theme({
   '.cm-selectionBackground, ::selection': {
     backgroundColor: '#d7d4f0'
   },
-  '&.cm-focused .cm-selectionBackground, &.cm-focused ::selection': {
+  '&.cm-editor.cm-focused .cm-selectionBackground, &.cm-editor.cm-focused ::selection': {
     backgroundColor: '#d7d4f0'
   },
   '.cm-activeLine': {
@@ -81,10 +81,10 @@ const jupyterTheme = EditorView.theme({
   '.cm-activeLineGutter': {
     backgroundColor: 'transparent'
   },
-  '&.cm-focused': {
+  '&.cm-editor.cm-focused': {
     outline: 'none',
-    border: '1px solid #66afe9',
-    boxShadow: 'inset 0 1px 1px rgba(0,0,0,0.075), 0 0 8px rgba(102,175,233,0.6)'
+    border: '1px solid #b8daff',
+    boxShadow: 'inset 0 1px 1px rgba(0,0,0,0.03), 0 0 4px rgba(184,218,255,0.4)'
   }
 }, { dark: false });
 

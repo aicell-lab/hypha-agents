@@ -161,7 +161,7 @@ export const CodeCell: React.FC<CodeCellProps> = ({
     }
     
     // Only focus the editor if clicking directly in the editor area
-    const isEditorClick = (e.target as HTMLElement)?.closest('.monaco-editor');
+    const isEditorClick = (e.target as HTMLElement)?.closest('.cm-editor');
     if (isEditorClick && internalEditorRef.current) {
       internalEditorRef.current.focus();
     }
