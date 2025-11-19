@@ -23,7 +23,10 @@ export const useNotebookKeyboardShortcuts = ({
                       activeElement?.tagName === 'TEXTAREA' ||
                       activeElement?.tagName === 'INPUT' ||
                       // Check for Monaco editor's internal textarea
-                      activeElement?.classList.contains('inputarea');
+                      activeElement?.classList.contains('inputarea') ||
+                      // Check for CodeMirror editor
+                      activeElement?.closest('.cm-editor') !== null ||
+                      activeElement?.classList.contains('cm-content');
 
     // If we're in an editor, don't handle cell-level shortcuts
     if (isInEditor) {
