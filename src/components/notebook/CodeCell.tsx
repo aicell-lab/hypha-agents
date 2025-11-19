@@ -80,14 +80,14 @@ export const CodeCell: React.FC<CodeCellProps> = ({
   const [codeValue, setCodeValue] = useState(code);
   const internalEditorRef = useRef<EditorAPI | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
-  const lineHeightPx = 20;
-  const minLines = 2;
-  const paddingHeight = 16;
+  const lineHeightPx = 17; // 14px font * 1.21429em line-height
+  const minLines = 1;
+  const paddingHeight = 10; // Actual padding in CodeMirror
 
   // Calculate initial editor height
   const calculateHeight = (content: string) => {
     const lineCount = Math.max(content.split('\n').length, minLines);
-    return Math.max(lineCount * lineHeightPx + (paddingHeight * 2), 72); // Minimum 72px
+    return Math.max(lineCount * lineHeightPx + paddingHeight, 36); // Minimum 36px for single line
   };
 
   const [editorHeight, setEditorHeight] = useState<number>(() => calculateHeight(code));

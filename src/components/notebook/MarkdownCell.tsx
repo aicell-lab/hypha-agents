@@ -50,6 +50,17 @@ const MarkdownCell: React.FC<MarkdownCellProps> = ({
 }) => {
   const internalEditorRef = useRef<EditorAPI | null>(null);
   const editorDivRef = useRef<HTMLDivElement>(null);
+  const lineHeightPx = 17; // 14px font * 1.21429em line-height
+  const minLines = 1;
+  const paddingHeight = 10; // Actual padding in CodeMirror
+
+  // Calculate initial editor height
+  const calculateHeight = (text: string) => {
+    const lineCount = Math.max(text.split('\n').length, minLines);
+    return Math.max(lineCount * lineHeightPx + paddingHeight, 36); // Minimum 36px for single line
+  };
+
+  const [editorHeight, setEditorHeight] = useState<number>(() => calculateHeight(content));
   const [isFocused, setIsFocused] = useState(false);
   
   // Add a check for staged cells
@@ -85,6 +96,12 @@ const handleRegenerateResponse = useCallback(() => {
       onEditingChange?.(false);
     }
   }, [isActive, initialEditMode]); // Only depend on active state and initial mode
+
+  // Update height when content changes
+  useEffect(() => {
+    const newHeight = calculateHeight(content);
+    setEditorHeight(newHeight);
+  }, [content]);
 
   // Function to handle running/rendering markdown
   const handleRun = useCallback(() => {
@@ -302,7 +319,7 @@ const handleRegenerateResponse = useCallback(() => {
                   language="markdown"
                   onChange={onChange}
                   onExecute={handleRun}
-                  height="auto"
+                  height={editorHeight}
                   autoFocus
                   editorRef={internalEditorRef}
                 />
