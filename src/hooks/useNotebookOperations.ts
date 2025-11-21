@@ -146,12 +146,17 @@ export const useNotebookOperations = ({
         rawContent = await getInBrowserFileContent(filePath);
       } else {
         if (isProjectsLoading || !initialLoadComplete) {
+          const errorMsg = 'Projects are still loading, please try again shortly.';
           console.warn('[Notebook] Load file cancelled: Projects provider not ready for remote project.', resolvedProjectId);
-          showToast('Projects are still loading, please try again shortly.', 'warning');
-          dismissToast(loadingToastId);
-          return;
+          showToast(errorMsg, 'warning', { id: loadingToastId });
+          throw new Error(errorMsg); // Throw error instead of silently returning
         }
         rawContent = await getFileContent(resolvedProjectId, filePath);
+      }
+
+      // Validate content exists
+      if (!rawContent) {
+        throw new Error('File content is empty or could not be loaded');
       }
 
       const notebookData: NotebookData = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
@@ -242,13 +247,48 @@ export const useNotebookOperations = ({
   const loadNotebookFromFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    const loadingToastId = 'loading-file-from-disk';
+    showToast('Reading file...', 'loading', { id: loadingToastId });
+
     const reader = new FileReader();
+
+    reader.onerror = () => {
+      showToast('Failed to read file. Please try again.', 'error', { id: loadingToastId });
+      event.target.value = '';
+    };
+
     reader.onload = async (e) => {
       try {
         const content = e.target?.result as string;
-        const loadedNotebookData: NotebookData = JSON.parse(content);
-        const newFilePath = `${file.name}`;
 
+        // Validate content exists
+        if (!content || content.trim() === '') {
+          throw new Error('File is empty or unreadable');
+        }
+
+        showToast('Parsing notebook...', 'loading', { id: loadingToastId });
+
+        // Parse JSON with better error handling
+        let loadedNotebookData: NotebookData;
+        try {
+          loadedNotebookData = JSON.parse(content);
+        } catch (parseError) {
+          throw new Error('Invalid notebook file format. Please ensure this is a valid .ipynb file.');
+        }
+
+        // Validate notebook structure
+        if (!loadedNotebookData || typeof loadedNotebookData !== 'object') {
+          throw new Error('Invalid notebook structure');
+        }
+
+        if (!Array.isArray(loadedNotebookData.cells)) {
+          throw new Error('Notebook is missing cells array');
+        }
+
+        showToast('Loading notebook...', 'loading', { id: loadingToastId });
+
+        const newFilePath = `${file.name}`;
         const metadata: NotebookMetadata = {
           ...defaultNotebookMetadata,
           ...(loadedNotebookData.metadata || {}),
@@ -258,9 +298,10 @@ export const useNotebookOperations = ({
           projectId: IN_BROWSER_PROJECT.id,
           filePath: newFilePath
         };
-        setNotebookMetadata(metadata);
+
         const cellsToLoad = loadedNotebookData.cells?.filter((cell: NotebookCell) => cell.role !== CELL_ROLES.THINKING) || [];
-        setCells(cellsToLoad);
+
+        // Calculate max execution count
         let maxExecutionCount = 0;
         cellsToLoad.forEach((cell: NotebookCell) => {
           const count = cell.executionCount;
@@ -268,30 +309,56 @@ export const useNotebookOperations = ({
             maxExecutionCount = count;
           }
         });
-        setExecutionCounter(maxExecutionCount + 1);
-        lastUserCellRef.current = null;
-        lastAgentCellRef.current = null;
-        setSelectedProject(getInBrowserProject());
+
+        // Save to in-browser storage first
         const notebookToSave: NotebookData = {
           nbformat: 4,
           nbformat_minor: 5,
           metadata: metadata,
           cells: cellsToLoad
         };
-        await saveInBrowserFile(newFilePath, notebookToSave)
-          .then(() => console.log(`Saved uploaded file to in-browser: ${newFilePath}`))
-          .catch(err => console.error(`Failed to auto-save uploaded file: ${err}`));
 
+        try {
+          await saveInBrowserFile(newFilePath, notebookToSave);
+          console.log(`[NotebookOps] Saved uploaded file to in-browser: ${newFilePath}`);
+        } catch (saveError) {
+          throw new Error(`Failed to save notebook: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
+        }
+
+        // Update all state in sequence
         setSelectedProject(getInBrowserProject());
+        setNotebookMetadata(metadata);
+        setCells(cellsToLoad);
+        setExecutionCounter(maxExecutionCount + 1);
+        lastUserCellRef.current = null;
+        lastAgentCellRef.current = null;
+
+        // Wait a tick for state to settle
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Reset kernel state
+        showToast('Initializing kernel...', 'loading', { id: loadingToastId });
         await resetKernelState();
 
+        showToast('Notebook loaded successfully', 'success', { id: loadingToastId });
+
       } catch (error) {
-        console.error('Error loading notebook from file:', error);
-        showToast('Failed to load notebook file', 'error');
+        console.error('[NotebookOps] Error loading notebook from file:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        showToast(`Failed to load notebook: ${errorMessage}`, 'error', { id: loadingToastId });
+
+        // Reset state on error
+        setCells([]);
+        setNotebookMetadata(defaultNotebookMetadata);
+        setExecutionCounter(1);
+        lastUserCellRef.current = null;
+        lastAgentCellRef.current = null;
       } finally {
+        // Always clear the file input to allow re-uploading the same file
         event.target.value = '';
       }
     };
+
     reader.readAsText(file);
   }, [saveInBrowserFile, setSelectedProject, getInBrowserProject, resetKernelState, setNotebookMetadata, setCells, setExecutionCounter]);
 

@@ -931,17 +931,43 @@ const NotebookPage: React.FC = () => {
 
   // Load notebook from file
   const handleLoadNotebook = useCallback(async (project: Project, file: any) => {
+    try {
+      console.log('[AgentLab] Loading notebook:', { projectId: project.id, filePath: file.path });
+
       // If switching to a different project, cleanup current kernel
       if (selectedProject?.id !== project.id && kernelManager.destroyCurrentKernel) {
         console.log('[AgentLab] Switching projects, cleaning up current kernel');
-        await kernelManager.destroyCurrentKernel();
+        try {
+          await kernelManager.destroyCurrentKernel();
+        } catch (error) {
+          console.warn('[AgentLab] Error destroying kernel:', error);
+          // Continue anyway - we'll try to load the new notebook
+        }
       }
-      
+
+      // Update selected project if changed
       if (selectedProject?.id !== project.id) {
-          setSelectedProject(project);
+        setSelectedProject(project);
+        // Wait a tick for state to settle
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
+
+      // Load the notebook content
       await notebookOps.loadNotebookContent(project.id, file.path);
-      await kernelManager.resetKernelState();
+
+      // Reset kernel state
+      try {
+        await kernelManager.resetKernelState();
+      } catch (error) {
+        console.error('[AgentLab] Error resetting kernel state:', error);
+        showToast('Notebook loaded but kernel initialization failed. Try restarting the kernel.', 'warning');
+      }
+
+      console.log('[AgentLab] Notebook loaded successfully');
+    } catch (error) {
+      console.error('[AgentLab] Error in handleLoadNotebook:', error);
+      // Error toast is already shown by loadNotebookContent, just log here
+    }
   }, [notebookOps.loadNotebookContent, setSelectedProject, selectedProject?.id, kernelManager.resetKernelState, kernelManager.destroyCurrentKernel]);
 
   // Effects
@@ -1077,11 +1103,13 @@ const NotebookPage: React.FC = () => {
 
   // Hide welcome screen when a notebook is loaded
   useEffect(() => {
-    if (isLoggedIn && notebookMetadata.filePath) {
+    // Hide welcome screen when a file is loaded, regardless of login status
+    // Users can use in-browser project without logging in
+    if (notebookMetadata.filePath) {
       console.log('[AgentLab] Notebook loaded with file path, hiding welcome screen');
       setShowWelcomeScreen(false);
     }
-  }, [isLoggedIn, notebookMetadata.filePath]);
+  }, [notebookMetadata.filePath]);
 
   // Keyboard shortcut for saving notebook
   useEffect(() => {
