@@ -99,6 +99,16 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
         const stream = manager.executeStream(kernelId, code);
 
         for await (const event of stream) {
+          // DEBUG: Log all events to understand the structure
+          console.log('[Web Python Kernel] Event received:', {
+            type: event.type,
+            data: event.data,
+            hasImagePng: event.data?.data?.['image/png'] ? 'YES' : 'NO',
+            hasTextHtml: event.data?.data?.['text/html'] ? 'YES' : 'NO',
+            hasTextPlain: event.data?.data?.['text/plain'] ? 'YES' : 'NO',
+            dataKeys: event.data?.data ? Object.keys(event.data.data) : []
+          });
+
           // Handle different event types
           switch (event.type) {
             case 'stream':
@@ -118,6 +128,7 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
               break;
 
             case 'execute_result':
+              console.log('[Web Python Kernel] execute_result event data:', event.data);
               if (event.data && event.data.data) {
                 const textPlain = event.data.data['text/plain'];
 
@@ -141,20 +152,31 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
               break;
 
             case 'display_data':
+              console.log('[Web Python Kernel] display_data event:', {
+                hasData: !!event.data,
+                dataKeys: event.data?.data ? Object.keys(event.data.data) : [],
+                imagePngLength: event.data?.data?.['image/png']?.length,
+                textHtmlLength: event.data?.data?.['text/html']?.length,
+                fullData: event.data
+              });
+
               if (event.data && event.data.data && callbacks?.onOutput) {
                 if (event.data.data['image/png']) {
+                  console.log('[Web Python Kernel] Processing image/png, length:', event.data.data['image/png'].length);
                   callbacks.onOutput({
-                    type: 'image',
+                    type: 'img', // Changed from 'image' to 'img' to match JupyterOutput expectations
                     content: `data:image/png;base64,${event.data.data['image/png']}`,
                     short_content: '[Image]'
                   });
                 } else if (event.data.data['text/html']) {
+                  console.log('[Web Python Kernel] Processing text/html');
                   callbacks.onOutput({
                     type: 'html',
                     content: event.data.data['text/html'],
                     short_content: '[HTML]'
                   });
                 } else if (event.data.data['text/plain']) {
+                  console.log('[Web Python Kernel] Processing text/plain from display_data');
                   const plainText = event.data.data['text/plain'];
                   callbacks.onOutput({
                     type: 'result',

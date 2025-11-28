@@ -1047,20 +1047,21 @@ const NotebookPage: React.FC = () => {
   }, []);
 
   // Store parsed params once initialization is done and set welcome screen visibility
+  // This effect should ONLY run during initial setup, not when files are manually loaded
   useEffect(() => {
     if (initRefObject.current && initialUrlParams) {
       setParsedUrlParams(initialUrlParams);
-      
+
       if (!isLoggedIn) {
         console.log('[AgentLab] User not logged in, showing welcome screen');
         setShowWelcomeScreen(true);
         return;
       }
-      
+
       if (initialUrlParams.filePath) {
         console.log(`[AgentLab] File URL parameter detected, loading: ${initialUrlParams.filePath}`);
         const projectId = initialUrlParams.projectId || IN_BROWSER_PROJECT.id;
-        
+
         // Only load if we haven't already loaded this file and not currently loading (prevent duplicate loading)
         if (notebookMetadata.filePath !== initialUrlParams.filePath && !isLoadingFromUrlRef.current) {
           isLoadingFromUrlRef.current = true;
@@ -1084,14 +1085,16 @@ const NotebookPage: React.FC = () => {
         }
         return;
       }
-      
+      // Only show welcome screen if no file is loaded from URL params
+      // Don't check notebookMetadata.filePath here as it causes re-runs when files are manually loaded
       const shouldShowWelcome = !initialUrlParams.filePath;
       setShowWelcomeScreen(!isLoggedIn || shouldShowWelcome);
       if (initialUrlParams.edit) {
         console.log('[AgentLab] Edit parameter detected:', initialUrlParams.edit);
       }
     }
-  }, [initRefObject.current, initialUrlParams, notebookOps.loadNotebookContent, isLoggedIn, notebookMetadata.filePath]);
+  }, [initRefObject.current, initialUrlParams, notebookOps.loadNotebookContent, isLoggedIn]);
+  // REMOVED notebookMetadata.filePath from dependencies to prevent re-running when files are manually loaded
 
   // Handle login state changes
   useEffect(() => {
