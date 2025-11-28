@@ -421,6 +421,8 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
       const success = await manager.interruptKernel(kernelId);
 
       if (success) {
+        // Reset kernel status to idle after successful interruption
+        setKernelStatus('idle');
         showToast('Kernel execution interrupted', 'success');
       } else {
         showToast('Failed to interrupt kernel execution', 'error');
@@ -429,6 +431,8 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
       return success;
     } catch (error) {
       console.error('[Web Python Kernel] Error interrupting kernel:', error);
+      // Even if there's an error, reset to idle to allow new executions
+      setKernelStatus('idle');
       showToast('Error interrupting kernel execution', 'error');
       return false;
     }

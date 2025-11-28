@@ -126,6 +126,9 @@ const NotebookPage: React.FC = () => {
   // Ref to store the AbortController for Hypha service setup
   const hyphaServiceAbortControllerRef = useRef<AbortController>(new AbortController());
 
+  // Ref to track if we're currently aborting execution
+  const isAbortingRef = useRef(false);
+
   // Initialize canvas panel and sidebar hooks early
   const canvasPanel = useCanvasPanel();
   const sidebar = useSidebar();
@@ -372,8 +375,15 @@ const NotebookPage: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       return await manager.executeCell(actualCellId, true) || '';
     } catch (error) {
-      console.error("Fatal error in handleExecuteCode:", error);
-      return `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
+      // If we're aborting, suppress the error output as it's expected
+      if (isAbortingRef.current) {
+        console.log('[AgentLab] Execution cancelled during abort (expected):', error);
+        return ''; // Return empty string to avoid showing errors during abort
+      }
+
+      console.error("Error in handleExecuteCode:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return `Execution error: ${errorMessage}`;
     }
     finally {
       if (actualCellId) {
@@ -408,20 +418,61 @@ const NotebookPage: React.FC = () => {
   // Handle abort execution
   const handleAbortExecution = useCallback(async () => {
     console.log('[AgentLab] Aborting execution...');
-    
-    // Interrupt kernel execution
-    await kernelManager.interruptKernel();
-    
+
+    // Set aborting flag to suppress errors during abort
+    isAbortingRef.current = true;
+
+    try {
+      // Interrupt kernel execution
+      await kernelManager.interruptKernel();
+    } catch (error) {
+      // Ignore interruption errors - they're expected when stopping execution
+      console.log('[AgentLab] Kernel interrupted (expected during abort):', error);
+    }
+
+    // Clear all running cell states to recover from stuck state
+    if (cellManager.current) {
+      cellManager.current.clearRunningState();
+      console.log('[AgentLab] Cleared running cell states');
+    }
+
     // Also abort Hypha Core service operations
     hyphaServiceAbortControllerRef.current.abort();
     hyphaServiceAbortControllerRef.current = new AbortController();
+
+    // Stop chat completion
     handleStopChatCompletion();
+
+    console.log('[AgentLab] Execution aborted and states cleared');
+
+    // Reset aborting flag after a short delay to allow any pending operations to complete
+    setTimeout(() => {
+      isAbortingRef.current = false;
+    }, 100);
   }, [kernelManager, handleStopChatCompletion]);
 
   // Handle interrupt kernel execution
   const handleInterruptKernel = useCallback(async () => {
-    await kernelManager.interruptKernel();
+    // Set aborting flag to suppress errors during interrupt
+    isAbortingRef.current = true;
 
+    try {
+      await kernelManager.interruptKernel();
+    } catch (error) {
+      // Ignore interruption errors - they're expected
+      console.log('[AgentLab] Kernel interrupted:', error);
+    }
+
+    // Clear running states to prevent stuck cells
+    if (cellManager.current) {
+      cellManager.current.clearRunningState();
+      console.log('[AgentLab] Cleared running states after interrupt');
+    }
+
+    // Reset aborting flag after a short delay
+    setTimeout(() => {
+      isAbortingRef.current = false;
+    }, 100);
   }, [kernelManager]);
 
   // Cell action handlers

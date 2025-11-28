@@ -315,7 +315,14 @@ export function useChatCompletion({
       role: 'user',
       content: message,
     });
-    const userCellId = cellManager.addCell('markdown', message, 'user');
+    // Add the user message cell below the currently active cell
+    const userCellId = cellManager.addCell(
+      'markdown',
+      message,
+      'user',
+      activeCellId || undefined,  // afterCellId - insert after active cell
+      undefined                    // parent - top level, no parent
+    );
 
     await processChatCompletion({
       messages,
