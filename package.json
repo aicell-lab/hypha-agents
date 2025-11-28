@@ -151,5 +151,12 @@
   "resolutions": {
     "eslint-config-react-app": "^7.0.1",
     "rollup": "4.26.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@lezer/common": "^1.2.3",
+      "@lezer/lr": "^1.4.3",
+      "@lezer/highlight": "^1.2.3"
+    }
   }
 }
