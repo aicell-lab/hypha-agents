@@ -116,6 +116,11 @@ const Sidebar: React.FC<SidebarProps> = ({
     return files.filter(file => !file.path.endsWith('.__dir__'));
   };
 
+  // Helper function to sort files by name (descending - newest first since timestamp is in filename)
+  const sortFilesByName = (files: ProjectFile[]): ProjectFile[] => {
+    return [...files].sort((a, b) => b.name.localeCompare(a.name));
+  };
+
   // Load project files when a project is selected
   useEffect(() => {
     const loadProjectFiles = async () => {
@@ -137,15 +142,17 @@ const Sidebar: React.FC<SidebarProps> = ({
           
           // Filter out hidden files
           const filteredFiles = filterHiddenFiles(files);
-          
-          console.info('[Sidebar] Loaded files:', filteredFiles.length); // Keep info
+          // Sort files by name (newest first)
+          const sortedFiles = sortFilesByName(filteredFiles);
+
+          console.info('[Sidebar] Loaded files:', sortedFiles.length); // Keep info
           setProjectFiles(prevFiles => {
             // console.log('[Sidebar Debug] Updating projectFiles state. Previous:', prevFiles, 'New:', files); // Removed debug
-            return filteredFiles;
+            return sortedFiles;
           });
-          
+
           // Convert to TreeNode format for our FileTree component
-          const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+          const treeData = convertProjectFilesToTreeNodes(sortedFiles);
           setFileTreeData(treeData);
         } catch (error) {
           console.error('Error loading project files:', error); // Keep error
@@ -198,7 +205,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       setIsLoadingFiles(true);
       try {
         const files = await listInBrowserFiles();
-        const mappedFiles = files.map(f => ({
+        // Sort files by name (newest first)
+        const sortedFiles = sortFilesByName(files);
+        const mappedFiles = sortedFiles.map(f => ({
           ...f,
           id: f.path,
           created_at: new Date().toISOString(),
@@ -206,9 +215,9 @@ const Sidebar: React.FC<SidebarProps> = ({
           size: 0
         }));
         setInBrowserFiles(mappedFiles);
-        
+
         // Convert to TreeNode format for our FileTree component
-        const treeData = convertProjectFilesToTreeNodes(files);
+        const treeData = convertProjectFilesToTreeNodes(sortedFiles);
         setFileTreeData(treeData);
       } catch (error) {
         console.error("Failed to load in-browser files on click:", error);
@@ -246,7 +255,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     try {
       const files = await listInBrowserFiles();
       console.info('[Sidebar] Fetched in-browser files:', files.length); // Keep info
-      const mappedFiles = files.map(f => ({
+      // Sort files by name (newest first)
+      const sortedFiles = sortFilesByName(files);
+      const mappedFiles = sortedFiles.map(f => ({
         ...f,
         id: f.path, // Ensure ID is set
         created_at: new Date().toISOString(), // Placeholder
@@ -254,9 +265,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         size: 0 // Placeholder
       }));
       setInBrowserFiles(mappedFiles); // This should trigger re-render
-      
+
       // Convert to TreeNode format for our FileTree component
-      const treeData = convertProjectFilesToTreeNodes(files);
+      const treeData = convertProjectFilesToTreeNodes(sortedFiles);
       setFileTreeData(treeData);
       
       // console.log('[Sidebar] Called setInBrowserFiles.'); // Removed simple call log
@@ -349,8 +360,10 @@ const Sidebar: React.FC<SidebarProps> = ({
         if (isInBrowserProject) {
           const inBrowserFiles = await listInBrowserFiles();
           newFiles = inBrowserFiles;
-          
-          const mappedFiles = inBrowserFiles.map(f => ({
+          // Sort files by name (newest first)
+          const sortedFiles = sortFilesByName(inBrowserFiles);
+
+          const mappedFiles = sortedFiles.map(f => ({
             ...f,
             id: f.path,
             created_at: new Date().toISOString(),
@@ -361,13 +374,17 @@ const Sidebar: React.FC<SidebarProps> = ({
         } else {
           // For remote projects, explicitly refresh the file list
           console.log('Refreshing remote files after rename');
-          newFiles = await getProjectFiles(selectedProject.id);
-          console.log('Updated files:', newFiles);
-          
+          const files = await getProjectFiles(selectedProject.id);
+          console.log('Updated files:', files);
+
+          // Filter and sort files
+          const filteredFiles = filterHiddenFiles(files);
+          newFiles = sortFilesByName(filteredFiles);
+
           // Set state
           setProjectFiles(newFiles);
         }
-        
+
         // Step 4: Update the tree data with the refreshed files
         const treeData = convertProjectFilesToTreeNodes(newFiles);
         setFileTreeData(treeData);
@@ -385,7 +402,9 @@ const Sidebar: React.FC<SidebarProps> = ({
           // Refresh files to get the correct state
           if (isInBrowserProject) {
             const inBrowserFiles = await listInBrowserFiles();
-            const mappedFiles = inBrowserFiles.map(f => ({
+            // Sort files by name (newest first)
+            const sortedFiles = sortFilesByName(inBrowserFiles);
+            const mappedFiles = sortedFiles.map(f => ({
               ...f,
               id: f.path,
               created_at: new Date().toISOString(),
@@ -393,14 +412,17 @@ const Sidebar: React.FC<SidebarProps> = ({
               size: 0
             }));
             setInBrowserFiles(mappedFiles);
-            
-            const treeData = convertProjectFilesToTreeNodes(inBrowserFiles);
+
+            const treeData = convertProjectFilesToTreeNodes(sortedFiles);
             setFileTreeData(treeData);
           } else {
             const files = await getProjectFiles(selectedProject.id);
-            setProjectFiles(files);
-            
-            const treeData = convertProjectFilesToTreeNodes(files);
+            // Filter and sort files
+            const filteredFiles = filterHiddenFiles(files);
+            const sortedFiles = sortFilesByName(filteredFiles);
+            setProjectFiles(sortedFiles);
+
+            const treeData = convertProjectFilesToTreeNodes(sortedFiles);
             setFileTreeData(treeData);
           }
         } catch (refreshErr) {
@@ -619,13 +641,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       } else if (selectedProject?.id) {
         await deleteFile(selectedProject.id, fileToDelete);
         const files = await getProjectFiles(selectedProject.id);
-        
-        // Filter out hidden files
+
+        // Filter out hidden files and sort
         const filteredFiles = filterHiddenFiles(files);
-        setProjectFiles(filteredFiles);
-        
-        // Update tree data with filtered files
-        const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+        const sortedFiles = sortFilesByName(filteredFiles);
+        setProjectFiles(sortedFiles);
+
+        // Update tree data with sorted files
+        const treeData = convertProjectFilesToTreeNodes(sortedFiles);
         setFileTreeData(treeData);
       } else {
         console.error('No project selected or invalid project ID for deletion');
@@ -668,7 +691,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         
         // Refresh the file list using provider method
         const files = await listInBrowserFiles();
-        setInBrowserFiles(files.map(f => ({
+        // Sort files by name (newest first)
+        const sortedFiles = sortFilesByName(files);
+        setInBrowserFiles(sortedFiles.map(f => ({
           ...f,
           id: f.path,
           created_at: new Date().toISOString(),
@@ -736,7 +761,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     try {
       if (isInBrowserProject) {
         const files = await listInBrowserFiles();
-        setInBrowserFiles(files.map(f => ({
+        // Sort files by name (newest first)
+        const sortedFiles = sortFilesByName(files);
+        setInBrowserFiles(sortedFiles.map(f => ({
           ...f,
           id: f.path,
           created_at: new Date().toISOString(),
@@ -745,12 +772,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         })));
       } else if (selectedProject) {
         const files = await getProjectFiles(selectedProject.id);
-        // Filter out hidden files
+        // Filter out hidden files and sort
         const filteredFiles = filterHiddenFiles(files);
-        setProjectFiles(filteredFiles);
-        
-        // Update tree with filtered files
-        const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+        const sortedFiles = sortFilesByName(filteredFiles);
+        setProjectFiles(sortedFiles);
+
+        // Update tree with sorted files
+        const treeData = convertProjectFilesToTreeNodes(sortedFiles);
         setFileTreeData(treeData);
       }
     } catch (error) {
@@ -1071,10 +1099,13 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 
                                 // Refresh the files list
                                 const files = await getProjectFiles(selectedProject.id);
-                                setProjectFiles(files);
-                                
+                                // Filter and sort files
+                                const filteredFiles = filterHiddenFiles(files);
+                                const sortedFiles = sortFilesByName(filteredFiles);
+                                setProjectFiles(sortedFiles);
+
                                 // Update the tree
-                                const treeData = convertProjectFilesToTreeNodes(files);
+                                const treeData = convertProjectFilesToTreeNodes(sortedFiles);
                                 setFileTreeData(treeData);
                               }
                             } catch (error) {
@@ -1109,13 +1140,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 
                                 // Refresh the files list
                                 const files = await getProjectFiles(selectedProject.id);
-                                
-                                // Filter out the .__dir__ files before display
+
+                                // Filter out the .__dir__ files and sort
                                 const filteredFiles = filterHiddenFiles(files);
-                                setProjectFiles(filteredFiles);
-                                
-                                // Update the tree, but filter out .__dir__ files
-                                const treeData = convertProjectFilesToTreeNodes(filteredFiles);
+                                const sortedFiles = sortFilesByName(filteredFiles);
+                                setProjectFiles(sortedFiles);
+
+                                // Update the tree with sorted files
+                                const treeData = convertProjectFilesToTreeNodes(sortedFiles);
                                 setFileTreeData(treeData);
                               }
                             } catch (error) {

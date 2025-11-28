@@ -40,6 +40,8 @@ export interface KernelManager {
   kernelExecutionLog: KernelExecutionLog[];
   interruptKernel: () => Promise<boolean>;
   destroyCurrentKernel: () => Promise<void>;
+  mountDirectory?: (mountPoint: string, dirHandle: FileSystemDirectoryHandle) => Promise<boolean>;
+  syncFileSystem?: (mountPath: string) => Promise<{success: boolean; error?: string}>;
 }
 
 export interface ProjectManifest {

@@ -90,6 +90,7 @@ const ModelConfigForm: React.FC<ModelConfigFormProps> = ({
             name="model"
             value={[
               'o3-mini',
+              'gpt-5.1',
               'gpt-4.1',
               'gpt-4o',
               'gpt-4o-mini',
@@ -115,7 +116,7 @@ const ModelConfigForm: React.FC<ModelConfigFormProps> = ({
             aria-label="Select AI model"
           >
             <option value="o3-mini">o3-mini</option>
-            <option value="gpt-4.1">gpt-4.1</option>
+            <option value="gpt-5.1">gpt-5.1</option>
             <option value="gpt-4o">gpt-4o</option>
             <option value="gpt-4o-mini">gpt-4o-mini</option>
             <option value="llama3.1">llama3.1</option>

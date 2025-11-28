@@ -136,8 +136,8 @@ importers:
         specifier: ^0.20.58
         version: 0.20.60(@types/react@18.3.27)(codemirror@5.65.20)(monaco-editor@0.52.2)(postcss@8.5.6)
       hypha-rpc:
-        specifier: ^0.20.58
-        version: 0.20.83
+        specifier: ^0.20.84
+        version: 0.20.84
       js-yaml:
         specifier: ^4.1.0
         version: 4.1.1
@@ -5993,8 +5993,8 @@ packages:
   hypha-core@0.20.60:
     resolution: {integrity: sha512-uSEw/JF0RrA0KwsjIk+BOjosJPYox7teZVQow4Z7pPPd5BPv1EMWS69dhJKgXW3Yz0NWQyRk8BpHmnG67JZiFQ==}
 
-  hypha-rpc@0.20.83:
-    resolution: {integrity: sha512-tcOyv+aN0fR72uV8pVdg+Cyqy80ae9Dmo82f5JUtfDPCRnE8QfjdSyiHcyd8Hw9FsZLg8xW5qYzWK3AFiEBing==}
+  hypha-rpc@0.20.84:
+    resolution: {integrity: sha512-RkjygbHMO7YwJsfx2jRu/5ICcULSzi6evAd8CDYO5DcCAsKHh6/QNc429d+MxhbMwSiduxTjJ0efvBOHzpjlyg==}
     engines: {node: '>=19.0.0'}
 
   iconv-lite@0.4.24:
@@ -18400,7 +18400,7 @@ snapshots:
       autoprefixer: 10.4.22(postcss@8.5.6)
       buffer: 6.0.3
       chai: 4.5.0
-      hypha-rpc: 0.20.83
+      hypha-rpc: 0.20.84
       imjoy-rpc: 0.5.59
       mocha: 8.4.0
       mock-socket: 9.3.1
@@ -18422,7 +18422,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  hypha-rpc@0.20.83:
+  hypha-rpc@0.20.84:
     dependencies:
       '@msgpack/msgpack': 2.8.0
 

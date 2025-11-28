@@ -534,7 +534,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
               aria-label="Edit folder name"
             />
           ) : (
-            <span className="ml-1 text-sm truncate max-w-[150px] select-none">{displayName}</span>
+            <span className="ml-1 text-sm truncate flex-1 min-w-0 select-none">{displayName}</span>
           )}
 
           <div className="buttons-container ml-auto flex space-x-1 invisible group-hover:visible">
@@ -671,7 +671,7 @@ const FileTreeItem: React.FC<FolderProps> = ({
             aria-label="Edit file name"
           />
         ) : (
-          <span className="ml-1 text-sm truncate max-w-[180px] select-none">{displayName}</span>
+          <span className="ml-1 text-sm truncate flex-1 min-w-0 select-none">{displayName}</span>
         )}
 
         <div className="buttons-container ml-auto flex space-x-1 invisible group-hover:visible">

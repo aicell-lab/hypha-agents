@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaCircle, FaExclamationTriangle, FaStop } from 'react-icons/fa';
+import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaCircle, FaExclamationTriangle, FaStop, FaFolderPlus } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -121,9 +121,10 @@ interface FileOperationsProps {
   onSave: () => void;
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onMountDirectory?: () => void;
 }
 
-export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownload, onLoad }) => (
+export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownload, onLoad, onMountDirectory }) => (
   <div className="flex items-center">
     <input
       type="file"
@@ -154,6 +155,15 @@ export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownlo
     >
       <FaDownload className="w-3.5 h-3.5" />
     </button>
+    {onMountDirectory && (
+      <button
+        onClick={onMountDirectory}
+        className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
+        title="Mount local directory as project"
+      >
+        <FaFolderPlus className="w-3.5 h-3.5" />
+      </button>
+    )}
   </div>
 );
 
@@ -306,6 +316,7 @@ export interface NotebookToolbarProps {
   onSave: () => void;
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onMountDirectory?: () => void;
   onRunAll: () => void;
   onClearOutputs: () => void;
   onRestartKernel: () => void;
@@ -339,6 +350,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onSave,
   onDownload,
   onLoad,
+  onMountDirectory,
   onRunAll,
   onClearOutputs,
   onRestartKernel,
@@ -469,6 +481,18 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
         <FaDownload className="w-3.5 h-3.5 mr-2" />
         Download
       </button>
+      {onMountDirectory && (
+        <button
+          onClick={() => {
+            onMountDirectory();
+            onClose();
+          }}
+          className="flex items-center w-full px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
+        >
+          <FaFolderPlus className="w-3.5 h-3.5 mr-2" />
+          Mount Directory
+        </button>
+      )}
 
       <div className="border-t border-gray-200 mt-1 pt-1">
         <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Cells</div>
@@ -578,6 +602,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onSave,
   onDownload,
   onLoad,
+  onMountDirectory,
   onRunAll,
   onClearOutputs,
   onRestartKernel,
@@ -622,10 +647,11 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onRetryKernel={onRetryKernel}
           />
           <div className="h-5 w-px bg-gray-200 mx-1"></div>
-          <FileOperations 
-            onSave={onSave} 
-            onDownload={onDownload} 
-            onLoad={onLoad} 
+          <FileOperations
+            onSave={onSave}
+            onDownload={onDownload}
+            onLoad={onLoad}
+            onMountDirectory={onMountDirectory}
           />
           <CellControls 
             onAddCodeCell={onAddCodeCell} 
@@ -661,6 +687,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onSave={onSave}
             onDownload={onDownload}
             onLoad={onLoad}
+            onMountDirectory={onMountDirectory}
             onRunAll={onRunAll}
             onClearOutputs={onClearOutputs}
             onRestartKernel={onRestartKernel}

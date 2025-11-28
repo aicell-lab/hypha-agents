@@ -150,10 +150,67 @@ const NotebookPage: React.FC = () => {
       if (prev.some(win => win.id === config.window_id)) {
         return prev;
       }
+
+      // Check if src is HTML content (more robust detection)
+      const isHtmlContent = (() => {
+        if (!config.src || typeof config.src !== 'string') return false;
+
+        const trimmed = config.src.trim();
+        if (!trimmed) return false;
+
+        const lower = trimmed.toLowerCase();
+
+        // Check for common HTML document patterns
+        if (lower.startsWith('<!doctype html')) return true;
+        if (lower.startsWith('<html')) return true;
+
+        // Check for other common HTML root elements
+        const htmlStartPatterns = [
+          '<head', '<body', '<div', '<span', '<p>',
+          '<h1', '<h2', '<h3', '<h4', '<h5', '<h6',
+          '<table', '<form', '<section', '<article',
+          '<header', '<footer', '<nav', '<main',
+          '<svg', '<canvas'
+        ];
+
+        if (htmlStartPatterns.some(pattern => lower.startsWith(pattern))) {
+          return true;
+        }
+
+        // Check if it contains HTML tags using regex
+        // This regex looks for opening or closing tags
+        const htmlTagPattern = /<\/?[a-z][\s\S]*>/i;
+        if (htmlTagPattern.test(trimmed)) {
+          // Additionally verify it's not a URL by checking for common protocols
+          const urlPattern = /^(https?|ftp|file):\/\//i;
+          return !urlPattern.test(trimmed);
+        }
+
+        return false;
+      })();
+
       const newWindow: HyphaCoreWindow = {
         id: config.window_id,
-        src: config.src,
-        name: config.name || `${config.src || 'Untitled Window'}`
+        name: config.name || (isHtmlContent ? 'HTML Content' : `${config.src || 'Untitled Window'}`),
+        ...(isHtmlContent ? {
+          // For HTML content, create a component with an iframe
+          component: (
+            <iframe
+              id={config.window_id}
+              srcDoc={config.src}
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none'
+              }}
+              title={config.name || 'HTML Content'}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
+            />
+          )
+        } : {
+          // For URLs, use the src property
+          src: config.src
+        })
       };
       return [...prev, newWindow];
     });
@@ -929,6 +986,44 @@ const NotebookPage: React.FC = () => {
     showToast('Cleared all outputs', 'success');
   }, []);
 
+  // Mount local directory handler
+  const handleMountDirectory = useCallback(async () => {
+    if (!kernelManager.mountDirectory) {
+      showToast('Mount directory feature not available', 'error');
+      return;
+    }
+
+    try {
+      // Request directory access from the user
+      const dirHandle = await (window as any).showDirectoryPicker({
+        mode: 'readwrite'
+      });
+
+      if (!dirHandle) {
+        return;
+      }
+
+      // Get directory name for mount point
+      const dirName = dirHandle.name;
+      const mountPoint = `/local/${dirName}`;
+
+      // Mount the directory
+      const success = await kernelManager.mountDirectory(mountPoint, dirHandle);
+
+      if (success) {
+        console.log(`[AgentLab] Successfully mounted directory ${dirName} to ${mountPoint}`);
+      }
+    } catch (error: any) {
+      // User cancelled the picker
+      if (error.name === 'AbortError') {
+        console.log('[AgentLab] Directory selection cancelled');
+        return;
+      }
+      console.error('[AgentLab] Error mounting directory:', error);
+      showToast(`Failed to mount directory: ${error.message}`, 'error');
+    }
+  }, [kernelManager.mountDirectory]);
+
   // Load notebook from file
   const handleLoadNotebook = useCallback(async (project: Project, file: any) => {
     try {
@@ -1167,6 +1262,7 @@ const NotebookPage: React.FC = () => {
       onSave={notebookOps.saveNotebook}
       onDownload={notebookOps.handleDownloadNotebook}
       onLoad={notebookOps.loadNotebookFromFile}
+      onMountDirectory={handleMountDirectory}
         onRunAll={handleRunAllCells}
         onClearOutputs={handleClearAllOutputs}
       onRestartKernel={kernelManager.restartKernel}

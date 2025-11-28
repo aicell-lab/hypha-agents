@@ -25,10 +25,13 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
   // Add ref to store the web-python-kernel manager and kernel ID
   const kernelManagerRef = useRef<any>(null);
   const currentKernelIdRef = useRef<string | null>(null);
+  const currentKernelRef = useRef<any>(null);
   // Add ref to prevent multiple initializations
   const isInitializingRef = useRef(false);
   // Add ref to store onKernelReady callback to prevent dependency issues
   const onKernelReadyRef = useRef(onKernelReady);
+  // Add ref to track mounted paths for auto-sync
+  const mountedPathsRef = useRef<Set<string>>(new Set());
 
   // Update the onKernelReady ref when it changes
   useEffect(() => {
@@ -85,6 +88,28 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     } catch (error) {
       console.error('[Web Python Kernel] Failed to load kernel module:', error);
       throw error;
+    }
+  }, []);
+
+  // Helper function to sync all mounted filesystems
+  const syncAllMountedPaths = useCallback(async () => {
+    const kernel = currentKernelRef.current;
+    if (!kernel || mountedPathsRef.current.size === 0) {
+      return;
+    }
+
+    const actualKernel = kernel.kernel || kernel;
+    if (typeof actualKernel.syncFileSystem !== 'function') {
+      return;
+    }
+
+    try {
+      for (const mountPath of mountedPathsRef.current) {
+        console.log(`[Web Python Kernel] Auto-syncing filesystem at ${mountPath}...`);
+        await actualKernel.syncFileSystem(mountPath);
+      }
+    } catch (error) {
+      console.error('[Web Python Kernel] Error auto-syncing filesystem:', error);
     }
   }, []);
 
@@ -216,6 +241,22 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
 
         setKernelStatus('idle');
 
+        // Sync all mounted filesystems after execution
+        try {
+          const kernel = currentKernelRef.current;
+          if (kernel && mountedPathsRef.current.size > 0) {
+            const actualKernel = kernel.kernel || kernel;
+            if (typeof actualKernel.syncFileSystem === 'function') {
+              for (const mountPath of mountedPathsRef.current) {
+                console.log(`[Web Python Kernel] Auto-syncing filesystem at ${mountPath}...`);
+                await actualKernel.syncFileSystem(mountPath);
+              }
+            }
+          }
+        } catch (syncError) {
+          console.error('[Web Python Kernel] Error auto-syncing filesystem:', syncError);
+        }
+
         // Signal completion via onStatus callback
         if (callbacks?.onStatus) {
           if (hasError) {
@@ -301,8 +342,10 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
 
         console.log('[Web Python Kernel] Created kernel:', kernelId);
 
-        // Store kernel ID
+        // Store kernel ID and kernel instance
         currentKernelIdRef.current = kernelId;
+        const kernel = manager.kernels?.[kernelId] || manager.getKernel?.(kernelId);
+        currentKernelRef.current = kernel;
 
         // Set up event listeners
         manager.onKernelEvent(kernelId, KernelEvents.KERNEL_BUSY, () => {
@@ -424,8 +467,10 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
 
       console.log('[Web Python Kernel] Created new kernel:', newKernelId);
 
-      // Store kernel ID
+      // Store kernel ID and kernel instance
       currentKernelIdRef.current = newKernelId;
+      const newKernel = manager.kernels?.[newKernelId] || manager.getKernel?.(newKernelId);
+      currentKernelRef.current = newKernel;
 
       // Re-setup event listeners
       manager.onKernelEvent(newKernelId, KernelEvents.KERNEL_BUSY, () => {
@@ -499,6 +544,104 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     }
   }, [isReady, restartKernel]);
 
+  // Mount native filesystem directory using web-python-kernel's built-in mountFS
+  const mountDirectory = useCallback(async (mountPoint: string, dirHandle: FileSystemDirectoryHandle) => {
+    const kernel = currentKernelRef.current;
+    const manager = kernelManagerRef.current?.manager;
+    const kernelId = currentKernelIdRef.current;
+
+    if (!kernel || !dirHandle) {
+      console.error('[Web Python Kernel] No kernel or directory handle available');
+      console.log('[Web Python Kernel] Debug - kernel:', !!kernel, 'dirHandle:', !!dirHandle);
+      showToast('Cannot mount directory: kernel not ready', 'error');
+      return false;
+    }
+
+    try {
+      console.log(`[Web Python Kernel] Mounting directory to ${mountPoint}...`);
+      console.log(`[Web Python Kernel] Kernel type:`, typeof kernel);
+      console.log(`[Web Python Kernel] Has kernel.kernel?:`, !!kernel.kernel);
+      console.log(`[Web Python Kernel] Has kernel.mountFS?:`, !!kernel.mountFS);
+      console.log(`[Web Python Kernel] Manager:`, !!manager);
+
+      showToast(`Mounting directory to ${mountPoint}...`, 'loading');
+
+      // Use web-python-kernel's built-in mountFS API
+      // Try different access patterns
+      let nativefs;
+      if (kernel.kernel && typeof kernel.kernel.mountFS === 'function') {
+        nativefs = await kernel.kernel.mountFS(mountPoint, dirHandle, 'readwrite');
+      } else if (typeof kernel.mountFS === 'function') {
+        nativefs = await kernel.mountFS(mountPoint, dirHandle, 'readwrite');
+      } else if (manager && typeof manager.mountFS === 'function') {
+        nativefs = await manager.mountFS(kernelId, mountPoint, dirHandle, 'readwrite');
+      } else {
+        throw new Error('mountFS function not found on kernel or manager');
+      }
+
+      console.log(`[Web Python Kernel] Successfully mounted directory to ${mountPoint}`);
+
+      // Track the mounted path for auto-sync
+      mountedPathsRef.current.add(mountPoint);
+
+      // Verify the mount by listing files
+      if (executeCode) {
+        await executeCode(`
+import os
+if os.path.exists("${mountPoint}"):
+    files = os.listdir("${mountPoint}")
+    print(f"Mounted directory contains {len(files)} items")
+    if files:
+        print(f"Sample files: {files[:5]}")
+else:
+    print("Warning: Mount point does not exist")
+`);
+      }
+
+      showToast(`Successfully mounted directory to ${mountPoint}`, 'success');
+      return true;
+    } catch (error) {
+      console.error('[Web Python Kernel] Error mounting directory:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      showToast(`Failed to mount directory: ${errorMsg}`, 'error');
+      return false;
+    }
+  }, [executeCode]);
+
+  // Sync filesystem from Python VFS to native browser filesystem
+  const syncFileSystem = useCallback(async (mountPath: string) => {
+    const kernel = currentKernelRef.current;
+
+    if (!kernel) {
+      console.error('[Web Python Kernel] No kernel available for filesystem sync');
+      return { success: false, error: 'No kernel available' };
+    }
+
+    try {
+      console.log(`[Web Python Kernel] Syncing filesystem at ${mountPath}...`);
+
+      // Try to access syncFileSystem on the kernel object (web-python-kernel 0.1.8+)
+      // The actual kernel instance is in kernel.kernel
+      const actualKernel = kernel.kernel || kernel;
+
+      if (typeof actualKernel.syncFileSystem === 'function') {
+        console.log(`[Web Python Kernel] Calling syncFileSystem for ${mountPath}...`);
+        const result = await actualKernel.syncFileSystem(mountPath);
+        console.log(`[Web Python Kernel] FileSystem synced successfully:`, result);
+        return result || { success: true };
+      }
+
+      console.warn('[Web Python Kernel] syncFileSystem not available, filesystem should auto-sync');
+      return { success: false, error: 'syncFileSystem not available' };
+    } catch (error) {
+      console.error('[Web Python Kernel] Error syncing filesystem:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }, []);
+
   return {
     isReady,
     kernelStatus,
@@ -510,6 +653,8 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     addKernelLogEntry,
     kernelExecutionLog,
     interruptKernel,
-    destroyCurrentKernel
+    destroyCurrentKernel,
+    mountDirectory,
+    syncFileSystem
   };
 };

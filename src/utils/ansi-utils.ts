@@ -2,6 +2,8 @@ import Convert from 'ansi-to-html';
 
 // Create ANSI converter instance with custom color scheme
 export const ansiConverter = new Convert({
+  bg: '#FFF',
+  fg: '#000',
   colors: {
     0: '#000000',
     1: '#e74c3c', // red
@@ -10,7 +12,7 @@ export const ansiConverter = new Convert({
     4: '#3498db', // blue
     5: '#9b59b6', // magenta
     6: '#1abc9c', // cyan
-    7: '#ecf0f1', // light gray
+    7: '#7f8c8d', // light gray (darker for visibility)
     8: '#95a5a6', // dark gray
     9: '#e74c3c', // bright red
     10: '#2ecc71', // bright green
@@ -18,7 +20,7 @@ export const ansiConverter = new Convert({
     12: '#3498db', // bright blue
     13: '#9b59b6', // bright magenta
     14: '#1abc9c', // bright cyan
-    15: '#ecf0f1'  // white
+    15: '#2c3e50'  // white (actually dark for light backgrounds)
   },
   newline: false // We'll handle newlines separately
 });

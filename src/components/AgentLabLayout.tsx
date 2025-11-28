@@ -29,6 +29,7 @@ interface AgentLabLayoutProps {
   onSave: () => Promise<void>;
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  onMountDirectory?: () => void;
   onRunAll: () => Promise<void>;
   onClearOutputs: () => void;
   onRestartKernel: () => Promise<void>;
@@ -114,6 +115,7 @@ export const AgentLabLayout: React.FC<AgentLabLayoutProps> = ({
   onSave,
   onDownload,
   onLoad,
+  onMountDirectory,
   onRunAll,
   onClearOutputs,
   onRestartKernel,
@@ -192,6 +194,7 @@ export const AgentLabLayout: React.FC<AgentLabLayoutProps> = ({
         onSave={onSave}
         onDownload={onDownload}
         onLoad={onLoad}
+        onMountDirectory={onMountDirectory}
         onRunAll={onRunAll}
         onClearOutputs={onClearOutputs}
         onRestartKernel={onRestartKernel}
