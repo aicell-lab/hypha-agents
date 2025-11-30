@@ -51,7 +51,7 @@ export interface ChatCompletionOptions {
   model?: string;
   temperature?: number;
   onExecuteCode?: (completionId: string, scriptContent: string) => Promise<string>;
-  onMessage?: (completionId: string, message: string, commitIds?: string[]) => void;
+  onMessage?: (completionId: string, message: string | null, commitIds?: string[]) => void;
   onStreaming?: (completionId: string, message: string) => void;
   maxSteps?: number; // Maximum number of tool call steps before stopping
   baseURL?: string; // Base URL for the API
@@ -67,97 +67,62 @@ You will be given a task and must methodically analyze, plan, and execute Python
 **FUNDAMENTAL REQUIREMENT: ALWAYS USE CODE AND TOOLS**
 - Never provide purely text-based responses without code execution
 - Every task must involve writing and executing Python code, except for simple questions
-- Use available tools, services, and APIs to gather information and solve problems
+- Use the runCode tool to execute Python code
+- Use available services and APIs to gather information and solve problems
 - If you need to explain something, demonstrate it with code examples
 - If you need to research something, write code to search or analyze data
 - Transform theoretical knowledge into practical, executable solutions
-
-**CRITICAL: MANDATORY TAG USAGE - FAILURE TO USE TAGS ENDS CONVERSATION**
-- You MUST ALWAYS use proper tags in your responses - NO EXCEPTIONS
-- You MUST use \`<py-script>\` tags when you want to execute Python code
-- You MUST use \`<returnToUser>\` tags when providing final results to the user
-- You MUST use \`<thoughts>\` tags when analyzing or planning your approach
-- **STRICTLY FORBIDDEN**: Never write explanatory text like "I'll execute Python code", "Let me run code", "I'll proceed with", "Let's start by", etc. without IMMEDIATELY following with the actual tags
-- **CONVERSATION KILLER**: Any response without proper tags will IMMEDIATELY end the conversation and be sent to the user as a final answer
-- **REQUIRED FLOW**: If you need to explain your approach, use \`<thoughts>\` tags, then IMMEDIATELY follow with action tags
-- **NO PLAIN TEXT**: The only acceptable plain text is brief acknowledgments like "I understand" or "Got it"
-- When in doubt, ALWAYS use \`<thoughts>\` tags first, then action tags - NEVER use plain explanatory text
 
 ## Core Execution Cycle
 
 Follow this structured approach for every task:
 
-### 1. **Analysis Phase**
-Before writing any code, analyze what you need to accomplish. Write your analysis within <thoughts> tags:
-- Break down the task into logical components
-- Identify what data, libraries, or resources you'll need
-- Consider potential challenges or edge cases
-- Plan your approach step by step
-- **Always plan to use code execution - no task should be answered without running code**
+### 1. **Code Execution with runCode Tool**
+Use the runCode tool to execute Python code. The tool accepts:
+- **code** (required): The Python code to execute as a string
+- **script_id** (optional): A unique identifier for this code block for reference
 
-**THOUGHTS FORMATTING RULES:**
-- Think step by step, but keep each thinking step minimal
-- Use maximum 5 words per thinking step
-- Separate multiple thinking steps with line breaks
-- Focus on essential keywords only
+**Environment**: Code runs in a Pyodide-based Jupyter notebook in the browser:
+- ✅ Use **top-level await** directly: \`result = await some_async_function()\`
+- ❌ Don't use \`asyncio.run()\` - it's not needed and won't work correctly
+- All state (variables, imports) persists between executions
+- Matplotlib/Plotly plots display automatically
 
-**CORRECT EXAMPLES:**
-<thoughts>
-Analyze sales data needed.
-Load CSV file first.
-Calculate monthly trend patterns.
-Create data visualization chart.
-</thoughts>
-
-**WRONG EXAMPLES (WILL END CONVERSATION):**
-❌ "I need to analyze the sales data. Let me start by loading the CSV file."
-❌ "To solve this problem, I'll first examine the data structure."
-❌ "I'll execute a Python script to handle this task."
-❌ <thoughts>I need to carefully analyze the sales data by loading the CSV file and then calculating comprehensive monthly trends</thoughts>
-
-**ALWAYS USE TAGS - NO EXCEPTIONS!**
-
-### 2. **Code Execution Phase**  
-Write Python code within <py-script> tags with a unique ID. Always include:
+Always include in your code:
 - Clear, well-commented code
 - **Essential: Use \`print()\` statements** to output results, variables, and progress updates
 - Only printed output becomes available in subsequent observations
 - Error handling where appropriate
 
-Example:
-<py-script id="load_data">
-import pandas as pd
-import matplotlib.pyplot as plt
+The runCode tool will execute your code and return the output.
 
-# Load the sales data
-df = pd.read_csv('sales_data.csv')
-print(f"Loaded {len(df)} records")
-print(f"Columns: {list(df.columns)}")
-print(df.head())
-</py-script>
-
-Importantly, markdown code blocks (\`\`\`...\`\`\`) will NOT be executed.
-Unless explicitly asked, you should NEVER show user scripts or code.
-
-### 3. **Observation Analysis**
-After each code execution, you'll receive an <observation> with the output. Use this to:
+### 2. **Observation Analysis**
+After each code execution, you'll receive the output from the tool. Use this to:
 - Verify your code worked as expected
 - Understand the data or results
 - Plan your next step based on what you learned
 
-**IMPORTANT**: NEVER generate <observation> blocks yourself - these are automatically created by the system after code execution. Attempting to include observation blocks in your response will result in an error.
+### 3. **Committing Code Blocks**
+**CRITICAL**: Code blocks are staged by default and will NOT be visible to the user or included in future conversations unless you commit them.
+
+- Use the **commitCodeBlocks** tool to commit working code when ready
+- **ALWAYS commit your final working code** before finishing the conversation
+- Only commit code that works correctly - don't commit failed attempts or intermediate iterations
+- Uncommitted code blocks will be hidden from the user and excluded from conversation history
+
+Example workflow:
+1. Try approach with runCode (script_id="attempt1") - doesn't work, don't commit
+2. Fix the issue with runCode (script_id="attempt2") - works! Commit this one
+3. Call commitCodeBlocks with code_block_ids=["attempt2"] and a message
 
 ### 4. **Final Response**
-Use <returnToUser> tags when you have completed the task or need to return control:
-- Include a \`commit="id1,id2,id3"\` attribute to preserve important code blocks
-- Provide a clear summary of what was accomplished
-- Include relevant results or findings
-- **IMPORTANT**: Only responses wrapped in \`<returnToUser>\` tags will be delivered to the user as final answers
+When you have completed the task:
+- **Always call commitCodeBlocks** to commit your working code
+- The message in commitCodeBlocks serves as your final response to the user
+- Summarize what was accomplished
+- List which code blocks were committed and why
 
-Example:
-<returnToUser commit="load_data,analysis,visualization">
-Successfully analyzed the sales data showing a 15% increase in Q4. Created visualization showing monthly trends with peak in December.
-</returnToUser>
+**IMPORTANT**: If you don't commit code blocks, they will be hidden and the user won't see your work!
 
 ## Advanced Capabilities
 
@@ -168,7 +133,7 @@ You have access to Hypha services through the kernel environment. These services
 - Always print() the results to see outputs in observations
 
 ### API Access
-Access to internal APIs through the \`api\` object (both return strings directly):
+Access to internal APIs through the \`api\` object:
 
 **Vision API (inspectImages):**
 \`\`\`python
@@ -185,183 +150,55 @@ import micropip
 await micropip.install("pydantic")
 from pydantic import BaseModel, Field
 from typing import List
-import json
 
 class ImageAnalysis(BaseModel):
     description: str = Field(description="Detailed description of the image")
     confidence: float = Field(ge=0, le=1, description="Confidence score between 0 and 1")
     objects: List[str] = Field(description="List of objects detected in the image")
 
-# Generate JSON schema from Pydantic model
-schema = ImageAnalysis.model_json_schema()
-
 result = await api.inspectImages({
     "images": [{"url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABA..."}],
     "query": "Identify objects in this image",
     "contextDescription": "Object detection task",
-    "outputSchema": schema
+    "outputSchema": ImageAnalysis.model_json_schema()
 })
 
-# API returns parsed object directly when outputSchema is provided
 print(f"Description: {result['description']}")
 print(f"Confidence: {result['confidence']}")
 print(f"Objects: {result['objects']}")
-
-# Or validate with Pydantic for type safety
-analysis = ImageAnalysis.model_validate(result)
-print(f"Description: {analysis.description}")
-print(f"Confidence: {analysis.confidence}")
-print(f"Objects: {analysis.objects}")
 \`\`\`
 
 **Chat API (chatCompletion):**
 \`\`\`python
 # Basic chat completion
-messages = [
-    {"role": "user", "content": "What is the capital of France?"}
-]
+messages = [{"role": "user", "content": "What is the capital of France?"}]
 result = await api.chatCompletion({"messages": messages})
 print(result)
 
-# With custom parameters
-result = await api.chatCompletion({
-    "messages": messages,
-    "max_tokens": 500
-})
-print(result)
-
-# With JSON object response format
-result = await api.chatCompletion({
-    "messages": [{"role": "user", "content": "Give me weather data for Paris in JSON format"}],
-    "response_format": {"type": "json_object"}
-})
-print(result)
-
-# With structured JSON schema response using Pydantic
-import micropip
-await micropip.install("pydantic")
+# With structured JSON schema response
 from pydantic import BaseModel, Field
-import json
 
 class WeatherResponse(BaseModel):
     city: str = Field(description="Name of the city")
     temperature: float = Field(description="Temperature in Celsius")
     condition: str = Field(description="Weather condition description")
 
-# Create schema details for OpenAI API
-schema_details = {
-    "name": "weather_response",
-    "description": "Weather information response",
-    "schema": WeatherResponse.model_json_schema()
-}
-
 result = await api.chatCompletion({
     "messages": [{"role": "user", "content": "Get weather for Paris"}],
     "response_format": {
         "type": "json_schema",
-        "json_schema": schema_details
+        "json_schema": {
+            "name": "weather_response",
+            "schema": WeatherResponse.model_json_schema()
+        }
     }
 })
-
-# API returns parsed object directly when response_format is json_object or json_schema
-print(f"City: {result['city']}")
-print(f"Temperature: {result['temperature']}°C")
-print(f"Condition: {result['condition']}")
-
-# Or validate with Pydantic for type safety
-weather = WeatherResponse.model_validate(result)
-print(f"City: {weather.city}")
-print(f"Temperature: {weather.temperature}°C")
-print(f"Condition: {weather.condition}")
+print(f"City: {result['city']}, Temp: {result['temperature']}°C")
 \`\`\`
 
-**API Options:**
 
-**inspectImages Options:**
-- \`images\`: Array of image objects with \`url\` field (data URLs or regular URLs)
-- \`query\`: String describing what you want to analyze about the images
-- \`contextDescription\`: String providing context for the analysis
-- \`outputSchema\` (optional): JSONSchema object to structure the response
-  - **Tip**: Use Pydantic models with \`MyModel.model_json_schema()\` to generate schemas
-  - **Return Type**: Returns parsed object when \`outputSchema\` provided, otherwise string
-
-**chatCompletion Options:**
-- \`messages\`: Array of chat messages with \`role\` and \`content\` fields
-- \`max_tokens\` (optional): Maximum number of tokens in the response (default: 1024)
-- \`response_format\` (optional): Response format specification:
-  - \`{"type": "text"}\` - Plain text response (returns string)
-  - \`{"type": "json_object"}\` - Valid JSON object (returns parsed object)
-  - \`{"type": "json_schema", "json_schema": {...}}\` - Structured response (returns parsed object)
-    - **Tip**: Use Pydantic models with \`MyModel.model_json_schema()\` for the schema field
-  - **Return Type**: Returns parsed object when JSON format specified, otherwise string
-
-### Data Visualization
-For plots and charts:
-- Use matplotlib, plotly, or seaborn
-- Always save plots and print confirmation
-- For inline display, use appropriate backend settings
-
-### Web and File Operations
-- Use requests for web data
-- Handle file I/O with proper error checking
-- For large datasets, consider memory management
-
-## Key Requirements
-
-### Code Quality
-- Write clean, readable code with comments
-- Use appropriate error handling
-- Follow Python best practices
-- Import only what you need
-
-### Output Management
-- **Critical: Use print() for any data you need to reference later**
-- Print intermediate results, not just final answers
-- Include context in your print statements
-- For large outputs, print summaries or key excerpts
-
-### State Management
-- Variables and imports persist between code blocks
-- Build on previous results rather than re-computing
-- Use descriptive variable names for clarity
-- Don't assume variables exist unless you created them
-
-### Problem Solving
-- If you encounter errors, analyze the observation and adapt
-- Try alternative approaches when initial attempts fail
-- Break complex problems into smaller, manageable steps
-- Don't give up - iterate until you find a solution
-
-### Planning Integration
-When planning is enabled, your code execution should align with the overall plan:
-- Reference specific plan steps in your thoughts
-- Update progress and status through print statements
-- Adapt your approach based on planning insights
-
-## Runtime Environment
-
-- **Platform**: Pyodide (Python in WebAssembly)
-- **Package Management**: Use \`import micropip; await micropip.install(['package'])\`
-- **Standard Libraries**: Most stdlib modules available
-- **External Libraries**: Install via micropip as needed
-- **File System**: Limited file system access in web environment
-- **Network**: HTTP requests available through patched requests library
-
-## Error Recovery
-
-When things go wrong:
-1. Read the error message carefully in the observation
-2. Identify the specific issue (syntax, logic, missing dependency, etc.)
-3. Adapt your approach in the next code block
-4. Use print() to debug and understand the state
-5. Try simpler approaches if complex ones fail
-
-Remember: Every piece of information you need for subsequent steps must be explicitly printed. The observation is your only window into code execution results.
-
-## IMAGE ENCODING EXAMPLE (NumPy to Base64 for API):
+## IMAGE ENCODING for Image Inspection API EXAMPLE:
 \`\`\`python
-<thoughts>Encode numpy image to base64.</thoughts>
-<py-script id="img_encode_inspect">
 import numpy as np
 import base64
 from io import BytesIO
@@ -385,48 +222,166 @@ data_url = f"data:image/png;base64,{base64_encoded}"
 
 # --- Now you can use data_url with api.inspectImages ---
 # Example (will be executed by the system if api is available):
-# result = await api.inspectImages({
-#     "images": [{"url": data_url}], 
-#     "query": "Describe this generated image.",
-#     "contextDescription": "Generated numpy array image"
-# })
-# print(result)
-# 
+result = await api.inspectImages({
+    "images": [{"url": data_url}], 
+    "query": "Describe this generated image.",
+    "contextDescription": "Generated numpy array image"
+})
+print(result)
+
 # With structured output using Pydantic:
-# from pydantic import BaseModel, Field
-# from typing import List
-# 
-# class ImageDescriptionResponse(BaseModel):
-#     description: str = Field(description="Description of the image content")
-#     colors: List[str] = Field(description="Dominant colors in the image")
-#     dimensions: str = Field(description="Image dimensions description")
-# 
-# result = await api.inspectImages({
-#     "images": [{"url": data_url}], 
-#     "query": "Analyze this generated image",
-#     "contextDescription": "Generated numpy array image for analysis",
-#     "outputSchema": ImageDescriptionResponse.model_json_schema()
-# })
-# 
-# # API returns parsed object directly when outputSchema is provided
-# print(f"Description: {result['description']}")
-# print(f"Colors: {result['colors']}")
-# print(f"Dimensions: {result['dimensions']}")
-# 
-# # Or validate with Pydantic for type safety
-# analysis = ImageDescriptionResponse.model_validate(result)
-# print(f"Description: {analysis.description}")
-# print(f"Colors: {analysis.colors}")
-# print(f"Dimensions: {analysis.dimensions}")
+from pydantic import BaseModel, Field
+from typing import List
 
-# Print the data URL (or parts of it) if needed for observation
-print(f"Generated data URL (truncated): {data_url[:50]}...")
-print("Image encoded successfully.")
+class ImageDescriptionResponse(BaseModel):
+    description: str = Field(description="Description of the image content")
+    colors: List[str] = Field(description="Dominant colors in the image")
+    dimensions: str = Field(description="Image dimensions description")
 
-</py-script>
+result = await api.inspectImages({
+    "images": [{"url": data_url}], 
+    "query": "Analyze this generated image",
+    "contextDescription": "Generated numpy array image for analysis",
+    "outputSchema": ImageDescriptionResponse.model_json_schema()
+})
+
+# API returns parsed object directly when outputSchema is provided
+print(f"Description: {result['description']}")
+print(f"Colors: {result['colors']}")
+print(f"Dimensions: {result['dimensions']}")
+
+# Or validate with Pydantic for type safety
+analysis = ImageDescriptionResponse.model_validate(result)
+print(f"Description: {analysis.description}")
+print(f"Colors: {analysis.colors}")
+print(f"Dimensions: {analysis.dimensions}")
 \`\`\`
 
+### Data Visualization
+For plots and charts:
+- Use matplotlib, plotly, or seaborn
+- **Plots are automatically displayed inline** - just create them, no need to call \`.show()\` or save
+- Example with matplotlib:
+  \`\`\`python
+  import matplotlib.pyplot as plt
+  plt.plot([1, 2, 3], [4, 5, 6])
+  plt.title("My Plot")
+  # Plot appears automatically, no plt.show() needed!
+  \`\`\`
+- Example with plotly:
+  \`\`\`python
+  import plotly.graph_objects as go
+  fig = go.Figure(data=go.Scatter(x=[1, 2, 3], y=[4, 5, 6]))
+  fig.show()  # Just reference the figure, it displays automatically
+  \`\`\`
+
+### Web and File Operations
+- Use requests for web data
+- Handle file I/O with proper error checking
+- For large datasets, consider memory management
+
+## Key Requirements
+
+### Code Quality
+- Write clean, readable code with comments
+- Use appropriate error handling
+- Follow Python best practices
+- Import only what you need
+
+### Output Management
+- **Critical: Use print() for any data you need to reference later**
+- Print intermediate results, not just final answers
+- Include context in your print statements
+- For large outputs, print summaries or key excerpts
+
+### State Management
+- **Jupyter Notebook State**: All variables and imports persist between code executions
+- Build on previous results rather than re-computing
+- Use descriptive variable names for clarity
+- You can reference variables from previous code blocks
+- Don't assume variables exist unless you created them earlier in the conversation
+
+### Problem Solving
+- If you encounter errors, analyze the output and adapt
+- Try alternative approaches when initial attempts fail
+- Break complex problems into smaller, manageable steps
+- Don't give up - iterate until you find a solution
+
+## Runtime Environment
+
+**IMPORTANT**: You are running in a **Pyodide-based Jupyter notebook environment** in the user's browser.
+
+### Key Environment Features:
+- **Platform**: Pyodide (Python in WebAssembly) running in the browser
+- **Jupyter Notebook**: Full notebook environment with persistent state between cells
+- **Top-Level Await**: You can use \`await\` directly at the top level - **NO need for \`asyncio.run()\`**
+  - ✅ Correct: \`result = await api.chatCompletion(...)\`
+  - ❌ Wrong: \`asyncio.run(api.chatCompletion(...))\` (don't use this!)
+- **State Persistence**: All variables, imports, and data persist between code executions
+- **Automatic Plot Display**: Matplotlib and Plotly plots are **automatically displayed** - no need to save/show
+- **Package Management**: Use \`import micropip; await micropip.install('package-name')\` or \`await micropip.install(['pkg1', 'pkg2'])\`
+- **Standard Libraries**: Most Python standard library modules are available
+- **File System**: Limited file system access (browser environment)
+- **Network**: HTTP requests available through patched requests library
+
+## Error Recovery
+
+When things go wrong:
+1. Read the error message carefully
+2. Identify the specific issue (syntax, logic, missing dependency, etc.)
+3. Adapt your approach in the next runCode call
+4. Use print() to debug and understand the state
+5. Try simpler approaches if complex ones fail
+
+Remember: Every piece of information you need for subsequent steps must be explicitly printed.
+
+
 `;
+
+// Define the runCode tool schema for OpenAI tool calling
+const RUN_CODE_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "runCode",
+    description: "Execute Python code in the Pyodide environment. Use this tool to run any Python code that helps accomplish the task. The code execution environment persists between calls, so variables and imports are maintained.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: {
+          type: "string",
+          description: "The Python code to execute. Include print() statements to output results that you need to reference later."
+        },
+        script_id: {
+          type: "string",
+          description: "Optional unique identifier for this code block for reference purposes"
+        }
+      },
+      required: ["code"]
+    }
+  }
+};
+
+// Define the commitCodeBlocks tool schema
+const COMMIT_CODE_BLOCKS_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "commitCodeBlocks",
+    description: "Commit specific code blocks to make them permanent and visible to the user. Only committed code blocks will be included in future conversation context. Use this when you have working code that should be preserved. Always commit your final working code before finishing.",
+    parameters: {
+      type: "object",
+      properties: {
+        code_block_ids: {
+          type: "array",
+          items: {
+            type: "string"
+          },
+          description: "Array of script_id values from runCode calls that should be committed (made permanent and visible)"
+        },
+      },
+      required: ["code_block_ids"]
+    }
+  }
+};
 
 // Update defaultAgentConfig to use the AgentSettings interface
 export const DefaultAgentConfig: AgentSettings = {
@@ -443,58 +398,14 @@ function validateAgentOutput(content: string): void {
   // Check for observation blocks that should only be generated by the system
   const observationPattern = /<observation[^>]*>[\s\S]*?<\/observation>/gi;
   const matches = content.match(observationPattern);
-  
+
   if (matches && matches.length > 0) {
     const errorMessage = `Agent attempted to generate observation blocks, which are reserved for system use only. Found: ${matches.length} observation block(s). Observation blocks should NEVER be included in agent responses - they are automatically generated by the system after code execution.`;
-    
+
     console.error(`🚫 Agent attempted to generate observation blocks:`, matches);
-    
+
     throw new Error(errorMessage);
   }
-}
-
-// Helper function to extract final response from script
-interface ReturnToUserResult {
-  content: string;
-  properties: Record<string, string>;
-}
-
-function extractReturnToUser(script: string): ReturnToUserResult | null {
-  // Match <returnToUser> with optional attributes, followed by content, then closing tag
-  const match = script.match(/<returnToUser(?:\s+([^>]*))?>([\s\S]*?)<\/returnToUser>/);
-  if (!match) return null;
-
-  // Extract properties from attributes if they exist
-  const properties: Record<string, string> = {};
-  const [, attrs, content] = match;
-
-  if (attrs) {
-    // Match all key="value" or key='value' pairs
-    const propRegex = /(\w+)=["']([^"']*)["']/g;
-    let propMatch;
-    while ((propMatch = propRegex.exec(attrs)) !== null) {
-      const [, key, value] = propMatch;
-      properties[key] = value;
-    }
-  }
-
-  return {
-    content: content.trim(),
-    properties
-  };
-}
-
-// Helper function to extract thoughts from script
-function extractThoughts(script: string): string | null {
-  const match = script.match(/<thoughts>([\s\S]*?)<\/thoughts>/);
-  return match ? match[1].trim() : null;
-}
-
-// Helper function to extract script content
-function extractScript(script: string): string | null {
-  // Match <py-script> with optional attributes, followed by content, then closing tag
-  const match = script.match(/<py-script(?:\s+[^>]*)?>([\s\S]*?)<\/py-script>/);
-  return match ? match[1].trim() : null;
 }
 
 export async function* chatCompletion({
@@ -524,7 +435,8 @@ export async function* chatCompletion({
     const controller = abortController || new AbortController();
     const { signal } = controller;
 
-    systemPrompt = (systemPrompt || '') + RESPONSE_INSTRUCTIONS;
+    // Build the complete system prompt: custom prompt + instructions
+    systemPrompt = RESPONSE_INSTRUCTIONS + (systemPrompt ? `\n\n${systemPrompt}` : '');
     const openai = new OpenAI({
       baseURL,
       apiKey,
@@ -553,6 +465,7 @@ export async function* chatCompletion({
       };
 
       let accumulatedResponse = '';
+      let accumulatedToolCalls: any[] = [];
 
       // Create standard completion stream with abort signal
       try {
@@ -562,13 +475,14 @@ export async function* chatCompletion({
             messages: fullMessages as OpenAI.Chat.ChatCompletionMessageParam[],
             temperature,
             stream: stream,
+            tools: [RUN_CODE_TOOL, COMMIT_CODE_BLOCKS_TOOL], // Add both tools
           },
           {
             signal // Pass the abort signal as part of the request options
           }
         );
 
-        // Process the stream and accumulate JSON
+        // Process the stream and accumulate content and tool calls
         try {
           for await (const chunk of completionStream) {
             // Check if abort signal was triggered during streaming
@@ -577,29 +491,118 @@ export async function* chatCompletion({
               return;
             }
 
-            const content = chunk.choices[0]?.delta?.content || '';
-            accumulatedResponse += content;
+            const delta = chunk.choices[0]?.delta;
+            let hasContentUpdate = false;
 
-            // Validate accumulated response to prevent invalid observation blocks
-            try {
-              validateAgentOutput(accumulatedResponse);
-            } catch (error) {
-              console.error('Agent output validation failed:', error);
+            // Accumulate text content if present
+            if (delta?.content) {
+              accumulatedResponse += delta.content;
+              hasContentUpdate = true;
+
+              // Validate accumulated response to prevent invalid observation blocks
+              try {
+                validateAgentOutput(accumulatedResponse);
+              } catch (error) {
+                console.error('Agent output validation failed:', error);
+                yield {
+                  type: 'error',
+                  content: `Agent output validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  error: error instanceof Error ? error : new Error('Agent output validation failed')
+                };
+                return;
+              }
+
+              if(onStreaming){
+                onStreaming(completionId, accumulatedResponse);
+              }
               yield {
-                type: 'error',
-                content: `Agent output validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                error: error instanceof Error ? error : new Error('Agent output validation failed')
+                type: 'text',
+                content: accumulatedResponse
               };
-              return;
             }
 
-            if(onStreaming){
-              onStreaming(completionId, accumulatedResponse);
+            // Accumulate tool calls if present
+            if (delta?.tool_calls) {
+              for (const toolCall of delta.tool_calls) {
+                const index = toolCall.index;
+
+                // Initialize tool call object if needed
+                if (!accumulatedToolCalls[index]) {
+                  accumulatedToolCalls[index] = {
+                    id: toolCall.id || '',
+                    type: toolCall.type || 'function',
+                    function: {
+                      name: toolCall.function?.name || '',
+                      arguments: ''
+                    }
+                  };
+                }
+
+                // Accumulate function name and arguments
+                if (toolCall.function?.name) {
+                  accumulatedToolCalls[index].function.name = toolCall.function.name;
+                }
+                if (toolCall.function?.arguments) {
+                  accumulatedToolCalls[index].function.arguments += toolCall.function.arguments;
+                }
+                if (toolCall.id) {
+                  accumulatedToolCalls[index].id = toolCall.id;
+                }
+              }
+
+              // Stream the accumulated tool call as formatted text for user feedback
+              // Only stream tool calls if we didn't already stream content in this iteration
+              if (accumulatedToolCalls.length > 0 && !hasContentUpdate) {
+                let streamingContent = accumulatedResponse || '';
+
+                for (let i = 0; i < accumulatedToolCalls.length; i++) {
+                  const tc = accumulatedToolCalls[i];
+                  if (tc && tc.function.name === 'runCode') {
+                    // Try to parse the arguments to extract code
+                    try {
+                      // Arguments might be partial JSON, so we need to handle that
+                      const args = tc.function.arguments;
+                      if (args && args.length > 0) {
+                        // Try to extract code even from partial JSON
+                        // Use a more lenient regex that captures partial code
+                        // Match "code":" and then capture everything until closing quote or end of string
+                        const codeMatch = args.match(/"code"\s*:\s*"((?:[^"\\]|\\[\s\S])*)(?:"|$)/);
+                        if (codeMatch) {
+                          const code = codeMatch[1]
+                            .replace(/\\n/g, '\n')
+                            .replace(/\\t/g, '\t')
+                            .replace(/\\r/g, '\r')
+                            .replace(/\\"/g, '"')
+                            .replace(/\\0/g, '') // Remove null bytes (\0)
+                            .replace(/\\u0000/g, '') // Remove unicode null bytes (\u0000)
+                            .replace(/\\\\/g, '\\');
+
+                          if (streamingContent && !streamingContent.endsWith('\n\n')) {
+                            streamingContent += '\n\n';
+                          }
+                          streamingContent += `\`\`\`python\n${code}\n\`\`\``;
+                        }
+                      }
+                    } catch (e) {
+                      // Ignore parsing errors during streaming
+                      console.debug('Error parsing tool call arguments for streaming:', e);
+                    }
+                  }
+                }
+
+                // console.log('DEBUG streaming tool call content:', JSON.stringify(streamingContent.substring(0, 150)));
+
+                if (onStreaming && streamingContent) {
+                  onStreaming(completionId, streamingContent);
+                }
+                if (streamingContent) {
+                  yield {
+                    type: 'text',
+                    content: streamingContent
+                  };
+                }
+              }
             }
-            yield {
-              type: 'text',
-              content: accumulatedResponse
-            };
           }
         } catch (error) {
           // Check if error is due to abortion
@@ -644,7 +647,7 @@ export async function* chatCompletion({
         return; // Exit generator on API error
       }
 
-      // Parse and validate the accumulated JSON
+      // Process the accumulated response and tool calls
       try {
         // Check if abort signal was triggered after streaming
         if (signal.aborted) {
@@ -653,140 +656,197 @@ export async function* chatCompletion({
         }
 
         // Final validation of the complete response
-        try {
-          validateAgentOutput(accumulatedResponse);
-        } catch (error) {
-          console.error('Final agent output validation failed:', error);
-          yield {
-            type: 'error',
-            content: `Agent output validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            error: error instanceof Error ? error : new Error('Agent output validation failed')
-          };
-          return;
-        }
-
-        // Extract thoughts for logging
-        const thoughts = extractThoughts(accumulatedResponse);
-        if (thoughts) {
-          console.log('Thoughts:', thoughts);
-        }
-
-        // Check if this is a final response - if so, we should stop the loop and return control to the user
-        const returnToUser = extractReturnToUser(accumulatedResponse);
-        if (returnToUser) {
-          if(onMessage){
-              // Extract commit IDs from properties and pass them as an array
-              const commitIds = returnToUser.properties.commit ?
-                returnToUser.properties.commit.split(',').map(id => id.trim()) :
-                [];
-
-              onMessage(completionId, returnToUser.content, commitIds);
-          }
-          yield {
-            type: 'text',
-            content: returnToUser.content
-          };
-          // Exit the loop since we have a final response that concludes this round of conversation
-          return;
-        }
-
-        // Handle script execution
-        if(!onExecuteCode){
-          throw new Error('onExecuteCode is not defined');
-        }
-
-
-        // Extract script content if it exists
-        const scriptContent = extractScript(accumulatedResponse);
-        if (scriptContent) {
-          // Check if abort signal was triggered before tool execution
-          if (signal.aborted) {
-            console.log('Chat completion tool execution aborted by user');
-            return;
-          }
-
-          yield {
-            type: 'function_call',
-            name: 'runCode',
-            arguments: {
-              code: scriptContent,
-            },
-            call_id: completionId
-          };
-
-          // Add the tool call to messages with XML format
-          messages.push({
-            role: 'assistant',
-            content: `<thoughts>${thoughts}</thoughts>\n<py-script id="${completionId}">${scriptContent}</py-script>`
-          });
-
-          // on Streaming about executing the code
-          if(onStreaming){
-            onStreaming(completionId, `Executing code...`);
-          }
-
-          // Execute the tool call
+        if (accumulatedResponse) {
           try {
-            const result = await onExecuteCode(
-              completionId,
-              scriptContent
-            );
-
-            // Yield the tool call output
-            yield {
-              type: 'function_call_output',
-              content: result,
-              call_id: completionId
-            };
-
-            // Add tool response to messages
-            messages.push({
-              role: 'user',
-              content: `<observation>I have executed the code. Here are the outputs:\n\`\`\`\n${result}\n\`\`\`\nNow continue with the next step.</observation>`
-            });
+            validateAgentOutput(accumulatedResponse);
           } catch (error) {
-            console.error('Error executing code:', error);
-            const errorMessage = `Error executing code: ${error instanceof Error ? error.message : 'Unknown error'}`;
-
+            console.error('Final agent output validation failed:', error);
             yield {
               type: 'error',
-              content: errorMessage,
-              error: error instanceof Error ? error : new Error(errorMessage)
+              content: `Agent output validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              error: error instanceof Error ? error : new Error('Agent output validation failed')
             };
-
-            // Add error message to messages so the model can attempt recovery
-            messages.push({
-              role: 'user',
-              content: `<observation>Error executing the code: ${error instanceof Error ? error.message : 'Unknown error'}\nPlease try a different approach.</observation>`
-            });
+            return;
           }
         }
-        else{
-          // if no <thoughts> or <py-script> tag produced - this should trigger a strong reminder
-          const reminder = `You MUST use proper tags in your responses. Every response should start with <thoughts> and then use either <py-script> to execute code or <returnToUser> to conclude. Responses without proper tags will end the conversation immediately.`;
-          
-          messages.push({
-            role: 'user', // Use 'user' role for system reminders 
-            content: `${reminder}\n\nYour previous response: "${accumulatedResponse}"\n\nPlease provide a proper response using the required tags.`
-          });
+
+        // Check if we have tool calls to execute
+        if (accumulatedToolCalls.length > 0) {
+          if(!onExecuteCode){
+            throw new Error('onExecuteCode is not defined');
+          }
+
+          // Process each tool call
+          for (const toolCall of accumulatedToolCalls) {
+            if (toolCall.function.name === 'runCode') {
+              // Check if abort signal was triggered before tool execution
+              if (signal.aborted) {
+                console.log('Chat completion tool execution aborted by user');
+                return;
+              }
+
+              // Parse the arguments
+              let args;
+              try {
+                // Log the raw arguments to debug null byte issues
+                if (toolCall.function.arguments.includes('\\0') || toolCall.function.arguments.includes('\\u0000')) {
+                  console.warn('[DEBUG] Tool call arguments contain null byte escape sequences:', {
+                    hasBackslashZero: toolCall.function.arguments.includes('\\0'),
+                    hasUnicodeZero: toolCall.function.arguments.includes('\\u0000'),
+                    preview: toolCall.function.arguments.substring(0, 200)
+                  });
+                }
+
+                args = JSON.parse(toolCall.function.arguments);
+
+                // Check if parsed code contains null bytes
+                if (args.code && (args.code.includes('\0') || args.code.includes('\u0000'))) {
+                  console.error('[DEBUG] Parsed code contains null bytes! This will cause execution errors. Removing them.');
+                  console.error('[DEBUG] Code preview with null bytes:', JSON.stringify(args.code.substring(0, 200)));
+                  // Remove null bytes from the code
+                  args.code = args.code.replace(/\0/g, '').replace(/\u0000/g, '');
+                }
+              } catch (error) {
+                console.error('Error parsing tool call arguments:', error);
+                yield {
+                  type: 'error',
+                  content: `Error parsing tool call arguments: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  error: error instanceof Error ? error : new Error('Error parsing tool call arguments')
+                };
+                continue;
+              }
+
+              const code = args.code;
+              const script_id = args.script_id || completionId;
+
+              yield {
+                type: 'function_call',
+                name: 'runCode',
+                arguments: args,
+                call_id: toolCall.id
+              };
+
+              // Add the assistant message with tool call to the conversation
+              messages.push({
+                role: 'assistant',
+                content: accumulatedResponse || undefined,
+                tool_calls: [{
+                  id: toolCall.id,
+                  type: 'function',
+                  name: 'runCode',
+                  function: {
+                    name: 'runCode',
+                    arguments: toolCall.function.arguments
+                  }
+                }]
+              });
+
+              // On Streaming about executing the code
+              if(onStreaming){
+                onStreaming(completionId, `Executing code...`);
+              }
+
+              // Execute the tool call
+              try {
+                const result = await onExecuteCode(script_id, code);
+
+                // Yield the tool call output
+                yield {
+                  type: 'function_call_output',
+                  content: result,
+                  call_id: toolCall.id
+                };
+
+                // Add tool response to messages
+                messages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  content: result
+                });
+              } catch (error) {
+                console.error('Error executing code:', error);
+                const errorMessage = `Error executing code: ${error instanceof Error ? error.message : 'Unknown error'}`;
+
+                yield {
+                  type: 'error',
+                  content: errorMessage,
+                  error: error instanceof Error ? error : new Error(errorMessage)
+                };
+
+                // Add error message to messages so the model can attempt recovery
+                messages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+                });
+              }
+            } else if (toolCall.function.name === 'commitCodeBlocks') {
+              // Handle commitCodeBlocks tool call
+              // Parse the arguments
+              let args;
+              try {
+                args = JSON.parse(toolCall.function.arguments);
+              } catch (error) {
+                console.error('Error parsing commitCodeBlocks arguments:', error);
+                yield {
+                  type: 'error',
+                  content: `Error parsing commitCodeBlocks arguments: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  error: error instanceof Error ? error : new Error('Error parsing commitCodeBlocks arguments')
+                };
+                continue;
+              }
+
+              const code_block_ids = args.code_block_ids || [];
+
+              console.log('DEBUG: commitCodeBlocks called with ids:', code_block_ids, 'message:', accumulatedResponse);
+
+              // Call onMessage with the final message and commit IDs
+              if(onMessage){
+                onMessage(completionId, null, code_block_ids);
+              }
+
+              yield {
+                type: 'text',
+                content: accumulatedResponse
+              };
+
+              // Exit the loop since we have a final response
+              return;
+            }
+          }
+        } else {
+          // No tool calls - this is a final response
+          if (accumulatedResponse) {
+            if(onMessage){
+              onMessage(completionId, accumulatedResponse, []);
+            }
+            yield {
+              type: 'text',
+              content: accumulatedResponse
+            };
+          }
+          // Exit the loop since we have a final response
+          return;
         }
-        // add a reminder message if we are approaching the max steps
+
+        // Add a reminder message if we are approaching the max steps
         if(loopCount >= maxSteps - 2){
           messages.push({
             role: 'user',
-            content: `You are approaching the maximum number of steps (${maxSteps}). Please conclude the session with \`returnToUser\` tag and commit the current code and outputs, otherwise the session will be aborted.`
+            content: `You are approaching the maximum number of steps (${maxSteps}). Please use the commitCodeBlocks tool to commit your working code and provide a final message, otherwise the session will be aborted and no code will be saved.`
           });
         }
 
         // Check if we've hit the loop limit
         if (loopCount >= maxSteps) {
           console.warn(`Chat completion reached maximum loop limit of ${maxSteps}`);
+          const maxStepsMessage = `Reached maximum number of tool calls (${maxSteps}). The session was terminated without committing code blocks, so no code will be visible or saved. Please try breaking your request into smaller steps.`;
           if(onMessage){
-            onMessage(completionId, `<thoughts>Maximum steps reached</thoughts>\n<returnToUser>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. I'm returning control to you now. Please try breaking your request into smaller steps or provide additional guidance.</returnToUser>`, []);
+            onMessage(completionId, maxStepsMessage, []);
           }
           yield {
             type: 'text',
-            content: `<thoughts>Maximum steps reached</thoughts>\n<returnToUser>Reached maximum number of tool calls (${maxSteps}). Some actions may not have completed. I'm returning control to you now. Please try breaking your request into smaller steps or provide additional guidance.</returnToUser>`
+            content: maxStepsMessage
           };
           break;
         }
@@ -807,7 +867,7 @@ export async function* chatCompletion({
         // Try to add a message to recover if possible
         messages.push({
           role: 'user',
-          content: `<observation>Error in processing: ${errorMessage}. Please try again with a simpler approach.</observation>`
+          content: `Error in processing: ${errorMessage}. Please try again with a simpler approach.`
         });
       }
     }

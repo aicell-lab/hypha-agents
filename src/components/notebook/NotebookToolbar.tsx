@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaCircle, FaExclamationTriangle, FaStop, FaFolderPlus } from 'react-icons/fa';
+import { FaPlay, FaTrash, FaKeyboard, FaSave, FaFolder, FaDownload, FaRedo, FaSpinner, FaBars, FaCircle, FaExclamationTriangle, FaStop, FaFolderPlus, FaCog } from 'react-icons/fa';
 import { AiOutlinePlus } from 'react-icons/ai';
 import { VscCode } from 'react-icons/vsc';
 import { MdOutlineTextFields } from 'react-icons/md';
@@ -122,9 +122,10 @@ interface FileOperationsProps {
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onMountDirectory?: () => void;
+  onShowEnvironmentInfo?: () => void;
 }
 
-export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownload, onLoad, onMountDirectory }) => (
+export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownload, onLoad, onMountDirectory, onShowEnvironmentInfo }) => (
   <div className="flex items-center">
     <input
       type="file"
@@ -162,6 +163,15 @@ export const FileOperations: React.FC<FileOperationsProps> = ({ onSave, onDownlo
         title="Mount local directory as project"
       >
         <FaFolderPlus className="w-3.5 h-3.5" />
+      </button>
+    )}
+    {onShowEnvironmentInfo && (
+      <button
+        onClick={onShowEnvironmentInfo}
+        className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition"
+        title="Environment Information (mounted directories, env vars, services)"
+      >
+        <FaCog className="w-3.5 h-3.5" />
       </button>
     )}
   </div>
@@ -317,6 +327,7 @@ export interface NotebookToolbarProps {
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onMountDirectory?: () => void;
+  onShowEnvironmentInfo?: () => void;
   onRunAll: () => void;
   onClearOutputs: () => void;
   onRestartKernel: () => void;
@@ -351,6 +362,7 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
   onDownload,
   onLoad,
   onMountDirectory,
+  onShowEnvironmentInfo,
   onRunAll,
   onClearOutputs,
   onRestartKernel,
@@ -493,6 +505,18 @@ const ToolbarDropdown: React.FC<ToolbarDropdownProps> = ({
           Mount Directory
         </button>
       )}
+      {onShowEnvironmentInfo && (
+        <button
+          onClick={() => {
+            onShowEnvironmentInfo();
+            onClose();
+          }}
+          className="flex items-center w-full px-3 py-2 text-sm text-green-700 hover:bg-green-50"
+        >
+          <FaCog className="w-3.5 h-3.5 mr-2" />
+          Environment Info
+        </button>
+      )}
 
       <div className="border-t border-gray-200 mt-1 pt-1">
         <div className="px-2 py-1 text-xs text-gray-500 border-b border-gray-200">Cells</div>
@@ -603,6 +627,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
   onDownload,
   onLoad,
   onMountDirectory,
+  onShowEnvironmentInfo,
   onRunAll,
   onClearOutputs,
   onRestartKernel,
@@ -652,6 +677,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onDownload={onDownload}
             onLoad={onLoad}
             onMountDirectory={onMountDirectory}
+            onShowEnvironmentInfo={onShowEnvironmentInfo}
           />
           <CellControls 
             onAddCodeCell={onAddCodeCell} 
@@ -688,6 +714,7 @@ export const NotebookToolbar: React.FC<NotebookToolbarProps> = ({
             onDownload={onDownload}
             onLoad={onLoad}
             onMountDirectory={onMountDirectory}
+            onShowEnvironmentInfo={onShowEnvironmentInfo}
             onRunAll={onRunAll}
             onClearOutputs={onClearOutputs}
             onRestartKernel={onRestartKernel}

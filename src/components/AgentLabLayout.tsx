@@ -87,7 +87,8 @@ interface AgentLabLayoutProps {
   onShowTerminal: () => void;
   onModelSettingsChange: () => void;
   onShowEditAgent: () => void;
-  
+  onShowEnvironmentInfo: () => void;
+
   // Status
   isProcessing: boolean;
   isReady: boolean;
@@ -173,7 +174,8 @@ export const AgentLabLayout: React.FC<AgentLabLayoutProps> = ({
   onShowTerminal,
   onModelSettingsChange,
   onShowEditAgent,
-  
+  onShowEnvironmentInfo,
+
   // Status
   isProcessing,
   isReady,
@@ -195,6 +197,7 @@ export const AgentLabLayout: React.FC<AgentLabLayoutProps> = ({
         onDownload={onDownload}
         onLoad={onLoad}
         onMountDirectory={onMountDirectory}
+        onShowEnvironmentInfo={onShowEnvironmentInfo}
         onRunAll={onRunAll}
         onClearOutputs={onClearOutputs}
         onRestartKernel={onRestartKernel}
@@ -279,6 +282,7 @@ export const AgentLabLayout: React.FC<AgentLabLayoutProps> = ({
                       onShowThebeTerminal={onShowTerminal}
                       onModelSettingsChange={onModelSettingsChange}
                       onShowEditAgent={onShowEditAgent}
+                      onShowEnvironmentInfo={onShowEnvironmentInfo}
                     />
                   </div>
                 </div>

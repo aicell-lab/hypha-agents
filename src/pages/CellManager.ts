@@ -1282,8 +1282,8 @@ export class CellManager {
   // Function to convert notebook cells to chat history
   convertCellsToHistory(
     cells: NotebookCell[]
-  ): Array<{ role: string; content: string }> {
-    const history: Array<{ role: string; content: string }> = [];
+  ): Array<{ role: string; content?: string | null; tool_call_id?: string; tool_calls?: any[] }> {
+    const history: Array<{ role: string; content?: string | null; tool_call_id?: string; tool_calls?: any[] }> = [];
 
     for (const cell of cells) {
       // Skip cells without a role (they're not part of the conversation)
@@ -1335,51 +1335,121 @@ export class CellManager {
             content: content.trim(),
           });
         } else {
-          // For non-system cells, include both code and output
-          content = `<py-script>${cell.content}</py-script>`;
-          history.push({
-            role: cell.role,
-            content: content.trim(),
-          });
-          // Add outputs if they exist
-          if (cell.output && cell.output.length > 0) {
-            content = "\n<observation>\n";
-            for (const output of cell.output) {
-              switch (output.type) {
-                case "stdout":
-                case "stderr":
-                  const shortContent = createShortContent(
-                    output.content,
-                    output.type
-                  );
-                  content += `${
-                    output.type === "stderr" ? "Error: " : ""
-                  }${shortContent}\n`;
-                  break;
-                case "html":
-                  content += "[HTML Output]\n";
-                  break;
-                case "img":
-                  content += "[Image Output]\n";
-                  break;
-                case "svg":
-                  content += "[SVG Output]\n";
-                  break;
-                default:
-                  if (output.content) {
+          // For non-system cells, check the role to determine formatting
+          if (cell.role === "user") {
+            // User-created code cells: format as user message with code and results
+            let userMessage = `I ran the following code:\n\`\`\`python\n${cell.content}\n\`\`\`\n`;
+
+            // Add outputs if they exist
+            if (cell.output && cell.output.length > 0) {
+              userMessage += "\nAnd got these results:\n";
+              for (const output of cell.output) {
+                switch (output.type) {
+                  case "stdout":
+                  case "stderr":
                     const shortContent = createShortContent(
                       output.content,
-                      "text"
+                      output.type
                     );
-                    content += `${shortContent}\n`;
-                  }
+                    userMessage += `${
+                      output.type === "stderr" ? "Error: " : ""
+                    }${shortContent}\n`;
+                    break;
+                  case "html":
+                    userMessage += "[HTML Output]\n";
+                    break;
+                  case "img":
+                    userMessage += "[Image Output]\n";
+                    break;
+                  case "svg":
+                    userMessage += "[SVG Output]\n";
+                    break;
+                  default:
+                    if (output.content) {
+                      const shortContent = createShortContent(
+                        output.content,
+                        "text"
+                      );
+                      userMessage += `${shortContent}\n`;
+                    }
+                }
               }
+            } else {
+              userMessage += "\nThe code executed successfully with no output.";
             }
-            content += "\n</observation>\n";
+
             history.push({
-                role: "user",
-                content: content.trim(),
+              role: "user",
+              content: userMessage.trim()
             });
+          } else {
+            // Assistant-created code cells: format as tool calls
+            // Tool calls can only be in assistant messages
+            history.push({
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: cell.id,
+                type: 'function',
+                name: 'runCode',
+                function: {
+                  name: 'runCode',
+                  arguments: JSON.stringify({
+                    code: cell.content,
+                    script_id: cell.id
+                  })
+                }
+              }]
+            });
+
+            // Add tool response if outputs exist
+            if (cell.output && cell.output.length > 0) {
+              content = "";
+              for (const output of cell.output) {
+                switch (output.type) {
+                  case "stdout":
+                  case "stderr":
+                    const shortContent = createShortContent(
+                      output.content,
+                      output.type
+                    );
+                    content += `${
+                      output.type === "stderr" ? "Error: " : ""
+                    }${shortContent}\n`;
+                    break;
+                  case "html":
+                    content += "[HTML Output]\n";
+                    break;
+                  case "img":
+                    content += "[Image Output]\n";
+                    break;
+                  case "svg":
+                    content += "[SVG Output]\n";
+                    break;
+                  default:
+                    if (output.content) {
+                      const shortContent = createShortContent(
+                        output.content,
+                        "text"
+                      );
+                      content += `${shortContent}\n`;
+                    }
+                }
+              }
+
+              history.push({
+                role: "tool",
+                tool_call_id: cell.id,
+                content: content.trim() || "Code executed successfully."
+              });
+            } else {
+              // If no output, still add a tool response
+              history.push({
+                role: "tool",
+                tool_call_id: cell.id,
+                content: "Code executed successfully."
+              });
+            }
           }
         }
 

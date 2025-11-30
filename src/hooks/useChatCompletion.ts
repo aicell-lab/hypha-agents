@@ -11,6 +11,7 @@ interface UseChatCompletionProps {
   getConversationHistory: (upToCellId?: string) => ChatMessage[];
   isReady: boolean;
   setCells: React.Dispatch<React.SetStateAction<NotebookCell[]>>;
+  environmentPrompt?: string; // Environment information to append to system prompt
 }
 
 export function useChatCompletion({
@@ -19,7 +20,8 @@ export function useChatCompletion({
   agentSettings,
   getConversationHistory,
   isReady,
-  setCells
+  setCells,
+  environmentPrompt
 }: UseChatCompletionProps) {
   const [isProcessingAgentResponse, setIsProcessingAgentResponse] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
@@ -112,8 +114,12 @@ export function useChatCompletion({
       setActiveAbortController(abortController);
 
       // Use agent settings in chat completion
+      // Append environment prompt to system prompt if available
+      const systemPrompt = environmentPrompt ? `\n\n${environmentPrompt}` : undefined;
+
       const completion = chatCompletion({
         messages,
+        systemPrompt, // Include environment information in system prompt
         model: agentSettings.model,
         temperature: agentSettings.temperature,
         maxSteps: 15,
@@ -127,14 +133,15 @@ export function useChatCompletion({
           console.debug('[DEBUG] New Message:', completionId, message, commitIds);
           
           // First, create the markdown cell with the final response
-          cellManager.updateCellById(
-            completionId,
-            message,
-            'markdown',
-            'assistant',
-            lastUserCellRef.current || undefined
-          );
-          
+          if(message){
+            cellManager.updateCellById(
+              completionId,
+              message,
+              'markdown',
+              'assistant',
+              lastUserCellRef.current || undefined
+            );
+          }
           // Instead of deleting cells, mark them as staged or not staged (committed)
           if (lastUserCellRef.current) {
             // Get all child cells of the current user message
@@ -230,7 +237,7 @@ export function useChatCompletion({
       // Also clean up any other thinking cells that might be lingering
       setCells(prev => prev.filter(cell => cell.type !== 'thinking'));
     }
-  }, [cellManager, executeCode, agentSettings, getConversationHistory, isReady, setCells]);
+  }, [cellManager, executeCode, agentSettings, getConversationHistory, isReady, setCells, environmentPrompt, handleExecuteCode]);
 
   // Handle regenerating responses
   const handleRegenerateClick = useCallback(async (cellId: string) => {

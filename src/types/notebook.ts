@@ -75,6 +75,15 @@ export interface NotebookMetadata {
     manifest?: any;
     config?: any;
   };
+  // Environment variables stored in the notebook
+  environmentVariables?: Array<{
+    key: string;
+    value: string;
+  }>;
+  // Installed Hypha services (only URLs, schemas are fetched dynamically)
+  installedServices?: Array<{
+    serviceUrl: string;
+  }>;
 }
 
 export interface NotebookData {

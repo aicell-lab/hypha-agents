@@ -12,6 +12,7 @@ export interface NotebookHeaderProps {
   onDownload: () => void;
   onLoad: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onMountDirectory?: () => void;
+  onShowEnvironmentInfo?: () => void;
   onRunAll: () => void;
   onClearOutputs: () => void;
   onRestartKernel: () => void;
@@ -41,6 +42,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
   onDownload,
   onLoad,
   onMountDirectory,
+  onShowEnvironmentInfo,
   onRunAll,
   onClearOutputs,
   onRestartKernel,
@@ -107,6 +109,7 @@ const NotebookHeader: React.FC<NotebookHeaderProps> = ({
           onDownload={onDownload}
           onLoad={onLoad}
           onMountDirectory={onMountDirectory}
+          onShowEnvironmentInfo={onShowEnvironmentInfo}
           onRunAll={onRunAll}
           onClearOutputs={onClearOutputs}
           onRestartKernel={onRestartKernel}

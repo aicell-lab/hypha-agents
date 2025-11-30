@@ -9,6 +9,7 @@ import { HyphaCoreWindow } from '../components/notebook/CanvasPanel';
 import { v4 as uuidv4 } from 'uuid';
 import ModelSettingsCanvasContent from '../components/notebook/ModelSettingsCanvasContent';
 import EditAgentCanvasContent, { EditAgentFormData } from '../components/notebook/EditAgentCanvasContent';
+import EnvironmentInfoDialog from '../components/notebook/EnvironmentInfoDialog';
 
 // Import utilities and types
 import { NotebookCell, NotebookMetadata, NotebookData, CellType, CellRole } from '../types/notebook';
@@ -28,6 +29,7 @@ import { useNotebookOperations } from '../hooks/useNotebookOperations';
 import { useAgentOperations } from '../hooks/useAgentOperations';
 import { useCanvasPanel } from '../hooks/useCanvasPanel';
 import { useSidebar } from '../hooks/useSidebar';
+import { useEnvironmentState } from '../hooks/useEnvironmentState';
 
 // Import types from ProjectsProvider
 import type { Project as BaseProject } from '../providers/ProjectsProvider';
@@ -132,6 +134,21 @@ const NotebookPage: React.FC = () => {
   // Initialize canvas panel and sidebar hooks early
   const canvasPanel = useCanvasPanel();
   const sidebar = useSidebar();
+
+  // Initialize environment state
+  const environmentState = useEnvironmentState({
+    server,
+    notebookMetadata,
+    onMetadataChange: (updatedMetadata) => {
+      setNotebookMetadata(updatedMetadata);
+    },
+    executeCode: async (code: string) => {
+      return await kernelManager.executeCode(code);
+    },
+    serverUrl: server?.config?.server_url || 'https://hypha.aicell.io',
+    userToken: server?.config?.token
+  });
+  const [showEnvironmentDialog, setShowEnvironmentDialog] = useState(false);
 
   // Initialization Hook
   const { hasInitialized: initRefObject, initialUrlParams } = useNotebookInitialization({
@@ -412,7 +429,8 @@ const NotebookPage: React.FC = () => {
     agentSettings,
     getConversationHistory,
     isReady: kernelManager.isReady,
-    setCells
+    setCells,
+    environmentPrompt: environmentState.environmentPrompt
   });
 
   // Handle abort execution
@@ -1063,6 +1081,11 @@ const NotebookPage: React.FC = () => {
 
       if (success) {
         console.log(`[AgentLab] Successfully mounted directory ${dirName} to ${mountPoint}`);
+
+        // Add to environment state
+        environmentState.addMountedDirectory(dirName, mountPoint);
+
+        showToast(`Directory "${dirName}" mounted successfully at ${mountPoint}`, 'success');
       }
     } catch (error: any) {
       // User cancelled the picker
@@ -1073,7 +1096,7 @@ const NotebookPage: React.FC = () => {
       console.error('[AgentLab] Error mounting directory:', error);
       showToast(`Failed to mount directory: ${error.message}`, 'error');
     }
-  }, [kernelManager.mountDirectory]);
+  }, [kernelManager.mountDirectory, environmentState.addMountedDirectory]);
 
   // Load notebook from file
   const handleLoadNotebook = useCallback(async (project: Project, file: any) => {
@@ -1184,6 +1207,14 @@ const NotebookPage: React.FC = () => {
       setIsAIReady(false);
     }
   }, [kernelManager.isReady, setIsAIReady]);
+
+  // Initialize environment variables in kernel when ready
+  useEffect(() => {
+    if (kernelManager.isReady && environmentState.environmentVariables.length > 0) {
+      console.log('[AgentLab] Kernel is ready, initializing environment variables');
+      environmentState.initializeKernelEnvironment();
+    }
+  }, [kernelManager.isReady, environmentState]);
 
   // Load agent settings from localStorage on component mount
   useEffect(() => {
@@ -1298,6 +1329,7 @@ const NotebookPage: React.FC = () => {
   }
 
   return (
+    <>
     <AgentLabLayout
       // Core state
       cells={cells}
@@ -1371,7 +1403,8 @@ const NotebookPage: React.FC = () => {
                     onShowTerminal={handleShowDenoTerminalInCanvas}
                     onModelSettingsChange={handleShowModelSettingsInCanvas}
                     onShowEditAgent={handleShowEditAgentInCanvas}
-      
+      onShowEnvironmentInfo={() => setShowEnvironmentDialog(true)}
+
       // Status
       isProcessing={isProcessingAgentResponse}
       isReady={kernelManager.isReady}
@@ -1383,6 +1416,21 @@ const NotebookPage: React.FC = () => {
       // URL params
       parsedUrlParams={parsedUrlParams}
     />
+
+    {/* Environment Information Dialog */}
+    <EnvironmentInfoDialog
+      isOpen={showEnvironmentDialog}
+      onClose={() => setShowEnvironmentDialog(false)}
+      mountedDirectories={environmentState.mountedDirectories}
+      environmentVariables={environmentState.environmentVariables}
+      onAddEnvVar={environmentState.addEnvironmentVariable}
+      onRemoveEnvVar={environmentState.removeEnvironmentVariable}
+      installedServices={environmentState.installedServices}
+      onAddService={environmentState.addInstalledService}
+      onRemoveService={environmentState.removeInstalledService}
+      environmentPrompt={environmentState.environmentPrompt}
+    />
+    </>
   );
 };
 
