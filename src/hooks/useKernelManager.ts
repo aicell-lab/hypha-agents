@@ -154,18 +154,52 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
 
             case 'execute_result':
               console.log('[Web Python Kernel] execute_result event data:', event.data);
-              if (event.data && event.data.data) {
-                const textPlain = event.data.data['text/plain'];
-
-                // Don't display None results (standard Jupyter behavior)
-                if (textPlain && textPlain !== 'None' && callbacks?.onOutput) {
+              if (event.data && event.data.data && callbacks?.onOutput) {
+                // Priority 1: Check for HTML (richer format)
+                if (event.data.data['text/html']) {
+                  console.log('[Web Python Kernel] Processing text/html from execute_result');
                   callbacks.onOutput({
-                    type: 'result',
-                    content: textPlain,
-                    short_content: textPlain
+                    type: 'html',
+                    content: event.data.data['text/html'],
+                    short_content: '[HTML]'
                   });
-                } else if (!textPlain && callbacks?.onOutput) {
-                  // Fallback to JSON stringify if text/plain is missing
+                }
+                // Priority 2: Check for images
+                else if (event.data.data['image/png']) {
+                  console.log('[Web Python Kernel] Processing image/png from execute_result');
+                  callbacks.onOutput({
+                    type: 'img',
+                    content: `data:image/png;base64,${event.data.data['image/png']}`,
+                    short_content: '[Image]'
+                  });
+                } else if (event.data.data['image/jpeg']) {
+                  console.log('[Web Python Kernel] Processing image/jpeg from execute_result');
+                  callbacks.onOutput({
+                    type: 'img',
+                    content: `data:image/jpeg;base64,${event.data.data['image/jpeg']}`,
+                    short_content: '[Image]'
+                  });
+                } else if (event.data.data['image/svg+xml']) {
+                  console.log('[Web Python Kernel] Processing image/svg+xml from execute_result');
+                  callbacks.onOutput({
+                    type: 'html', // SVG can be rendered as HTML
+                    content: event.data.data['image/svg+xml'],
+                    short_content: '[SVG]'
+                  });
+                }
+                // Priority 3: Check for plain text (don't display None results)
+                else if (event.data.data['text/plain']) {
+                  const textPlain = event.data.data['text/plain'];
+                  if (textPlain !== 'None') {
+                    callbacks.onOutput({
+                      type: 'result',
+                      content: textPlain,
+                      short_content: textPlain
+                    });
+                  }
+                }
+                // Fallback: JSON stringify if no known MIME type
+                else {
                   const result = JSON.stringify(event.data.data);
                   callbacks.onOutput({
                     type: 'result',
@@ -186,21 +220,40 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
               });
 
               if (event.data && event.data.data && callbacks?.onOutput) {
-                if (event.data.data['image/png']) {
-                  console.log('[Web Python Kernel] Processing image/png, length:', event.data.data['image/png'].length);
-                  callbacks.onOutput({
-                    type: 'img', // Changed from 'image' to 'img' to match JupyterOutput expectations
-                    content: `data:image/png;base64,${event.data.data['image/png']}`,
-                    short_content: '[Image]'
-                  });
-                } else if (event.data.data['text/html']) {
+                // Priority 1: Check for HTML (richer format than text)
+                if (event.data.data['text/html']) {
                   console.log('[Web Python Kernel] Processing text/html');
                   callbacks.onOutput({
                     type: 'html',
                     content: event.data.data['text/html'],
                     short_content: '[HTML]'
                   });
-                } else if (event.data.data['text/plain']) {
+                }
+                // Priority 2: Check for images
+                else if (event.data.data['image/png']) {
+                  console.log('[Web Python Kernel] Processing image/png, length:', event.data.data['image/png'].length);
+                  callbacks.onOutput({
+                    type: 'img',
+                    content: `data:image/png;base64,${event.data.data['image/png']}`,
+                    short_content: '[Image]'
+                  });
+                } else if (event.data.data['image/jpeg']) {
+                  console.log('[Web Python Kernel] Processing image/jpeg');
+                  callbacks.onOutput({
+                    type: 'img',
+                    content: `data:image/jpeg;base64,${event.data.data['image/jpeg']}`,
+                    short_content: '[Image]'
+                  });
+                } else if (event.data.data['image/svg+xml']) {
+                  console.log('[Web Python Kernel] Processing image/svg+xml');
+                  callbacks.onOutput({
+                    type: 'html', // SVG can be rendered as HTML
+                    content: event.data.data['image/svg+xml'],
+                    short_content: '[SVG]'
+                  });
+                }
+                // Priority 3: Check for plain text
+                else if (event.data.data['text/plain']) {
                   console.log('[Web Python Kernel] Processing text/plain from display_data');
                   const plainText = event.data.data['text/plain'];
                   callbacks.onOutput({
