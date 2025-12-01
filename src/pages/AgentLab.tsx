@@ -35,8 +35,8 @@ import { useEnvironmentState } from '../hooks/useEnvironmentState';
 import type { Project as BaseProject } from '../providers/ProjectsProvider';
 import { ProjectsProvider, useProjects, IN_BROWSER_PROJECT } from '../providers/ProjectsProvider';
 
-// Import setupNotebookService
-import { setupNotebookService } from '../components/services/hyphaCoreServices';
+// Import setupNotebookService and initializeHyphaCore
+import { setupNotebookService, initializeHyphaCore } from '../components/services/hyphaCoreServices';
 
 // Import the hook's return type
 import { InitialUrlParams } from '../hooks/useNotebookInitialization';
@@ -130,6 +130,9 @@ const NotebookPage: React.FC = () => {
 
   // Ref to track if we're currently aborting execution
   const isAbortingRef = useRef(false);
+
+  // Ref to track if HyphaCore has been initialized
+  const hyphaCoreInitializedRef = useRef(false);
 
   // Initialize canvas panel and sidebar hooks early
   const canvasPanel = useCanvasPanel();
@@ -238,6 +241,29 @@ const NotebookPage: React.FC = () => {
     canvasPanel.setShowCanvasPanel(true);
   }, [canvasPanel]);
 
+  // Initialize HyphaCore early, before kernel manager starts
+  useEffect(() => {
+    // Only initialize once
+    if (hyphaCoreInitializedRef.current) {
+      return;
+    }
+
+    const initHyphaCore = async () => {
+      try {
+        await initializeHyphaCore({
+          onAddWindow: handleAddWindow,
+          agentSettings,
+        });
+        hyphaCoreInitializedRef.current = true;
+      } catch (error) {
+        console.error('[AgentLab] Failed to initialize HyphaCore:', error);
+        showToast(`Failed to initialize HyphaCore: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      }
+    };
+
+    initHyphaCore();
+  }, [agentSettings, handleAddWindow]);
+
   // Setup service with kernel when ready
   const setupServiceWithKernel = useCallback(async (executeCode: (code: string, callbacks?: any, timeout?: number) => Promise<void>) => {
     if (isSettingUpService) {
@@ -247,36 +273,23 @@ const NotebookPage: React.FC = () => {
     
     setIsSettingUpService(true);
     setHyphaCoreApi(null);
-    
-    if(!server) {
-      showToast('Hypha Core Service is not available, please login.', 'warning');
-      setIsSettingUpService(false);
-      return;
-    }
-    
-    console.log('[AgentLab] Setting up Hypha Core service with ready kernel');
+
     const currentSignal = hyphaServiceAbortControllerRef.current.signal;
     try {
       const api = await setupNotebookService({
         onAddWindow: handleAddWindow,
-        server, 
+        server,
         executeCode: executeCode,
-        agentSettings,
-        abortSignal: currentSignal,
         projectId: selectedProject?.id || IN_BROWSER_PROJECT.id,
       });
       if (currentSignal.aborted) {
-          console.log('[AgentLab] Hypha Core service setup aborted before completion.');
-          return;
+        return;
       }
       setHyphaCoreApi(api);
-      console.log('[AgentLab] Hypha Core service successfully set up.');
       showToast('Hypha Core Service Connected', 'success');
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-          console.log('[AgentLab] Hypha Core service setup explicitly aborted.');
-      } else {
-          showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      if (error.name !== 'AbortError') {
+        showToast(`Failed to connect Hypha Core Service: ${error instanceof Error ? error.message : String(error)}`, 'error');
       }
       setHyphaCoreApi(null);
     } finally {

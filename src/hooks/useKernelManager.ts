@@ -32,6 +32,8 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
   const onKernelReadyRef = useRef(onKernelReady);
   // Add ref to track mounted paths for auto-sync
   const mountedPathsRef = useRef<Set<string>>(new Set());
+  // Add ref to store HyphaCore instance
+  const hyphaCoreRef = useRef<any>(null);
 
   // Update the onKernelReady ref when it changes
   useEffect(() => {
@@ -45,6 +47,24 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
       timestamp: Date.now(),
     };
     setKernelExecutionLog(prevLog => [...prevLog, newEntry]);
+  }, []);
+
+  // Function to verify HyphaCore is initialized (should be done early by AgentLab)
+  const verifyHyphaCore = useCallback((): any => {
+    if (hyphaCoreRef.current) {
+      console.log('[Kernel Manager] HyphaCore already available in ref');
+      return hyphaCoreRef.current;
+    }
+
+    // Check if initialized globally
+    if ((window as any)._hyphaCoreInstance) {
+      console.log('[Kernel Manager] HyphaCore found globally');
+      hyphaCoreRef.current = (window as any)._hyphaCoreInstance;
+      return hyphaCoreRef.current;
+    }
+
+    // HyphaCore should have been initialized early by AgentLab
+    throw new Error('HyphaCore not found. It should be initialized before kernel manager starts.');
   }, []);
 
   // Function to dynamically load web-python-kernel module
@@ -379,12 +399,12 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
 
       try {
         setKernelStatus('starting');
-        console.log('[Web Python Kernel] Initializing web-python-kernel...');
+
+        // Verify HyphaCore is initialized (should be done early by AgentLab)
+        const hyphaCore = verifyHyphaCore();
 
         // Load the kernel module
         const { manager, KernelMode, KernelLanguage, KernelEvents } = await loadWebPythonKernel();
-
-        console.log('[Web Python Kernel] Creating kernel...');
 
         // Create a new kernel
         const kernelId = await manager.createKernel({
@@ -393,12 +413,43 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
           autoSyncFs: true,
         });
 
-        console.log('[Web Python Kernel] Created kernel:', kernelId);
-
         // Store kernel ID and kernel instance
         currentKernelIdRef.current = kernelId;
         const kernel = manager.kernels?.[kernelId] || manager.getKernel?.(kernelId);
         currentKernelRef.current = kernel;
+
+        // Mount the worker to HyphaCore
+        if (kernel?.worker) {
+          const tempExecuteCode = createExecuteCodeFunction(manager, kernelId);
+
+          // Start mounting in passive mode
+          const mountPromise = hyphaCore.mountWorker(kernel.worker, {passive: true});
+
+          // Setup RPC client (must be listening before sending hyphaClientReady)
+          const setupPromise = tempExecuteCode(`
+import js
+import micropip
+await micropip.install('hypha-rpc')
+from hypha_rpc import setup_local_client
+
+# Start listening for initializeHyphaClient message
+rpc_future = setup_local_client()
+
+# Send hyphaClientReady event to trigger initializeHyphaClient message
+msg = js.Object.new()
+msg.type = "hyphaClientReady"
+js.postMessage(msg)
+
+# Wait for the RPC connection to be established
+api = await rpc_future
+          `);
+
+          // Wait for both mount and RPC setup to complete
+          await Promise.all([mountPromise, setupPromise]);
+          console.log('[Web Python Kernel] HyphaCore connection established');
+        } else {
+          throw new Error('Kernel worker not found');
+        }
 
         // Set up event listeners
         manager.onKernelEvent(kernelId, KernelEvents.KERNEL_BUSY, () => {
@@ -440,7 +491,7 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     }
 
     initializeKernel();
-  }, [loadWebPythonKernel, initializeExecuteCode]);
+  }, [loadWebPythonKernel, initializeExecuteCode, verifyHyphaCore]);
 
   // Function to destroy current kernel
   const destroyCurrentKernel = useCallback(async () => {
@@ -506,6 +557,9 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
     try {
       setKernelStatus('starting');
 
+      // Verify HyphaCore (should already be initialized)
+      verifyHyphaCore();
+
       // Destroy current kernel if it exists
       if (kernelId) {
         try {
@@ -528,6 +582,40 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
       currentKernelIdRef.current = newKernelId;
       const newKernel = manager.kernels?.[newKernelId] || manager.getKernel?.(newKernelId);
       currentKernelRef.current = newKernel;
+
+      // Mount the restarted worker to HyphaCore
+      const hyphaCore = verifyHyphaCore();
+      if (newKernel?.worker) {
+        const tempExecuteCode = createExecuteCodeFunction(manager, newKernelId);
+
+        // Start mounting in passive mode
+        const mountPromise = hyphaCore.mountWorker(newKernel.worker, {passive: true});
+
+        // Setup RPC client (must be listening before sending hyphaClientReady)
+        const setupPromise = tempExecuteCode(`
+import js
+import micropip
+await micropip.install('hypha-rpc')
+from hypha_rpc import setup_local_client
+
+# Start listening for initializeHyphaClient message
+rpc_future = setup_local_client()
+
+# Send hyphaClientReady event to trigger initializeHyphaClient message
+msg = js.Object.new()
+msg.type = "hyphaClientReady"
+js.postMessage(msg)
+
+# Wait for the RPC connection to be established
+api = await rpc_future
+        `);
+
+        // Wait for both mount and RPC setup to complete
+        await Promise.all([mountPromise, setupPromise]);
+        console.log('[Web Python Kernel] HyphaCore connection re-established');
+      } else {
+        throw new Error('New kernel worker not found');
+      }
 
       // Re-setup event listeners
       manager.onKernelEvent(newKernelId, KernelEvents.KERNEL_BUSY, () => {
@@ -561,7 +649,7 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
       setIsReady(false);
       showToast(`Failed to restart kernel: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
-  }, [initializeExecuteCode, clearRunningState]);
+  }, [initializeExecuteCode, clearRunningState, verifyHyphaCore]);
 
   const resetKernelState = useCallback(async () => {
     if (!isReady) {
