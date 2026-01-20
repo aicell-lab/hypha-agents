@@ -3,7 +3,7 @@
  */
 
 import { useCallback } from 'react';
-import { NotebookData, NotebookMetadata, NotebookCell, CellRole } from '../types/notebook';
+import { NotebookData, NotebookMetadata, NotebookCell, CellRole, OutputItem } from '../types/notebook';
 import { showToast, dismissToast } from '../utils/notebookUtils';
 import { useProjects, IN_BROWSER_PROJECT } from '../providers/ProjectsProvider';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,6 +14,160 @@ const CELL_ROLES = {
   SYSTEM: 'system' as CellRole,
   USER: 'user' as CellRole,
   ASSISTANT: 'assistant' as CellRole
+};
+
+// Helper to convert internal cell format to standard notebook format
+const toStandardCell = (cell: NotebookCell): any => {
+  const { type, content, output, executionCount, ...rest } = cell;
+  // Convert content string to source array (split by lines, keep ends)
+  const source = typeof content === 'string' 
+      ? content.split('\n').map((line, index, arr) => index === arr.length - 1 ? line : line + '\n') 
+      : content || [];
+      
+  const standardCell: any = {
+    ...rest,
+    cell_type: type,
+    source: source,
+    metadata: cell.metadata || {}
+  };
+
+  if (type === 'code') {
+    standardCell.execution_count = executionCount ?? null;
+    standardCell.outputs = (output || []).map((item: OutputItem) => {
+      // Map internal output types to standard NBFormat types
+      if (item.type === 'stdout' || item.type === 'stderr') {
+        return {
+          output_type: 'stream',
+          name: item.type,
+          text: item.content.split('\n').map((l: string, i: number, a: string[]) => i === a.length - 1 ? l : l + '\n')
+        };
+      } else if (item.type === 'html') {
+        return {
+          output_type: 'display_data',
+          data: {
+            'text/html': item.content
+          },
+          metadata: {}
+        };
+      } else if (item.type === 'img') {
+        // Strip data URI prefix if present to get raw base64
+        const base64Data = item.content.replace(/^data:image\/[a-z]+;base64,/, '');
+        // Default to png if we can't infer, but usually it's png or jpeg
+        const mimeType = item.content.includes('image/jpeg') ? 'image/jpeg' : 'image/png';
+        return {
+          output_type: 'display_data',
+          data: {
+            [mimeType]: base64Data
+          },
+          metadata: {}
+        };
+      } else if (item.type === 'result') {
+        return {
+          output_type: 'execute_result',
+          execution_count: executionCount ?? null,
+          data: {
+            'text/plain': item.content
+          },
+          metadata: {}
+        };
+      } else if (item.type === 'error') {
+        return {
+          output_type: 'error',
+          ename: 'Error',
+          evalue: item.content,
+          traceback: [item.content]
+        };
+      }
+      // Fallback for unknown types - keep as is (might not be visible but preserves data)
+      return item;
+    });
+  }
+
+  return standardCell;
+};
+
+// Helper to convert standard notebook format to internal cell format
+const fromStandardCell = (cell: any): NotebookCell => {
+  // Check if it's already in internal format (legacy support)
+  if (cell.type && !cell.cell_type && cell.content !== undefined) {
+    return cell as NotebookCell;
+  }
+  
+  // Standard format conversion
+  let content = '';
+  if (Array.isArray(cell.source)) {
+    content = cell.source.join('');
+  } else if (typeof cell.source === 'string') {
+    content = cell.source;
+  } else if (cell.content) {
+      content = cell.content;
+  }
+  
+  const outputs: OutputItem[] = [];
+  if (cell.outputs && Array.isArray(cell.outputs)) {
+    cell.outputs.forEach((output: any) => {
+      if (output.output_type === 'stream') {
+        outputs.push({
+          type: output.name, // stdout or stderr
+          content: Array.isArray(output.text) ? output.text.join('') : output.text,
+          short_content: (Array.isArray(output.text) ? output.text.join('') : output.text).substring(0, 100)
+        });
+      } else if (output.output_type === 'display_data' || output.output_type === 'execute_result') {
+        if (output.data['text/html']) {
+          outputs.push({
+            type: 'html',
+            content: output.data['text/html'],
+            short_content: '[HTML]'
+          });
+        }
+        if (output.data['image/png']) {
+          outputs.push({
+            type: 'img',
+            content: `data:image/png;base64,${output.data['image/png']}`,
+            short_content: '[Image]'
+          });
+        } else if (output.data['image/jpeg']) {
+          outputs.push({
+            type: 'img',
+            content: `data:image/jpeg;base64,${output.data['image/jpeg']}`,
+            short_content: '[Image]'
+          });
+        }
+        
+        // Convert unknown MIME types or text/plain if no rich media found
+        if (!output.data['text/html'] && !output.data['image/png'] && !output.data['image/jpeg'] && output.data['text/plain']) {
+           const type = output.output_type === 'execute_result' ? 'result' : 'stdout';
+           outputs.push({
+             type: type,
+             content: output.data['text/plain'],
+             short_content: output.data['text/plain'].substring(0, 100)
+           });
+        }
+      } else if (output.output_type === 'error') {
+        const errorContent = output.traceback ? output.traceback.join('\n') : `${output.ename}: ${output.evalue}`;
+        outputs.push({
+          type: 'error',
+          content: errorContent,
+          short_content: `${output.ename}: ${output.evalue}`
+        });
+      }
+    });
+  } else if (cell.output) {
+      // Legacy support for cells already having 'output' property in internal format
+      outputs.push(...cell.output);
+  }
+  
+  return {
+    id: cell.id || uuidv4(),
+    type: (cell.cell_type || cell.type || 'code') as any,
+    content: content,
+    language: cell.language,
+    executionCount: cell.execution_count ?? cell.executionCount,
+    executionState: cell.executionState || 'idle',
+    output: outputs,
+    role: cell.metadata?.role || cell.role,
+    metadata: cell.metadata || {}
+  };
 };
 
 const defaultNotebookMetadata: NotebookMetadata = {
@@ -115,7 +269,7 @@ export const useNotebookOperations = ({
         nbformat: 4,
         nbformat_minor: 5,
         metadata: metadataToSave,
-        cells: cellManager.getCurrentCellsContent()
+        cells: cellManager.getCurrentCellsContent().map(toStandardCell) as any
       };
 
       if (resolvedProjectId === IN_BROWSER_PROJECT.id) {
@@ -162,7 +316,8 @@ export const useNotebookOperations = ({
       const notebookData: NotebookData = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
 
       if (notebookData && typeof notebookData === 'object') {
-        const loadedCells = notebookData.cells || [];
+        const rawCells = notebookData.cells || [];
+        const loadedCells = rawCells.map(fromStandardCell);
 
         setNotebookMetadata(prev => ({
           ...defaultNotebookMetadata,
@@ -299,7 +454,8 @@ export const useNotebookOperations = ({
           filePath: newFilePath
         };
 
-        const cellsToLoad = loadedNotebookData.cells?.filter((cell: NotebookCell) => cell.role !== CELL_ROLES.THINKING) || [];
+        const rawCells = loadedNotebookData.cells || [];
+        const cellsToLoad = rawCells.map(fromStandardCell).filter(cell => cell.role !== CELL_ROLES.THINKING);
 
         // Calculate max execution count
         let maxExecutionCount = 0;
@@ -315,7 +471,7 @@ export const useNotebookOperations = ({
           nbformat: 4,
           nbformat_minor: 5,
           metadata: metadata,
-          cells: cellsToLoad
+          cells: cellsToLoad.map(toStandardCell) as any
         };
 
         try {
@@ -369,7 +525,7 @@ export const useNotebookOperations = ({
       nbformat: 4,
       nbformat_minor: 5,
       metadata: notebookMetadata,
-      cells: cellManager?.getCurrentCellsContent() || [],
+      cells: (cellManager?.getCurrentCellsContent() || []).map(toStandardCell) as any,
     };
     const blob = new Blob([JSON.stringify(notebookToSave, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -403,16 +559,16 @@ export const useNotebookOperations = ({
       const filePath = `${agent.manifest.name}_${timestamp}.ipynb`;
       const resolvedProjectId = projectId || IN_BROWSER_PROJECT.id;
 
-      let cells = [];
+      let internalCells: NotebookCell[] = [];
       const template = agent.manifest.chat_template || {};
 
       if (template.cells && template.cells.length > 0) {
         console.log('[Notebook] Using cells from agent chat template');
-        cells = template.cells;
+        internalCells = template.cells.map(fromStandardCell);
       } else if (agent.manifest.startup_script) {
         console.log('[Notebook] Creating system cell with agent startup script');
         const systemCellContent = agent.manifest.startup_script;
-        cells.push({
+        internalCells.push({
           id: uuidv4(),
           type: 'code',
           content: systemCellContent,
@@ -427,14 +583,14 @@ export const useNotebookOperations = ({
 
         if (agent.manifest.welcomeMessage) {
           console.log('[Notebook] Adding welcome message cell');
-          cells.push({
+          internalCells.push({
             id: uuidv4(),
             type: 'markdown',
             content: agent.manifest.welcomeMessage,
             executionState: 'idle',
+            role: 'assistant',
             metadata: {
-              trusted: true,
-              role: 'assistant'
+              trusted: true
             },
             executionCount: undefined,
             output: []
@@ -466,7 +622,7 @@ export const useNotebookOperations = ({
             }
           }
         },
-        cells: cells
+        cells: internalCells.map(toStandardCell) as any
       };
 
       if (resolvedProjectId === IN_BROWSER_PROJECT.id) {
