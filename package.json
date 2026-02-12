@@ -38,6 +38,7 @@
     "ai": "^4.1.28",
     "ansi-to-html": "^0.7.2",
     "axios": "^1.7.9",
+    "coi-serviceworker": "^0.1.7",
     "cra-template-typescript": "1.2.0",
     "date-fns": "^4.1.0",
     "events": "^3.3.0",

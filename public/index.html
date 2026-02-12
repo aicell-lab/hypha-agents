@@ -26,6 +26,8 @@
     <link rel="manifest" href="%PUBLIC_URL%/site.webmanifest" />
 
     <title>Hypha Agents</title>
+    <!-- Add Cross-Origin Isolation for Safari/Firefox SharedArrayBuffer support -->
+    <script src="%PUBLIC_URL%/coi-serviceworker.min.js"></script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
