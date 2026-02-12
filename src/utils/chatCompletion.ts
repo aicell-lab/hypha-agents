@@ -625,14 +625,19 @@ export async function* chatCompletion({
 
         // Check for specific OpenAI API errors
         if (error instanceof Error) {
+          const msg = error.message.toLowerCase();
+          const isLocalhost = baseURL.includes('localhost') || baseURL.includes('127.0.0.1');
+          
           // Handle common API errors
-          if (error.message.includes('404')) {
+          if (isLocalhost && (msg.includes('fetch') || msg.includes('network') || msg.includes('connection') || msg.includes('failed'))) {
+             errorMessage = `Connection failed to ${baseURL}. \n\nIf using Ollama, ensure it is running with CORS enabled:\`OLLAMA_ORIGINS="*" ollama serve\`\n\nAlso check if the model '${model}' is pulled:\`ollama pull ${model}\``;
+          } else if (msg.includes('404')) {
             errorMessage = `Invalid model endpoint: ${baseURL} or model: ${model}`;
-          } else if (error.message.includes('401') || error.message.includes('403')) {
-            errorMessage = `Authentication error: Invalid API key`;
-          } else if (error.message.includes('429')) {
+          } else if (msg.includes('401') || msg.includes('403')) {
+            errorMessage = `Authentication error: Invalid API key. Please check your settings.`;
+          } else if (msg.includes('429')) {
             errorMessage = `Rate limit exceeded. Please try again later.`;
-          } else if (error.message.includes('timeout') || error.message.includes('ECONNREFUSED')) {
+          } else if (msg.includes('timeout') || msg.includes('econnrefused')) {
             errorMessage = `Connection timeout. The model endpoint (${baseURL}) may be unavailable.`;
           } else {
             errorMessage = `API error: ${error.message}`;

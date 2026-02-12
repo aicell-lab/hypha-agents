@@ -59,6 +59,11 @@ const ModelConfigForm: React.FC<ModelConfigFormProps> = ({
             placeholder="Enter API base URL"
           />
         </div>
+        {(settings.baseURL.includes('localhost') || settings.baseURL.includes('127.0.0.1')) && (
+          <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-100">
+            <strong>Ollama Setup:</strong> To allow browser connections, run Ollama with: <code className="bg-blue-100 px-1 rounded">OLLAMA_ORIGINS="*" ollama serve</code>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
