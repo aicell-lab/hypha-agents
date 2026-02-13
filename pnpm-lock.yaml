@@ -120,9 +120,6 @@ importers:
       axios:
         specifier: ^1.7.9
         version: 1.13.2
-      coi-serviceworker:
-        specifier: ^0.1.7
-        version: 0.1.7
       cra-template-typescript:
         specifier: 1.2.0
         version: 1.2.0
@@ -4289,9 +4286,6 @@ packages:
 
   codemirror@5.65.20:
     resolution: {integrity: sha512-i5dLDDxwkFCbhjvL2pNjShsojoL3XHyDwsGv1jqETUoW+lzpBKKqNTUWgQwVAOa0tUm4BwekT455ujafi8payA==}
-
-  coi-serviceworker@0.1.7:
-    resolution: {integrity: sha512-bjSUqEngCPOkErY2vbyWsaIGCNRODYzlNycaREVw5s12/C8SM+RnRUUeX6pZbTtov6C52ZLY/+tvHK+BDxuUuA==}
 
   coincident@1.2.3:
     resolution: {integrity: sha512-Uxz3BMTWIslzeWjuQnizGWVg0j6khbvHUQ8+5BdM7WuJEm4ALXwq3wluYoB+uF68uPBz/oUOeJnYURKyfjexlA==}
@@ -16303,8 +16297,6 @@ snapshots:
       q: 1.5.1
 
   codemirror@5.65.20: {}
-
-  coi-serviceworker@0.1.7: {}
 
   coincident@1.2.3:
     dependencies:
