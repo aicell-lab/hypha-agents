@@ -136,6 +136,7 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
   // Create executeCode function that wraps the kernel execution
   const createExecuteCodeFunction = useCallback((manager: any, kernelId: string) => {
     return async (code: string, callbacks?: ExecuteCodeCallbacks, _timeout?: number) => {
+      debugger;
       let hasError = false;
 
       try {
@@ -406,6 +407,7 @@ export const useKernelManager = ({ server, clearRunningState, onKernelReady }: U
         // Load the kernel module
         const { manager, KernelMode, KernelLanguage, KernelEvents } = await loadWebPythonKernel();
 
+        debugger;
         // Create a new kernel
         const kernelId = await manager.createKernel({
           mode: KernelMode.WORKER,

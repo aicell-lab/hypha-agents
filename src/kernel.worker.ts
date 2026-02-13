@@ -70,12 +70,16 @@ function createKeyboardInterruptResult() {
 
 // Global error handlers to prevent worker crashes
 self.addEventListener("error", (event) => {
+  debugger;
   console.error("[WORKER] Global error caught:", event.error);
+  console.warn("[WORKER] Full error event:", event);
   console.error("[WORKER] Error Event details:", {
     message: event.message,
     filename: event.filename,
     lineno: event.lineno,
     colno: event.colno,
+    type: event.type,
+    timeStamp: event.timeStamp,
     error: event.error ? event.error.toString() : 'null'
   });
   event.preventDefault();
@@ -83,11 +87,15 @@ self.addEventListener("error", (event) => {
 
 // Check isolation status
 console.log("[WORKER] Worker started. CrossOriginIsolated:", self.crossOriginIsolated);
+console.log("[WORKER] Worker URL:", self.location.href);
+console.log("[WORKER] User Agent:", self.navigator.userAgent);
+
 if (!self.crossOriginIsolated) {
   console.warn("[WORKER] SharedArrayBuffer will NOT work. Application requires cross-origin-isolation.");
 }
 
 self.addEventListener("unhandledrejection", (event) => {
+  debugger;
   if (isKeyboardInterrupt(event.reason)) {
     console.log("[WORKER] KeyboardInterrupt caught in unhandled rejection handler - this is expected during interrupts");
     
@@ -228,6 +236,8 @@ self.addEventListener("message", (event) => {
 
 // Initialize the kernel with provided options
 async function initializeKernel(options: IKernelOptions): Promise<void> {
+  debugger;
+  console.log("[WORKER] initializeKernel called", options);
   try {
     await kernel.initialize(options);
     
