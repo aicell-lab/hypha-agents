@@ -81,6 +81,10 @@ module.exports = function override(config, env) {
   config.ignoreWarnings = [
     // Ignore source map warnings for hypha-core
     /Failed to parse source map.*hypha-core.*utf8\.mjs\.map/,
+    // Ignore source map warnings for hypha-rpc
+    /Failed to parse source map.*hypha-rpc.*utf8\.mjs\.map/,
+    // Ignore source map warnings for imjoy-rpc
+    /Failed to parse source map.*imjoy-rpc.*utf8\.mjs\.map/,
     // Ignore source map warnings for monaco-editor marked
     /Failed to parse source map.*monaco-editor.*marked.*\.js\.map/,
   ];
@@ -105,8 +109,10 @@ module.exports = function override(config, env) {
             loader: 'source-map-loader',
             options: {
               filterSourceMappingUrl: (url, resourcePath) => {
-                // Ignore source map warnings for hypha-core and monaco-editor
+                // Ignore source map warnings for hypha-core, hypha-rpc, imjoy-rpc and monaco-editor
                 if (resourcePath.includes('hypha-core') || 
+                    resourcePath.includes('hypha-rpc') || 
+                    resourcePath.includes('imjoy-rpc') || 
                     resourcePath.includes('monaco-editor')) {
                   return false;
                 }
@@ -118,6 +124,8 @@ module.exports = function override(config, env) {
         exclude: [
           // Exclude problematic packages from source map processing
           /node_modules\/hypha-core/,
+          /node_modules\/hypha-rpc/,
+          /node_modules\/imjoy-rpc/,
           /node_modules\/monaco-editor.*marked/,
         ],
       },
@@ -134,9 +142,11 @@ module.exports = function override(config, env) {
     // Ignore missing source map warnings for specific modules
     new webpack.IgnorePlugin({
       checkResource(resource, context) {
-        // Ignore source map files for hypha-core and monaco-editor marked
+        // Ignore source map files for hypha-core, hypha-rpc, imjoy-rpc and monaco-editor marked
         if (resource.endsWith('.map') && 
             (context.includes('hypha-core') || 
+             context.includes('hypha-rpc') || 
+             context.includes('imjoy-rpc') || 
              context.includes('monaco-editor') && context.includes('marked'))) {
           return true;
         }

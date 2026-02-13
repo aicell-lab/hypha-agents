@@ -16,6 +16,20 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const isAgentLabRoute = location.pathname === '/lab' || location.pathname === '/notebook';
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isIsolationChecked, setIsIsolationChecked] = useState(false);
+  const [isIsolated, setIsIsolated] = useState(true);
+
+  useEffect(() => {
+    // Check for Cross-Origin Isolation (required for Pyodide/SharedArrayBuffer in Safari)
+    if (typeof window !== 'undefined') {
+      const isolated = !!window.crossOriginIsolated;
+      setIsIsolated(isolated);
+      setIsIsolationChecked(true);
+      if (!isolated) {
+        console.warn('App is not cross-origin isolated. Pyodide kernel may fail in Safari/Firefox.');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -24,6 +38,7 @@ const AppContent: React.FC = () => {
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
+
 
   // Close sidebar on mobile when route changes
   useEffect(() => {
@@ -34,6 +49,12 @@ const AppContent: React.FC = () => {
   if (isAgentLabRoute) {
     return (
       <div className="flex flex-col h-screen">
+        {!isIsolated && isIsolationChecked && (
+          <div className="bg-red-600 text-white px-4 py-2 text-center text-sm font-medium z-50">
+            ⚠️ Browser Security Restriction: This app requires Cross-Origin Isolation (SharedArrayBuffer) to run the Python kernel. 
+            Please refresh the page. If the issue persists, your browser or environment may not support the required security headers.
+          </div>
+        )}
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <Routes>
             <Route path="/lab" element={<AgentLab />} />
