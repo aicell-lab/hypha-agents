@@ -10,6 +10,12 @@ if (monacoConfigured) {
   console.log('[Index] Monaco configuration loaded successfully');
 }
 
+// Log isolation status
+console.log('[Index] App started. CrossOriginIsolated:', window.crossOriginIsolated);
+if (!window.crossOriginIsolated) {
+  console.warn('[Index] Application is NOT cross-origin isolated. Pyodide/WebWorkers may fail in Safari.');
+}
+
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );

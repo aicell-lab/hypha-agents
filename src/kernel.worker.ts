@@ -71,8 +71,21 @@ function createKeyboardInterruptResult() {
 // Global error handlers to prevent worker crashes
 self.addEventListener("error", (event) => {
   console.error("[WORKER] Global error caught:", event.error);
+  console.error("[WORKER] Error Event details:", {
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    error: event.error ? event.error.toString() : 'null'
+  });
   event.preventDefault();
 });
+
+// Check isolation status
+console.log("[WORKER] Worker started. CrossOriginIsolated:", self.crossOriginIsolated);
+if (!self.crossOriginIsolated) {
+  console.warn("[WORKER] SharedArrayBuffer will NOT work. Application requires cross-origin-isolation.");
+}
 
 self.addEventListener("unhandledrejection", (event) => {
   if (isKeyboardInterrupt(event.reason)) {
