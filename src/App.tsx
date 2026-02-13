@@ -67,12 +67,6 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen">
-      {!isIsolated && isIsolationChecked && (
-          <div className="bg-red-600 text-white px-4 py-2 text-center text-sm font-medium z-50">
-            ⚠️ Browser Security Restriction: This app requires Cross-Origin Isolation (SharedArrayBuffer) to run the Python kernel. 
-            Please refresh the page. If the issue persists, your browser or environment may not support the required security headers.
-          </div>
-      )}
       <Navbar className="flex-shrink-0" />
       <div className="flex-1 flex overflow-hidden">
 
