@@ -12,7 +12,6 @@ if (monacoConfigured) {
 
 // Log isolation status
 console.log('[Index] App started. CrossOriginIsolated:', window.crossOriginIsolated);
-debugger;
 if (!window.crossOriginIsolated) {
   console.warn('[Index] Application is NOT cross-origin isolated. Pyodide/WebWorkers may fail in Safari.');
 }
