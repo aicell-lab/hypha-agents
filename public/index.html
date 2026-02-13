@@ -27,6 +27,14 @@
 
     <title>Hypha Agents</title>
     <!-- Add Cross-Origin Isolation for Safari/Firefox SharedArrayBuffer support -->
+    <script>
+      window.coi = {
+        shouldRegister: () => true,
+        shouldDeregister: () => false,
+        doReload: () => true,
+        quiet: false
+      };
+    </script>
     <script src="%PUBLIC_URL%/coi-serviceworker.min.js"></script>
   </head>
   <body>
