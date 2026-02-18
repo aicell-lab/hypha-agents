@@ -129,18 +129,31 @@ export function useChatCompletion({
         onExecuteCode: async (completionId: string, scriptContent: string) => {
           return await handleExecuteCode(completionId, scriptContent);
         },
-        onMessage: (completionId: string, message: string, commitIds?: string[]) => {
+        onMessage: (completionId: string, message?: string | null, commitIds?: string[]) => {
           console.debug('[DEBUG] New Message:', completionId, message, commitIds);
           
           // First, create the markdown cell with the final response
           if(message){
-            cellManager.updateCellById(
-              completionId,
-              message,
-              'markdown',
-              'assistant',
-              lastUserCellRef.current || undefined
-            );
+            // If we have a thinking cell, reuse it for the final response instead of creating a new cell
+            if (thinkingCellId) {
+              cellManager.updateCellById(
+                thinkingCellId,
+                message,
+                'markdown',
+                'assistant',
+                lastUserCellRef.current || undefined
+              );
+              // Clear thinkingCellId so it doesn't get deleted in the finally block
+              thinkingCellId = '';
+            } else {
+              cellManager.updateCellById(
+                completionId,
+                message,
+                'markdown',
+                'assistant',
+                lastUserCellRef.current || undefined
+              );
+            }
           }
           // Instead of deleting cells, mark them as staged or not staged (committed)
           if (lastUserCellRef.current) {
@@ -163,7 +176,7 @@ export function useChatCompletion({
                     metadata: {
                       ...cell.metadata,
                       staged: !isCommitted, // Mark as staged if not committed
-                      isCodeVisible: false, // Keep code collapsed for both staged and committed
+                      isCodeVisible: true, // Expand code/markdown by default for better visibility
                       isOutputVisible: isCommitted // Show output only for committed cells
                     }
                   };
